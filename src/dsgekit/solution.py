@@ -1,0 +1,329 @@
+"""First-order solution object: impulse responses, simulation, moments, diagnostics.
+
+Holds ``u_t = F k_t`` and ``k_{t+1} = P k_t + Q eps_{t+1}`` in the rescaled
+deviations of :mod:`dsgekit.linearize`, together with everything needed to read
+them back as levels.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Mapping, Sequence
+
+import numpy as np
+from scipy.linalg import solve_discrete_lyapunov
+
+from .klein import KleinSolution
+from .linearize import Coordinates, LinearSystem
+from .model import Model
+from .steady import SteadyState
+
+__all__ = ["FirstOrderSolution", "shock_covariance"]
+
+
+def shock_covariance(shocks: Sequence[str], cov) -> np.ndarray:
+    """Coerce a covariance given as a mapping of standard deviations, a vector or a matrix."""
+    ne = len(shocks)
+    if cov is None:
+        return np.eye(ne)
+    if isinstance(cov, Mapping):
+        missing = [s for s in shocks if s not in cov]
+        if missing:
+            raise KeyError(f"no standard deviation given for shocks {missing}")
+        sd = np.array([float(cov[s]) for s in shocks])
+        return np.diag(sd ** 2)
+    arr = np.asarray(cov, dtype=float)
+    if arr.ndim == 1:
+        if arr.size != ne:
+            raise ValueError(f"expected {ne} standard deviations, got {arr.size}")
+        return np.diag(arr ** 2)
+    if arr.shape != (ne, ne):
+        raise ValueError(f"covariance must be {ne}x{ne}, got {arr.shape}")
+    return arr
+
+
+@dataclass
+class FirstOrderSolution:
+    """The saddle-path solution and the objects computed from it."""
+
+    model: Model
+    steady: SteadyState
+    system: LinearSystem
+    klein: KleinSolution
+    params: object = None
+    ctx: object = None
+    _cache: dict = field(default_factory=dict, repr=False)
+
+    # -- shorthands ------------------------------------------------------
+    @property
+    def P(self) -> np.ndarray:
+        return self.klein.P
+
+    @property
+    def F(self) -> np.ndarray:
+        return self.klein.F
+
+    @property
+    def Q(self) -> np.ndarray:
+        return self.klein.Q
+
+    @property
+    def coords(self) -> Coordinates:
+        return self.system.coords
+
+    @property
+    def eigenvalues(self) -> np.ndarray:
+        return self.klein.eigenvalues
+
+    @property
+    def state_names(self) -> list[str]:
+        return list(self.model.states)
+
+    @property
+    def jump_names(self) -> list[str]:
+        return list(self.model.jumps)
+
+    def _J(self) -> np.ndarray:
+        """Map states to the full variable vector: ``x_t = J k_t``."""
+        return np.vstack([np.eye(self.klein.n_k), self.F])
+
+    # -- paths -----------------------------------------------------------
+    def state_path(self, k0, periods: int = 40, shocks: np.ndarray | None = None) -> np.ndarray:
+        """Propagate the states from an initial deviation, optionally feeding innovations."""
+        k = np.zeros((periods, self.klein.n_k))
+        k[0] = np.asarray(k0, dtype=float)
+        for t in range(1, periods):
+            k[t] = self.P @ k[t - 1]
+            if shocks is not None and self.Q is not None:
+                k[t] = k[t] + self.Q @ shocks[t]
+        return k
+
+    def variables(self, k: np.ndarray) -> dict:
+        """Deviation paths of every variable implied by a state path."""
+        u = k @ self.F.T
+        out = {n: k[:, i] for i, n in enumerate(self.state_names)}
+        out.update({n: u[:, i] for i, n in enumerate(self.jump_names)})
+        return out
+
+    def to_levels(self, paths: Mapping[str, np.ndarray]) -> dict:
+        """Convert deviation paths to levels using the steady state and the scaling."""
+        out = {}
+        for name, dev in paths.items():
+            i = self.model.position(name)
+            out[name] = self.coords.center[i] + self.coords.scale[i] * np.asarray(dev)
+        return out
+
+    # -- impulse responses ----------------------------------------------
+    def irf(self, name: str, size: float = 1.0, periods: int = 40, *,
+            kind: str = "shock", levels: bool = False, percent: bool = True) -> dict:
+        """Impulse response of every variable.
+
+        ``kind="shock"`` applies an innovation of ``size`` standard-deviation
+        units, so the impact period is ``k = Q e_m * size``. ``kind="state"``
+        displaces the named state directly, which is what one wants for a
+        counterfactual on an exogenous LEVEL rather than on its innovation.
+
+        Deviations are returned in the rescaled units -- proportional for
+        variables with a nonzero steady state, absolute for the rest -- times 100
+        when ``percent`` is set. ``levels=True`` returns levels instead, and then
+        ``percent`` is ignored.
+        """
+        nk = self.klein.n_k
+        k0 = np.zeros(nk)
+        if kind == "shock":
+            if self.Q is None:
+                raise ValueError("no shock loading: solve the model with a C matrix")
+            e = np.zeros(self.model.n_shocks)
+            e[self.model.shock_position(name)] = size
+            k0 = self.Q @ e
+        elif kind == "state":
+            if name not in self.model.states:
+                raise KeyError(f"{name!r} is not a state; states are {self.state_names}")
+            k0[self.model.states.index(name)] = size
+        else:
+            raise ValueError(f"kind must be 'shock' or 'state', got {kind!r}")
+
+        k = self.state_path(k0, periods)
+        paths = self.variables(k)
+        if levels:
+            return self.to_levels(paths)
+        return {n: v * (100.0 if percent else 1.0) for n, v in paths.items()}
+
+    def irf_impulse(self, impulse, periods: int = 40, *, levels: bool = False,
+                    percent: bool = True) -> dict:
+        """Impulse response to an arbitrary innovation VECTOR.
+
+        :meth:`irf` moves one named shock; this moves a whole vector at once,
+        which is what an ORTHOGONALISED impulse is: the column of a Cholesky
+        factor of the shock covariance. With correlated shocks the two differ —
+        moving one innovation alone is not a thing the model can do, since the
+        others move with it — and the established packages report the
+        orthogonalised version. With a diagonal covariance they coincide.
+        """
+        if self.Q is None:
+            raise ValueError("no shock loading: solve the model with a C matrix")
+        e = np.asarray(impulse, dtype=float).ravel()
+        if e.size != self.model.n_shocks:
+            raise ValueError(f"impulse has {e.size} entries for "
+                             f"{self.model.n_shocks} shocks")
+        paths = self.variables(self.state_path(self.Q @ e, periods))
+        if levels:
+            return self.to_levels(paths)
+        return {n: v * (100.0 if percent else 1.0) for n, v in paths.items()}
+
+    # -- simulation ------------------------------------------------------
+    def simulate(self, periods: int = 1000, cov=None, *, seed: int | None = None,
+                 burn: int = 100, levels: bool = False) -> dict:
+        """Simulate the linear solution.
+
+        ``burn`` periods are discarded so the draw starts from the ergodic
+        distribution rather than from the steady state.
+        """
+        rng = np.random.default_rng(seed)
+        Sigma = shock_covariance(self.model.shocks, cov)
+        total = periods + burn
+        L = np.linalg.cholesky(Sigma + 1e-300 * np.eye(Sigma.shape[0])) \
+            if np.all(np.linalg.eigvalsh(Sigma) > 0) else _psd_factor(Sigma)
+        eps = rng.standard_normal((total, self.model.n_shocks)) @ L.T
+        k = np.zeros((total, self.klein.n_k))
+        for t in range(1, total):
+            k[t] = self.P @ k[t - 1] + (self.Q @ eps[t] if self.Q is not None else 0.0)
+        k = k[burn:]
+        paths = self.variables(k)
+        return self.to_levels(paths) if levels else paths
+
+    # -- second moments --------------------------------------------------
+    def covariance(self, cov=None) -> np.ndarray:
+        """Unconditional covariance of ``x_t = [k_t; u_t]`` in deviations."""
+        Sigma = shock_covariance(self.model.shocks, cov)
+        if self.Q is None:
+            raise ValueError("no shock loading: moments need a C matrix")
+        Vk = solve_discrete_lyapunov(self.P, self.Q @ Sigma @ self.Q.T)
+        J = self._J()
+        return J @ Vk @ J.T
+
+    def moments(self, cov=None, lags: int = 1) -> dict:
+        """Standard deviations, correlations and autocorrelations of every variable."""
+        Sigma = shock_covariance(self.model.shocks, cov)
+        Vk = solve_discrete_lyapunov(self.P, self.Q @ Sigma @ self.Q.T)
+        J = self._J()
+        V = J @ Vk @ J.T
+        sd = np.sqrt(np.maximum(np.diag(V), 0.0))
+        denom = np.outer(sd, sd)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            corr = np.where(denom > 0, V / np.where(denom == 0, 1.0, denom), 0.0)
+        names = self.model.names
+        auto = {}
+        Pj = np.eye(self.klein.n_k)
+        for j in range(1, lags + 1):
+            Pj = Pj @ self.P
+            Vj = J @ Pj @ Vk @ J.T
+            with np.errstate(divide="ignore", invalid="ignore"):
+                auto[j] = np.where(sd > 0, np.diag(Vj) / np.where(sd == 0, 1.0, sd ** 2), 0.0)
+        return dict(names=names, std=sd, corr=corr, cov=V,
+                    autocorr={j: dict(zip(names, v)) for j, v in auto.items()},
+                    std_by_name=dict(zip(names, sd)))
+
+    def variance_decomposition(self, cov=None, horizon: int | None = None) -> dict:
+        """Share of each shock in the (forecast error) variance of each variable.
+
+        ``horizon=None`` gives the unconditional decomposition; an integer gives
+        the forecast-error variance decomposition at that horizon.
+        """
+        Sigma = shock_covariance(self.model.shocks, cov)
+        J = self._J()
+        n_eps = self.model.n_shocks
+        shares = np.zeros((self.model.n_vars, n_eps))
+        for m in range(n_eps):
+            Sm = np.zeros_like(Sigma)
+            Sm[m, m] = Sigma[m, m]
+            QSQ = self.Q @ Sm @ self.Q.T
+            if horizon is None:
+                Vm = solve_discrete_lyapunov(self.P, QSQ)
+            else:
+                Vm = np.zeros_like(QSQ)
+                Ps = np.eye(self.klein.n_k)
+                for _ in range(horizon):
+                    Vm = Vm + Ps @ QSQ @ Ps.T
+                    Ps = Ps @ self.P
+            shares[:, m] = np.diag(J @ Vm @ J.T)
+        total = shares.sum(axis=1, keepdims=True)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            frac = np.where(total > 0, shares / np.where(total == 0, 1.0, total), 0.0)
+        return dict(names=self.model.names, shocks=list(self.model.shocks),
+                    variance=shares, share=frac)
+
+    # -- diagnostics -----------------------------------------------------
+    def accuracy(self, sizes=(0.02, 0.01, 0.005), seed: int = 0) -> dict:
+        """Check the solution against the NONLINEAR system it approximates.
+
+        Feeds the first-order decision rules back into the original residuals at
+        a sequence of shrinking displacements. A correct first-order solution
+        leaves a residual of order ``||y||^2``, so halving the displacement must
+        divide the residual by roughly four. A wrongly assembled system -- a
+        transposed block, a misplaced timing -- leaves a residual of order
+        ``||y||`` instead, and the ratio comes out near two. That is the
+        discriminating test, not the size of any single residual.
+        """
+        rng = np.random.default_rng(seed)
+        nk = self.klein.n_k
+        direction = rng.standard_normal(nk)
+        direction /= np.linalg.norm(direction)
+        zero_e = np.zeros(self.model.n_shocks)
+        out = []
+        for s in sizes:
+            k0 = direction * s
+            k1 = self.P @ k0
+            x0 = self.coords.to_level(np.concatenate([k0, self.F @ k0]))
+            x1 = self.coords.to_level(np.concatenate([k1, self.F @ k1]))
+            r = self.model.residuals(x1, x0, zero_e, self.params, self.ctx)
+            out.append(float(np.max(np.abs(r / np.maximum(self.system.row_scale, 1e-300)))))
+        return _order_report(list(sizes), out)
+
+    def summary(self) -> str:
+        eig = self.eigenvalues
+        stable = int(np.sum(eig < 1.0))
+        lines = [
+            f"{self.model.name}: {self.model.n_states} states, {self.model.n_jumps} jumps, "
+            f"{self.model.n_shocks} shocks",
+            f"  steady-state residual : {self.steady.residual:.3e}",
+            f"  linearisation residual: {self.system.steady_residual:.3e}",
+            f"  Blanchard-Kahn        : {stable} stable roots for {self.klein.n_k} states -- OK",
+        ]
+        finite = eig[np.isfinite(eig)]
+        if finite.size:
+            near = finite[finite < 1.0]
+            if near.size:
+                lines.append(f"  largest stable root   : {near.max():.6f}")
+        return "\n".join(lines)
+
+
+def _order_report(sizes, residuals, floor: float = 1e-13) -> dict:
+    """Turn a residual-versus-displacement sweep into an implied order of accuracy.
+
+    ``exact=True`` when the residuals sit at round-off: an exactly linear model
+    leaves nothing for the approximation to miss, and the ratio of two numbers
+    that are both machine noise carries no information about the order. Reporting
+    it as an order would invite the reader to conclude the solver is first-order
+    accurate when in fact it was exact.
+    """
+    if max(residuals) < floor:
+        return dict(sizes=sizes, residuals=residuals, ratios=[], implied_order=[],
+                    exact=True,
+                    note="residuals at round-off: the model is linear to this order")
+    ratios = [residuals[i] / residuals[i + 1] for i in range(len(residuals) - 1)
+              if residuals[i + 1] > 0]
+    order = [float(np.log(r) / np.log(sizes[i] / sizes[i + 1])) for i, r in enumerate(ratios)]
+    return dict(sizes=sizes, residuals=residuals, ratios=ratios, implied_order=order,
+                exact=False)
+
+
+def _psd_factor(Sigma: np.ndarray) -> np.ndarray:
+    """Factor of a positive SEMI-definite covariance, for models with a zero-variance shock.
+
+    Cholesky refuses a singular matrix, and a shock switched off by setting its
+    variance to zero is an ordinary thing to want.
+    """
+    vals, vecs = np.linalg.eigh(Sigma)
+    vals = np.maximum(vals, 0.0)
+    return vecs @ np.diag(np.sqrt(vals))

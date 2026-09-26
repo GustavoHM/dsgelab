@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsgekit — replicações</title>
+<meta name="description" content="Artigos refeitos no dsgekit: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Replicações</h1>
+    <p class="tag">Um artigo, a calibração que ele publica, e um número que o código desta página
+    confere. O que o sistema resolvido não reproduz fica dito ao lado do número.</p>
+    <p class="tag"><a href="./">dsgekit</a></p>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap"><ul>
+  <li><a href="#criterio">O que conta</a></li>
+  <li><a href="#heutel">Heutel (2012)</a></li>
+  <li><a href="#crescimento">Crescimento estocástico</a></li>
+  <li><a href="#taylor">Princípio de Taylor</a></li>
+  <li><a href="#fila">Fora desta página</a></li>
+</ul></div></nav>
+
+<main>
+
+<section id="criterio"><div class="wrap">
+  <h2>O que conta como replicação</h2>
+  <p class="lede">A mesma equação, a mesma calibração, confrontadas com um número publicado ou com
+  uma solução fechada. O bloco é executado por <code>tools/check_site_examples.py</code>.</p>
+  <p>Os exemplos de ensino do Dynare (Collard, Pfeifer) ficam na
+  <a href="./#validacao">tabela de validação</a> da página do pacote. São arquivos de manual, e a
+  comparação lá é contra a solução do Dynare, variável a variável.</p>
+</div></section>
+
+<section id="heutel"><div class="wrap">
+  <h2>Heutel (2012), Review of Economic Dynamics</h2>
+  <p>Garth Heutel, <em>How should environmental policy respond to business cycles? Optimal policy
+  under persistent productivity shocks</em>, Review of Economic Dynamics 15, 244–264,
+  <a href="https://doi.org/10.1016/j.red.2011.05.002">10.1016/j.red.2011.05.002</a>. O porte está
+  em <code>dsgekit.examples.heutel</code> e em <a href="../docs/heutel.md">docs/heutel.md</a>.
+  O sistema resolvido é o linear do código MATLAB do autor. Anderson–Moore entra como o Klein/QZ
+  do pacote. O modelo não linear, que daria segunda ordem e previsão perfeita, não está neste
+  exemplo.</p>
+
+  <h3>Tabela 2 e o impulso de 1%</h3>
+  <p>A Tabela 2, p. 251, traz α = 0,36, β = 0,98267, δ = 0,025, ρ = 0,95, σ<sub>ε</sub> = 0,007,
+  η = 0,9979, θ₁ = 0,05607, θ₂ = 2,8 e 1 − γ = 0,696. A prosa da p. 250 imprime β = 0,98627. O
+  exemplo segue a tabela e os scripts. A seção 4.1 simula uma inovação de 1% e descreve o consumo
+  no máximo por volta do período 15. O capital, na mesma frase, fica «around period 40 (year 6)».
+  Num modelo trimestral o sexto ano é o horizonte 24. A série resolvida atinge o máximo do capital
+  no horizonte 25 e o do consumo no 15. O 40 não é o que este sistema produz, e o exemplo não
+  desloca a série para coincidir com ele.</p>
+<pre><code>import numpy as np
+from dsgekit.examples import heutel
+
+p = heutel.Params()
+assert p.alpha == 0.36 and p.beta == 0.98267 and p.delta == 0.025
+assert p.rho == 0.95 and p.sd == 0.007 and p.eta == 0.9979
+assert p.theta1 == 0.05607 and p.theta2 == 2.8
+assert abs((1 - p.gamma) - 0.696) &lt; 1e-12
+
+ss = heutel.steady_levels("tax", p)
+assert abs(ss["lambda"]) &lt; 1e-10          # multiplicador de Ramsey no estado estacionário
+assert 0 &lt; ss["mu"] &lt; 1 and ss["c"] &gt; 0 and ss["e"] &gt; 0
+
+sol = heutel.solve("tax", p)
+irf = sol.irf("eps_a", size=0.01, periods=100, percent=False)
+assert np.max(np.abs(irf["a"] - 0.01 * p.rho ** np.arange(100))) &lt; 1e-12
+gap = ss["c"]*irf["c"] + ss["i"]*irf["i"] + ss["z"]*irf["z"] - ss["y"]*irf["y"]
+assert np.max(np.abs(gap)) &lt; 1e-10        # recursos ao longo do impulso
+assert int(np.argmax(irf["c"])) == 15
+assert int(np.argmax(irf["k"])) == 25
+print(ss["k"], ss["y"], ss["mu"], int(np.argmax(irf["k"])))</code></pre>
+
+  <h3>Informação defasada, p. 262</h3>
+  <p>Com o governo escolhendo o instrumento antes de ver o estado, o artigo substitui a condição de
+  primeira ordem por τ<sub>t</sub> = d · y<sub>t−1</sub> e q<sub>t</sub> = d · y<sub>t−1</sub>. O
+  d que ele publica é 1,415 para o imposto e 0,658 para a quota. Os scripts trazem 1,4151 e
+  0,6580. No período do choque o produto defasado ainda está no estado estacionário, e o
+  instrumento não se move.</p>
+<pre><code>tax = heutel.Params.source("tax_asym")
+quota = heutel.Params.source("quota_asym")
+assert round(tax.policy_slope, 3) == 1.415
+assert round(quota.policy_slope, 3) == 0.658
+
+irf_tax = heutel.solve("tax_asym", tax).irf("eps_a", size=0.01, periods=100, percent=False)
+assert abs(irf_tax["tau"][0]) &lt; 1e-10
+assert np.max(np.abs(irf_tax["tau"][1:] - tax.policy_slope * irf_tax["y"][:-1])) &lt; 1e-10
+
+irf_q = heutel.solve("quota_asym", quota).irf("eps_a", size=0.01, periods=100, percent=False)
+assert abs(irf_q["q"][0]) &lt; 1e-10
+assert np.max(np.abs(irf_q["q"][1:] - quota.policy_slope * irf_q["y"][:-1])) &lt; 1e-10
+assert np.max(np.abs(irf_q["e"] - irf_q["q"])) &lt; 1e-10
+print(tax.policy_slope, quota.policy_slope)</code></pre>
+  <div class="note"><p>A calibração literal do planejador nos scripts, θ₂ = 0,1 e γ = 0,8, é a
+  sensibilidade da p. 258, e não produz estado estacionário admissível.
+  <code>heutel.solve("planner")</code> levanta <code>SteadyStateError</code>. O caso-base da
+  Tabela 2 pede <code>heutel.solve("planner", heutel.Params())</code>.</p></div>
+</div></section>
+
+<section id="crescimento"><div class="wrap">
+  <h2>Crescimento estocástico com solução fechada</h2>
+  <p>Brock e Mirman (1972, Journal of Economic Theory) colocam o crescimento ótimo sob incerteza.
+  Com utilidade logarítmica e depreciação total a regra de um setor é exata,
+  k′ = αβ a k<sup>α</sup>, e a solução log-linear é P = [[α, 1], [0, ρ]], F = [α, 1]. A versão
+  com vários setores, a mesma utilidade e a mesma depreciação, é Long e Plosser (1983, Journal of
+  Political Economy). O exemplo é o caso de um setor.</p>
+  <p>No processo log a′ = ρ log a + ε, a correção de risco de segunda ordem sobre a tecnologia é
+  σ². É o termo de Jensen que a aproximação de Schmitt-Grohé e Uribe (2004, Journal of Economic
+  Dynamics and Control) tem de devolver. O capital obedece à regra exata estado a estado, e a
+  correção dele é zero. As tabelas numéricas daquele artigo são outro modelo.</p>
+<pre><code>import numpy as np
+import dsgekit as dk
+from dsgekit.examples import rbc
+
+model, params, guess = rbc.build()
+sol = dk.solve(model, params, guess=guess)
+exact = rbc.closed_form(params)
+assert np.allclose(sol.P, exact["P"]) and np.allclose(sol.F, exact["F"])
+
+sigma = 0.007
+so = dk.solve_second_order(sol, cov={"eps_a": sigma})
+i_a = model.states.index("a")
+i_k = model.states.index("k")
+assert abs(so.h_ss[i_a] - sigma ** 2) &lt; 1e-8
+assert abs(so.h_ss[i_k]) &lt; 1e-8
+print(sol.P, so.h_ss[i_a])</code></pre>
+</div></section>
+
+<section id="taylor"><div class="wrap">
+  <h2>Princípio de Taylor</h2>
+  <p>Clarida, Galí e Gertler (2000, Quarterly Journal of Economics 115, 147–180): na regra
+  i = φ<sub>π</sub> π + φ<sub>x</sub> x, o equilíbrio determinado pede φ<sub>π</sub> &gt; 1. O
+  exemplo é o modelo de três equações com φ<sub>π</sub> = 1,5, φ<sub>x</sub> = 0,125 e β = 0,99.
+  O equilíbrio com esses coeficientes é determinado. Com φ<sub>π</sub> = 0,8 o mesmo sistema é
+  recusado. Com φ<sub>x</sub> positivo a fronteira exata deste modelo fica um pouco abaixo de 1;
+  0,8 está do lado indeterminado. O que se confere é esse limiar, não uma tabela de coeficientes
+  estimados.</p>
+<pre><code>from dataclasses import replace
+import dsgekit as dk
+from dsgekit.examples import nk
+
+model, params, guess = nk.build()
+assert params.phi_pi == 1.5 and params.phi_x == 0.125 and params.beta == 0.99
+sol_nk = dk.solve(model, params, guess=guess)
+assert sol_nk.klein.n_stable == model.n_states
+
+below = replace(params, phi_pi=0.8)
+try:
+    dk.solve(model, below, guess=guess)
+    raised = False
+except dk.BlanchardKahnError:
+    raised = True
+assert raised
+print(sol_nk.klein.n_stable, raised)</code></pre>
+</div></section>
+
+<section id="fila"><div class="wrap">
+  <h2>Fora desta página</h2>
+  <table>
+    <thead><tr><th>Artigo</th><th>Por que não está aqui</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Smets e Wouters (2007), American Economic Review</td>
+        <td>A replicação pede a verossimilhança e o filtro de Kalman. O roadmap deixa os dois no gEconpy e no pydsge.</td>
+      </tr>
+      <tr>
+        <td>Schmitt-Grohé e Uribe (2003), pequena economia aberta</td>
+        <td>O próximo modelo numérico natural. Ainda não está no pacote. O de 2004, nesta página, é só o termo σ² do AR(1) lognormal.</td>
+      </tr>
+    </tbody>
+  </table>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <p>dsgekit — MIT. <a href="./">Voltar ao pacote</a>.<br>
+  Os blocos desta página são executados por <code>tools/check_site_examples.py</code>.</p>
+</div></footer>
+
+<script src="highlight.js"></script>
+</body>
+</html>

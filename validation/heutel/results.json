@@ -1,0 +1,26 @@
+{
+  "planner": {
+    "steady_max_abs": 5.135916580911726e-09,
+    "matrix_max_abs": 2.7409984004744814e-12,
+    "irf_max_abs": 3.0541593559751945e-12,
+    "std_max_abs": 1.6087797760633293e-11
+  },
+  "tax": {
+    "steady_max_abs": 9.549694368615746e-11,
+    "matrix_max_abs": 5.921728407376123e-13,
+    "irf_max_abs": 8.348009783443189e-13,
+    "std_max_abs": 5.804953739918517e-12
+  },
+  "tax_asym": {
+    "steady_max_abs": 9.549694368615746e-11,
+    "matrix_max_abs": 4.987676938128516e-14,
+    "irf_max_abs": 5.927333276978253e-16,
+    "std_max_abs": 1.0536710393083126e-14
+  },
+  "quota_asym": {
+    "steady_max_abs": 9.549694368615746e-11,
+    "matrix_max_abs": 4.987676938128516e-14,
+    "irf_max_abs": 3.5060843117662444e-13,
+    "std_max_abs": 3.568256801145253e-13
+  }
+}

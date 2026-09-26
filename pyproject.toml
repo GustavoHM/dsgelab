@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsgekit"
+version = "0.1.0"
+description = "General-purpose toolkit for solving DSGE models: steady state, Klein/QZ first order, second-order perturbation, perfect-foresight transitions and calibration by targets."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Gustavo Hoffmann Moreira", email = "gustavo@gakusai.net"}]
+keywords = ["dsge", "perturbation", "rational expectations", "klein", "macroeconomics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/GustavoHM/dsgekit"
+Documentation = "https://github.com/GustavoHM/dsgekit/tree/main/docs"
+Repository = "https://github.com/GustavoHM/dsgekit"
+Issues = "https://github.com/GustavoHM/dsgekit/issues"
+
+[project.optional-dependencies]
+symbolic = ["sympy>=1.12"]
+test = ["pytest>=7"]
+
+[project.scripts]
+dsgekit = "dsgekit.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# importlib import mode lets both packages be tested in one run: the
+# default mode keys modules by basename and two suites with a
+# test_calibrate.py would collide.
+addopts = "--import-mode=importlib"

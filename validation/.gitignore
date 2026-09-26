@@ -1,0 +1,7 @@
+# Os .mod são baixados por fetch.sh, não versionados: são GPL e este pacote é MIT.
+mods/
+# Artefatos das rodadas do Dynare/Octave.
+*.mat
+*.log
++*/
+*.m~

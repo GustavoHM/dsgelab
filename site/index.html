@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dsgekit — resolver modelos DSGE em Python</title>
+<meta name="description" content="Biblioteca geral para modelos DSGE: estado estacionário, Klein/QZ, segunda ordem, previsão perfeita e calibração por alvos. Validada contra o Dynare e o MacroModelling.jl.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>dsgekit</h1>
+    <p class="tag">Declare o modelo uma vez — nomes de estados, nomes de saltos, nomes de choques e
+    uma função de resíduos. Estado estacionário, solução de primeira ordem, respostas a impulso,
+    momentos, correções de risco de segunda ordem, transições de previsão perfeita e calibração por
+    alvos saem todos dessa única declaração.</p>
+    <div class="pills">
+      <span class="pill">Python 3.10+</span>
+      <span class="pill">só numpy e scipy</span>
+      <span class="pill">Blanchard-Kahn imposto</span>
+      <span class="pill">2ª ordem sem Dynare</span>
+      <span class="pill">validado a 1e-14</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc"><div class="wrap"><ul>
+  <li><a href="#porque">Por quê</a></li>
+  <li><a href="#instalar">Instalar</a></li>
+  <li><a href="#exemplos">Exemplos</a></li>
+  <li><a href="replications.html">Replicações</a></li>
+  <li><a href="#caixa">O que tem na caixa</a></li>
+  <li><a href="#datacao">Datação</a></li>
+  <li><a href="#validacao">Validação</a></li>
+  <li><a href="#comparacao">Comparação</a></li>
+  <li><a href="#citar">Como citar</a></li>
+  <li><a href="#docs">Documentação</a></li>
+</ul></div></nav>
+
+<main>
+
+<section id="porque"><div class="wrap">
+  <h2>Por que existe</h2>
+  <p class="lede">A restrição de projeto: o bloco estocástico e a transição determinística têm de ser
+  o <em>mesmo</em> modelo.</p>
+  <p>Um modo de falhar comum no trabalho aplicado é ter uma solução de perturbação montada sobre um
+  conjunto de equações e uma trajetória de transição resolvida por um ponto fixo escrito à mão sobre
+  outro conjunto — parecido, escrito pela mesma pessoa, e não idêntico. Aqui as duas chamam a mesma
+  função de resíduos, e por isso não podem divergir.</p>
+  <div class="note"><p><strong>As verificações são da biblioteca, não da sua disciplina.</strong>
+  A condição de determinação é imposta e não apenas relatada; uma identidade que o modelo não impõe
+  — a lei de Walras, uma restrição de recursos — é sempre verificação e nunca equação; a convergência
+  é julgada pelo resíduo e nunca pela bandeira de sucesso do solucionador; e a ordem de acurácia da
+  aproximação é mensurável, e é medida.</p></div>
+</div></section>
+
+<section id="instalar"><div class="wrap">
+  <h2>Instalar</h2>
+<pre><code class="plain">pip install "dsgekit @ git+https://github.com/GustavoHM/dsgekit"
+pip install "dsgekit[symbolic] @ git+https://github.com/GustavoHM/dsgekit"</code></pre>
+  <p>Depende só de numpy e scipy. O <code>sympy</code> é opcional e serve ao front end textual, que
+  entrega derivadas analíticas exatas.</p>
+<pre><code class="plain">dsgekit --example rbc        # resolve um modelo do pacote e imprime os diagnósticos</code></pre>
+</div></section>
+
+<section id="exemplos"><div class="wrap">
+  <h2>Exemplos</h2>
+  <p class="lede">Rodam como estão, na ordem em que aparecem, logo depois do
+  <code>pip install</code>. Um verificador extrai cada bloco desta página e executa
+  (<code>tools/check_site_examples.py</code>): um exemplo que não roda é pior do que exemplo
+  nenhum. Artigos refeitos, com o número que a página confere, estão em
+  <a href="replications.html">Replicações</a>.</p>
+
+  <h3>1. Resolver um modelo que já vem no pacote</h3>
+<pre><code>import dsgekit as dk
+from dsgekit.examples import rbc
+
+model, params, guess = rbc.build()
+sol = dk.solve(model, params, guess=guess)
+
+print(sol.summary())
+irf = sol.irf("eps_a", size=0.01, periods=40)     # desvios em %
+mom = sol.moments(cov={"eps_a": 0.007})           # dp, correlações, autocorrelações
+dec = sol.variance_decomposition(cov={"eps_a": 0.007})</code></pre>
+
+  <h3>2. Declarar o seu próprio modelo</h3>
+  <p>Três listas de nomes e uma função. As variáveis são acessadas por <em>nome</em>, em
+  <code>cur</code> para o período <em>t</em> e <code>nxt</code> para <em>t+1</em>.</p>
+<pre><code>import numpy as np
+from dataclasses import dataclass
+from dsgekit import Model, solve
+
+@dataclass
+class P:
+    alpha: float = 0.36
+    beta:  float = 0.99
+    delta: float = 1.0
+    gamma: float = 1.0
+    rho:   float = 0.95
+
+def equations(nxt, cur, eps, p):
+    y  = cur.a * cur.k ** p.alpha
+    y1 = nxt.a * nxt.k ** p.alpha
+    return [
+        nxt.k - ((1 - p.delta) * cur.k + y - cur.c),                    # recursos
+        cur.c ** -p.gamma - p.beta * nxt.c ** -p.gamma                  # Euler
+            * (p.alpha * y1 / nxt.k + 1 - p.delta),
+        np.log(nxt.a) - p.rho * np.log(cur.a) - eps.eps_a,              # tecnologia
+    ]
+
+meu = Model(states=["k", "a"], jumps=["c"], shocks=["eps_a"], equations=equations)
+sol_meu = solve(meu, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
+
+sol_meu.P                     # transição dos estados
+sol_meu.accuracy()            # a ordem implícita tem de dar ~2</code></pre>
+  <p>Um deslize de índice num vetor de resíduos empacotado à mão é silencioso, e é a classe de erro
+  mais cara neste tipo de código. Nomear elimina a classe.</p>
+
+  <h3>3. As mesmas equações, em texto, com derivadas exatas</h3>
+<pre><code>from dsgekit.symbolic import from_equations
+
+simbolico = from_equations(
+    [
+        "k(+1) = (1-delta)*k + a*k**alpha - c",
+        "c**(-gamma) = beta * c(+1)**(-gamma) * (alpha*a(+1)*k(+1)**(alpha-1) + 1 - delta)",
+        "log(a(+1)) = rho*log(a) + eps_a",
+    ],
+    states=["k", "a"], jumps=["c"], shocks=["eps_a"],
+    parameters=["alpha", "beta", "rho", "delta", "gamma"],
+)
+sol_sim = dk.solve(simbolico, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
+
+dk.compare_irfs(sol_meu, sol_sim, "eps_a")["worst"]   # os dois são o mesmo modelo</code></pre>
+  <p>O resíduo, a jacobiana e a hessiana são diferenciados <em>exatamente</em>. Em segunda ordem isso
+  não é conforto: uma diferença segunda divide pelo quadrado do passo, e uma hessiana numérica carrega
+  cerca de metade dos dígitos significativos do resíduo de que veio.</p>
+
+  <h3>4. Segunda ordem e correções de risco</h3>
+<pre><code>so = dk.solve_second_order(sol, cov={"eps_a": 0.007})
+
+so.g_ss, so.h_ss          # o que a primeira ordem põe em zero
+so.mean_correction()      # média ergódica, em forma FECHADA
+so.ergodic_mean()         # a mesma coisa, em nível
+so.accuracy()             # a ordem implícita tem de dar ~3
+so.simulate(periods=5000, seed=1)   # podada, por padrão</code></pre>
+  <p>Uma simulação de primeira ordem mantém a média dos estados no estado estacionário <em>por
+  construção</em>. Quando o deslocamento das regras de decisão é grande, ela pode errar o
+  <em>sinal</em> de um efeito de média, não apenas a magnitude — e ordenamentos de bem-estar são
+  exatamente os objetos que dependem disso.</p>
+
+  <h3>5. Transição de previsão perfeita, com política anunciada</h3>
+<pre><code>from dataclasses import replace
+
+p_velho, p_novo = P(), replace(P(), beta=0.985)
+ss0 = dk.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, p_velho)
+ss1 = dk.steady_state(meu, ss0.values, p_novo)
+
+T = 80
+surpresa = dk.perfect_foresight(meu, ss0, ss1, params=p_novo, T=T)
+
+cronograma = [p_velho] * 10 + [p_novo] * (T + 1 - 10)      # ANUNCIADO em t=0
+anunciada = dk.perfect_foresight(meu, ss0, ss1, params=cronograma, T=T)
+
+surpresa["k"], anunciada["k"]              # níveis, (T+1,)
+anunciada["c"][0] != surpresa["c"][0]      # o anúncio aparece no impacto</code></pre>
+  <p>Newton de tempo empilhado sobre a mesma função de resíduos que a perturbação lineariza. Uma
+  surpresa é uma mudança em <code>terminal</code> com parâmetros constantes; um cronograma legal
+  conhecido de antemão é uma sequência.</p>
+
+  <h3>6. Calibrar parâmetros por alvos — e saber se estão identificados</h3>
+<pre><code>def observaveis(ss, p):
+    y = ss["a"] * ss["k"] ** p.alpha
+    return {"ky": ss["k"] / y, "cy": ss["c"] / y}
+
+res = dk.calibrate(
+    meu, P(),
+    free={"beta": 0.95, "alpha": 0.30},
+    targets={"ky": 0.35, "cy": 0.65},
+    guess={"k": 0.2, "a": 1.0, "c": 0.36},
+    observables=observaveis,
+    bounds={"alpha": (0.05, 0.9), "beta": (0.5, 0.999)},
+)
+print(res.report())
+
+ident = dk.target_jacobian(meu, P(), free=["beta", "alpha"], targets=["k"],
+                           guess={"k": 0.2, "a": 1.0, "c": 0.36})
+ident["identified"]        # False: dois parâmetros, um alvo
+ident["null_directions"]   # a direção que nenhum alvo enxerga</code></pre>
+  <p>Feito à mão isso vira um ninho de bisseções, uma por parâmetro, cada qual escondendo que os
+  alvos são <em>conjuntamente</em> determinados. Uma calibração cuja matriz de elasticidades é
+  deficiente em posto não está identificada, e nenhuma tolerância de solucionador corrige isso.</p>
+
+
+  <h3>8. Derivar as CPOs em vez de as escrever</h3>
+  <p>Declara-se o problema; o lagrangiano é diferenciado por você. O que se ganha não é digitação —
+  é que a álgebra deixa de ser feita à mão, e é nela que entram os sinais trocados e os termos
+  esquecidos, que não aparecem no estado estacionário.</p>
+<pre><code>from dsgekit.blocks import Problem, optimality_conditions
+
+prob = Problem(
+    "log(c)",                                   # retorno do PERÍODO
+    controls=["c", "i"], states=["k"], exogenous=["a"],
+    constraints=["c + i = a*k**alpha",          # recursos
+                 "k(+1) = (1-delta)*k + i"],    # acumulação
+    discount="beta", parameters=["alpha", "beta", "delta", "rho"],
+)
+foc = optimality_conditions(prob)
+
+for eq in foc["equations"]:
+    print(f"{eq:60s}  # {foc['detail'][eq]}")   # cada equação diz de onde veio
+
+derivado = dk.from_equations(
+    foc["equations"] + ["log(a(+1)) = rho*log(a) + eps_a"],
+    states=["k", "a"], jumps=foc["jumps"], shocks=["eps_a"],
+    parameters=["alpha", "beta", "delta", "rho"])</code></pre>
+  <p>Condições de transversalidade, desigualdades e envelopes não padrão continuam sendo do
+  modelador: o pacote deriva o que você declarou, e a declaração é a modelagem.</p>
+
+  <h3>9. Terceira ordem</h3>
+<pre><code>to = dk.solve_third_order(so, cov={"eps_a": 0.007})
+
+to.g_kkk, to.h_kkk        # os termos cúbicos
+to.accuracy()             # a ordem implícita tem de dar ~4
+to.simulate(periods=5000, seed=1)    # podada em três camadas</code></pre>
+  <div class="note"><p><strong>O que a terceira ordem daqui faz, e o que não faz.</strong> O bloco
+  cúbico está implementado e verificado — dividir o deslocamento pela metade divide o resíduo por
+  dezesseis. Os termos <code>sigma²·k</code>, o risco entrando na INCLINAÇÃO das regras, <em>não</em>
+  estão: este pacote escreve <code>k' = h(k,σ) + Qε</code>, com a inovação aditiva, e não há onde
+  guardar a dependência do estado da curvatura em ε. Para prêmio de risco variável no tempo, use o
+  Dynare — e o exemplo seguinte escreve o <code>.mod</code> para você.</p></div>
+
+  <h3>10. Exportar para o Dynare e para o MacroModelling.jl</h3>
+<pre><code>ss_sim = dk.steady_state(simbolico, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
+
+texto = dk.to_dynare(simbolico, P(), steady=ss_sim, cov={"eps_a": 0.007},
+                     path="modelo.mod", order=2)
+jl = dk.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl")
+
+"predetermined_variables k;" in texto     # a datação é traduzida sozinha</code></pre>
+  <p>A tradução da datação é a parte que um porte manual erra: no dsgekit o estado em <em>t</em> é o
+  DISPONÍVEL em <em>t</em>; no Dynare a variável predeterminada é a DECIDIDA em <em>t</em>. E os
+  processos exógenos vão escritos um período atrás, para que a inovação apareça sem defasagem. A ida
+  e volta — o pacote escreve o <code>.mod</code>, o Dynare resolve, comparamos — bate a
+  <code>5e-14</code> em estado estacionário, IRFs e momentos, nos três modelos de referência.</p>
+
+  <h3>7. Verificações independentes</h3>
+<pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
+
+dk.check_slack(sol, {"c_positivo": lambda v: v["c"]}, size=-0.5)   # ao longo das IRFs
+
+dk.steady_state_invariance(                    # uma invariância que é TEOREMA do modelo
+    lambda v: dk.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
+    [0.5, 0.8, 0.95], ["k", "c"])["ok"]         # k não depende da persistência</code></pre>
+</div></section>
+
+<section id="caixa"><div class="wrap">
+  <h2>O que tem na caixa</h2>
+  <div class="cards">
+    <div class="card"><h4>Estado estacionário</h4><p>Positividade resolvida em logs e âncoras por
+    laço externo, para termos que dependem do próprio estado estacionário.</p></div>
+    <div class="card"><h4>Primeira ordem</h4><p>Klein/QZ em forma complexa, com Blanchard-Kahn
+    imposto e a margem de determinação relatada.</p></div>
+    <div class="card"><h4>Segunda ordem</h4><p>Equação de Sylvester generalizada, correções de risco,
+    simulação podada e média ergódica em forma fechada.</p></div>
+    <div class="card"><h4>Terceira ordem</h4><p>Bloco cúbico verificado à ordem 4. Sem os termos de
+    risco na inclinação — a página diz por quê.</p></div>
+    <div class="card"><h4>Das CPOs ao <code>.mod</code></h4><p>Declare o lagrangiano, derive as
+    condições, resolva, exporte para Dynare ou MacroModelling.jl.</p></div>
+    <div class="card"><h4>Previsão perfeita</h4><p>Newton de tempo empilhado com jacobiana esparsa e
+    trajetórias de parâmetros anunciadas.</p></div>
+    <div class="card"><h4>Calibração</h4><p>Alvos resolvidos em conjunto, com diagnóstico de
+    identificação por posto e direções nulas.</p></div>
+    <div class="card"><h4>Verificações</h4><p>Ordem de acurácia, identidades independentes, folga de
+    restrições suavizadas, comparação entre soluções.</p></div>
+  </div>
+</div></section>
+
+<section id="datacao"><div class="wrap">
+  <h2>A única convenção que você precisa acertar</h2>
+  <p><code>eps</code> é a inovação datada em <em>t+1</em>, desconhecida em <em>t</em>, com
+  <code>E_t eps = 0</code>. Um AR(1) escreve-se assim:</p>
+<pre><code class="plain">nxt.a - p.rho * cur.a - eps.eps_a</code></pre>
+  <div class="note"><p><strong>Escrever ao contrário não dá erro.</strong> Tratar a inovação como
+  conhecida em <em>t</em> torna o modelo determinístico dentro do período: a solução de primeira
+  ordem não muda, e <em>toda</em> correção de risco de segunda ordem sai zero em silêncio. É a única
+  convenção que a biblioteca não consegue verificar por você — mas o teste está no pacote: sobre
+  <code>log a' = rho log a + eps</code> a correção tem de dar exatamente <code>sigma²</code>.</p></div>
+</div></section>
+
+<section id="validacao"><div class="wrap">
+  <h2>Validação</h2>
+  <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
+
+  <h3>Contra respostas conhecidas no papel</h3>
+  <p>84 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
+  um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
+  <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
+  <code>k' = αβk^α</code>; e a própria ordem de acurácia — dividir o deslocamento pela metade tem de
+  dividir o resíduo de primeira ordem por quatro e o de segunda por oito.</p>
+
+  <h3>Contra os modelos de referência do Dynare</h3>
+  <p>Os exemplos de <a href="https://www.dynare.org/resources/">dynare.org/resources</a>, rodados no
+  Dynare e confrontados variável a variável.</p>
+  <table>
+    <thead><tr><th>Modelo</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos teóricos</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>example1 <span style="color:var(--muted)">(Collard, choques correlacionados)</span></td>
+          <td class="num">1,2e-14</td><td class="num">3,2e-14</td><td class="num">2,5e-14</td><td class="ok">OK</td></tr>
+      <tr><td>example2 <span style="color:var(--muted)">(o mesmo em logaritmos)</span></td>
+          <td class="num">2,1e-05</td><td class="num">4,3e-06</td><td class="num">3,3e-06</td><td class="ok">OK*</td></tr>
+      <tr><td>RBC_baseline <span style="color:var(--muted)">(Pfeifer, 15 variáveis)</span></td>
+          <td class="num">0,0e+00</td><td class="num">3,8e-14</td><td class="num">3,5e-14</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* No <code>example2</code> o <code>steady</code> do
+  Dynare para antes: o seu estado estacionário deixa resíduo de <code>1,1e-06</code> nas equações do
+  modelo, contra <code>1,0e-44</code> do dsgekit, e toda a discrepância decorre disso. A confirmação
+  independente está à mão — <code>example1</code> e <code>example2</code> são a mesma economia em
+  coordenadas diferentes, e <code>exp(e.e. do example2)</code> bate com o <code>example1</code> em
+  nível a <code>1e-15</code>.</p>
+
+  <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
+  <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de
+  segunda ordem do dsgekit batem com o Dynare a <code>9,4e-06</code> pontos percentuais e com o
+  MacroModelling.jl a <code>8,8e-06</code>. O Dynare usa segunda ordem não podada; o MacroModelling,
+  podada; o dsgekit resolve a equação de Sylvester e devolve a média em forma fechada, sem simular.</p>
+</div></section>
+
+<section id="comparacao"><div class="wrap">
+  <h2>Como se compara ao que já existe</h2>
+  <p class="lede">O campo é povoado, e vale dizer com franqueza onde este pacote fica.</p>
+  <table>
+    <thead><tr><th>Capacidade</th><th>dsgekit</th><th>gEconpy</th><th>dolo</th><th>PyMacLab</th><th>econpizza</th></tr></thead>
+    <tbody>
+      <tr><td>Deriva as CPOs do problema do agente</td><td class="ok">sim</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Perturbação de 1ª ordem</td><td>sim</td><td>sim</td><td>sim</td><td>sim</td><td>—</td></tr>
+      <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
+      <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>sim</td><td>—</td></tr>
+      <tr><td>3ª ordem com risco na inclinação</td><td><strong>não</strong></td><td>—</td><td>sim</td><td>sim</td><td>—</td></tr>
+      <tr><td>Métodos globais / projeção</td><td><strong>não</strong></td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
+      <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
+      <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
+      <tr><td>Estimação bayesiana</td><td><strong>não</strong></td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Calibração por alvos + identificação</td><td>sim</td><td>parcial</td><td>?</td><td>?</td><td>?</td></tr>
+      <tr><td>Exportar para Dynare e MacroModelling.jl</td><td class="ok">sim</td><td>parcial</td><td>sim</td><td>—</td><td>—</td></tr>
+      <tr><td>Ordem de acurácia autoverificada</td><td>sim (ordens 2, 3, 4)</td><td>?</td><td>?</td><td>?</td><td>?</td></tr>
+      <tr><td>Dependências</td><td class="num">numpy, scipy</td><td class="num">sympy, PyMC</td><td class="num">pandas (pin antigo)</td><td class="num">numpy, scipy</td><td class="num">JAX</td></tr>
+      <tr><td>Instala em Python 3.14</td><td class="ok">sim</td><td class="ok">sim</td><td>não</td><td>não</td><td>?</td></tr>
+    </tbody>
+  </table>
+  <div class="note"><p><strong>Se você não precisa de segunda ordem, instale o
+  <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> Ele é maior em quase tudo
+  — declaração por blocos com derivação automática das condições de primeira ordem, estado
+  estacionário analítico, estimação bayesiana, exportação para Dynare — e simplesmente não faz
+  segunda ordem, que é onde este pacote tem o que ele não tem. Para métodos globais ou terceira
+  ordem, o <a href="https://github.com/EconForge/dolo.py">dolo</a>; para agentes heterogêneos, o
+  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> ou o
+  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
+  <p>O nicho defensável do <code>dsgekit</code> é estreito: a mesma função de resíduos serve à
+  perturbação e à transição determinística; segunda ordem em processo, sem sair para o Octave; as
+  verificações são da biblioteca e não da disciplina do usuário; e duas dependências, numpy e scipy.
+  A tabela completa, com o que verifiquei instalando e o que apenas li na documentação, está em
+  <a href="https://github.com/GustavoHM/dsgekit/blob/main/docs/comparison.md">docs/comparison.md</a>.</p>
+</div></section>
+
+<section id="citar"><div class="wrap">
+  <h2>Como citar</h2>
+  <p class="lede">Se o pacote entrou num resultado publicado, ele entra nas referências. Software é
+  um insumo metodológico como qualquer outro, e a versão importa: um número que só se reproduz numa
+  versão específica não é reproduzível sem ela.</p>
+
+  <h3>BibTeX</h3>
+<pre><code class="plain">@software{dsgekit_2026,
+  author  = {Hoffmann Moreira, Gustavo},
+  title   = {{dsgekit}: a general toolkit for solving DSGE models in Python},
+  year    = {2026},
+  version = {0.1.0},
+  license = {MIT},
+  url     = {https://github.com/GustavoHM/dsgekit},
+  note    = {Pacote em Python}
+}</code></pre>
+
+  <h3>ABNT</h3>
+<pre><code class="plain">HOFFMANN MOREIRA, Gustavo. dsgekit: a general toolkit for solving DSGE models in Python.
+Versão 0.1.0. 2026. Software em Python. Disponível em:
+https://github.com/GustavoHM/dsgekit. Acesso em: [data].</code></pre>
+
+  <h3>No corpo do texto</h3>
+  <p>Cite a versão junto do resultado, não só o nome:</p>
+  <blockquote style="border-left:3px solid var(--rule); margin:1rem 0; padding:.2rem 0 .2rem 1.1rem;
+     color:var(--muted)">O modelo foi resolvido com o <code>dsgekit</code> 0.1.0
+     (Hoffmann Moreira, 2026), em perturbação de segunda ordem.</blockquote>
+
+  <div class="note"><p><strong>Antes de citar, arquive.</strong> Uma URL de repositório não é uma
+  referência arquivável: o conteúdo muda e o link morre. Ligue o repositório ao
+  <a href="https://zenodo.org/">Zenodo</a>, crie um <em>release</em>, e o DOI que sai daí é o que se
+  cita. O arquivo <code>CITATION.cff</code> na raiz do pacote já está no formato que o GitHub lê —
+  preencha ali o DOI e o ORCID, e o botão "Cite this repository" passa a servir a entrada pronta.</p></div>
+
+  <h3>E as ferramentas que este pacote usa</h3>
+  <p>Se o seu resultado passou por elas, elas também entram: o
+  <a href="https://www.dynare.org/">Dynare</a> quando o modelo foi exportado ou conferido lá, o
+  <a href="https://github.com/thorek1/MacroModelling.jl">MacroModelling.jl</a> na mesma situação, e
+  <a href="https://numpy.org/citing-numpy/">NumPy</a> e <a href="https://scipy.org/citing-scipy/">SciPy</a>,
+  que pedem citação explicitamente e sustentam tudo o que está aqui.</p>
+</div></section>
+
+<section id="docs"><div class="wrap">
+  <h2>Documentação</h2>
+  <div class="cards">
+    <div class="card"><h4><a href="replications.html">Replicações</a></h4><p>Heutel (2012), o
+    crescimento estocástico com solução fechada e o princípio de Taylor. O código da página é
+    executado.</p></div>
+    <div class="card"><h4><a href="../docs/guide.md">Guia de uso</a></h4><p>Da declaração à segunda
+    ordem, com as armadilhas de cada etapa.</p></div>
+    <div class="card"><h4><a href="../docs/api.md">Referência da API</a></h4><p>Toda função, todo
+    argumento, todo campo devolvido.</p></div>
+    <div class="card"><h4><a href="../docs/design-notes.md">Notas de projeto</a></h4><p>Cada decisão
+    numérica e a falha específica que ela evita.</p></div>
+    <div class="card"><h4><a href="../docs/from-scripts.md">Portar um script</a></h4><p>De laços de
+    ponto fixo a equações declarativas, passo a passo.</p></div>
+  </div>
+</div></section>
+
+</main>
+
+<footer><div class="wrap">
+  <p>dsgekit — MIT. Feito para o programa de pesquisa sobre geração distribuída, e não amarrado a
+  ele. <br>Os links da documentação apontam para os arquivos do repositório; ao publicar, veja
+  <code>site/README.md</code>.</p>
+</div></footer>
+
+<script src="highlight.js"></script>
+</body>
+</html>

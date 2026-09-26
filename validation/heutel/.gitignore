@@ -1,0 +1,4 @@
+# Local copies of the user-supplied replication files; not relicensed by dsgekit.
+original/
+# Reproducible Octave/Dynare scratch output.
+out/

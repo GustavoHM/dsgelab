@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# OS
+.DS_Store
+
+# Dynare and Octave scratch. The .mod files under validation/mods are GPL and
+# are fetched by validation/fetch.sh, not vendored in this MIT package.
+validation/mods/
+validation/out/
+validation/out_roundtrip/
+validation/heutel/original/
+validation/heutel/out/
+*.mat
+*.log
