@@ -9,7 +9,7 @@ authors:
     given-names: "Gustavo"
     email: "gustavo@gakusai.net"
     # orcid: "https://orcid.org/0000-0000-0000-0000"   # preencha
-version: "0.1.0"
+version: "0.2.0"
 date-released: "2026-09-09"
 license: MIT
 # Preencha ao publicar. Um DOI do Zenodo, obtido ligando o repositório e criando um release,

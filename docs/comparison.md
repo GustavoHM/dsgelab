@@ -36,8 +36,8 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Estado estacionário analítico declarado | — | ✅ bloco `STEADY_STATE` | ? | ? | ? | 📄 | ✅ |
 | **Perturbação de 1ª ordem** | ✅ Klein/QZ | ✅ | 📄 | 📄 | — | 📄 Klein | ✅ |
 | **Perturbação de 2ª ordem + correções de risco** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
-| Perturbação de 3ª ordem | ⚠️ † só o bloco determinístico | — | 📄 | — | — | — | ✅ |
-| Métodos globais / projeção | — | — | 📄 iteração de tempo, valor, expectativas | — | 📄 | — | — |
+| Perturbação de 3ª ordem | ✅ † cúbico e inclinação de risco | — | 📄 | — | — | — | ✅ |
+| Métodos globais / projeção | ✅ † colocação de Chebyshev | — | 📄 iteração de tempo, valor, expectativas | — | 📄 | — | — |
 | Agentes heterogêneos (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Restrições ocasionalmente ativas | — | — | 📄 | 📄 ZLB | 📄 | — | 📄 OccBin |
 | **Previsão perfeita não linear** | ✅ Newton de tempo empilhado | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 *shooting* | ? | ✅ |
@@ -48,8 +48,8 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Autocorrelações | ✅ | ✅ `autocorrelation_matrix` | ? | ? | — | 📄 | ✅ |
 | Decomposição de variância | ✅ | ? | ? | ? | — | ? | ✅ |
 | Simulação com poda (*pruning*) | ✅ | — (só 1ª ordem) | ? | ? | — | ? | ✅ |
-| **Estimação bayesiana** | **—** | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
-| Filtro de Kalman / *smoothing* | — | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
+| **Estimação bayesiana** | ✅ † Kalman e Metropolis | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
+| Filtro de Kalman / *smoothing* | ✅ † filtro, sem suavizador | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibração por alvos** | ✅ conjunta, com limites | ✅ parâmetros calibrados por razões-alvo | ? | ? | ? | ? | 📄 |
 | **Diagnóstico de identificação da calibração** | ✅ posto e direções nulas | ? | ? | ? | ? | ? | 📄 (identificação do modelo) |
 | Blanchard-Kahn | ✅ **imposto**, com margem | ✅ `check_bk_condition` | ? | ? | — | ? | ✅ relatado |
@@ -86,21 +86,24 @@ CPOs** a partir de um lagrangiano declarado, **terceira ordem** e **exportadores
 MacroModelling.jl — este último com ida e volta verificada, isto é, o pacote escreve o `.mod`, o
 Dynare resolve, e as duas soluções batem a 5e-14.
 
-Duas continuam abertas, e a terceira ordem foi entregue pela metade:
+As três lacunas que essa tabela deixava em aberto foram fechadas no que cada uma tem de verificável,
+e o alcance de cada fechamento é o do teste, não o de uma plataforma.
 
-* **Terceira ordem, só o bloco determinístico.** ``g_kkk`` e ``h_kkk`` estão implementados e
-  verificados pelo teste de ordem de acurácia (razão 16 ao dobrar a precisão). Os termos
-  ``sigma^2 k`` — o risco entrando na INCLINAÇÃO das regras, que é o motivo econômico usual para ir
-  à terceira ordem — não estão, e a razão é de forma e não de esforço: este pacote escreve
-  ``k' = h(k,sigma) + Q eps``, com a inovação aditiva, enquanto o Dynare escreve
-  ``y = g(y(-1), u, sigma)``, com a inovação como ARGUMENTO da regra. As duas coincidem em primeira
-  ordem; em segunda a diferença entra só pela média e é absorvida por ``h_sigma_sigma``, que aqui é
-  resolvido a partir das equações — o que se confere contra o Dynare e o MacroModelling a 1e-06 p.p.
-  num modelo de 71 variáveis. Em terceira, não há onde guardar a dependência do estado. A derivação
-  que tentei devolve o módulo certo com o sinal trocado, e um coeficiente que se sabe errado não se
-  embarca. **Para prêmio de risco variável no tempo, use o Dynare — e o exportador escreve o `.mod`.**
-* **Estimação bayesiana:** não implementada.
-* **Métodos globais e de projeção:** não implementados.
+* **Terceira ordem, incluindo a inclinação de risco.** ``g_kkk`` e ``h_kkk`` continuam verificados
+  pela ordem de acurácia. ``h_ssk`` e ``g_ssk`` saem da curvatura da regra em relação à inovação,
+  contraída com ``Σ``. No AR(1) logarítmico, ``h_ssk[a, a] = ρ σ²`` com o sinal positivo, que é o
+  termo cruzado de ``(1+â)^ρ exp(σ²/2)``. A linha do capital, cuja regra é exata, sai em zero.
+  O tensor completo do Dynare, com a inovação como argumento em todos os monômios, não é este
+  objeto. O termo ``σ² k`` da regra de decisão é.
+* **Estimação bayesiana do modelo linear.** Filtro de Kalman sobre a solução de primeira ordem,
+  moda da posteriori e Metropolis–Hastings de passeio aleatório. No AR(1) gaussiano a verossimilhança
+  bate com a fórmula condicional, e a moda de ``ρ`` numa amostra simulada volta ao valor que a gerou.
+  Não há filtro de partículas, nem suavizador, nem estimação da solução podada.
+* **Projeção por colocação de Chebyshev.** O mesmo resíduo, numa grade tensorial de até três estados.
+  As linhas sem salto futuro determinam o estado seguinte a cada choque. As outras são integradas por
+  Gauss–Hermite. No crescimento estocástico de solução fechada, a política reproduz
+  ``c = (1-αβ) a k^α``. Uma grade esparsa, iteração de valor e mais de dois choques na quadratura
+  tensorial não estão neste solver.
 
 ### Avaliação honesta
 

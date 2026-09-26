@@ -8,8 +8,9 @@ aplicado precisa dele.
 O núcleo a que o pacote se propôs está feito. Estado estacionário com positividade e âncora
 externa, Klein/QZ com Blanchard–Kahn imposto, impulso, momentos, decomposição de variância,
 segunda ordem com correção de risco, média ergódica em forma fechada e simulação podada,
-terceira ordem no bloco determinístico, previsão perfeita com trajetória anunciada de
-parâmetros, calibração conjunta com diagnóstico de posto, verificações, equações em texto com
+terceira ordem com o bloco cúbico e a inclinação de risco, previsão perfeita com trajetória anunciada de
+parâmetros, calibração conjunta com diagnóstico de posto, estimação linear por Kalman e
+Metropolis, projeção de Chebyshev, verificações, equações em texto com
 derivadas exatas até a hessiana, derivação de condições de primeira ordem de um problema e
 exportação para Dynare e MacroModelling.jl. O que segue é o que esses objetos ainda não
 entregam.
@@ -51,31 +52,28 @@ equações de fechamento que o usuário escreve, um `Model` só, pronto para `fr
 o exportador. Os limites são os que `Problem` já tem. Restrições de igualdade, nada em `t+2`, e
 o fechamento de mercado continua sendo texto do modelador. Não é uma linguagem de blocos.
 
-## A lacuna de forma
+## Fechado, com o alcance do teste
 
-**Risco que depende do estado.** `g_kkk` e `h_kkk` estão implementados e o teste de ordem de
-acurácia os separa de um bloco cúbico errado. `g_ssk` e `h_ssk` não estão nas matrizes. Uma
-derivação anterior recuperou o módulo no RBC de referência, `|h_ssk[a, a]| = ρ σ²` a quatro
-algarismos, com o sinal trocado. A solução é escrita `k' = h(k, σ) + Q ε`, com a inovação
-aditiva. O termo em que o risco muda a inclinação vive na derivada cruzada em relação à inovação,
-e essa forma não tem onde guardá-la. O Dynare escreve `y = g(y(-1), u, σ)`.
+**Inclinação de risco, terceira ordem.** `g_ssk` e `h_ssk` são calculados. A curvatura da regra
+em relação à inovação é resolvida antes da esperança, e a derivada dessa curvatura no estado,
+contraída com a covariância, é o termo `σ² k`. No AR(1) logarítmico, `h_ssk[a, a] = ρ σ²`. A
+linha do capital no RBC de solução fechada sai em zero. O tensor em que a inovação é argumento de
+todos os monômios, como no Dynare, não é calculado. O termo que entra na regra de decisão é.
 
-O trabalho, se for feito, é a representação: regras que recebem a inovação como argumento, com
-`g_u`, `g_uu` e `g_ku`, e só então `g_σσk`. Corrigir o sinal à mão embarca um coeficiente que se
-sabe errado. Até essa forma existir, a terceira ordem daqui melhora a aproximação determinística,
-e o prêmio de risco variável no tempo sai pelo exportador, com `stoch_simul(order=3)`. A prova
-de que o sinal deixou de ser um palpite é a ida e volta contra o Dynare, no mesmo padrão que a
-segunda ordem já tem.
+**Estimação bayesiana do modelo linear.** `estimate` maximiza a posteriori do filtro de Kalman
+sobre a solução de primeira ordem e, se pedido, corre um Metropolis–Hastings. A verossimilhança
+do AR(1) gaussiano bate com a fórmula condicional. Não há filtro de partículas nem suavizador.
 
-A documentação de `solve_third_order` dizia que `cov` entrava em `g_ssk` e `h_ssk`. `cov` é a
-covariância guardada para a simulação. Os coeficientes de inclinação não são calculados.
+**Projeção.** `solve_projection` coloca o resíduo expectacional numa grade de Chebyshev, até três
+estados e dois choques na quadratura tensorial. No crescimento estocástico de solução fechada a
+política reproduz `c = (1 − αβ) a k^α`. Grade esparsa e iteração de valor ficam de fora.
 
 **Terceira ordem no tamanho do modelo aplicado.** No sistema de 71 variáveis, `m = 2n + n_ε` fica
 perto de 150. O tensor denso de terceiras derivadas tem ordem `n m³` e não cabe como objeto
 simbólico, nem como diferença finita repetida de uma hessiana. O front end simbólico para na
 hessiana de propósito: ela já custa `n m²` expressões. Para a terceira ordem rodar aqui nesse
 tamanho, o tensor tem de ser esparso. Enquanto não for, o caminho desse modelo é o `.mod`. Nos
-modelos pequenos, o bloco cúbico determinístico já roda e já é verificado.
+modelos pequenos, o bloco cúbico e a inclinação de risco já rodam e já são verificados.
 
 ## Só se um modelo aplicado pedir
 
@@ -95,10 +93,12 @@ a não linearidade é suave e o choque é grande.
 Cada um destes é uma célula vazia numa tabela de capacidades, e o lugar certo de fazê-lo já está
 nomeado em [`docs/comparison.md`](docs/comparison.md).
 
-* **Estimação bayesiana, filtro de Kalman e suavizador.** gEconpy, via PyMC, ou pydsge. A
-  identificação pela verossimilhança é o mesmo projeto. `target_jacobian` continua sendo o
-  diagnóstico de identificação da calibração, que é o objeto que este pacote resolve.
-* **Métodos globais e de projeção.** dolo.
+* **Suavizador de Kalman, filtro de partículas e estimação da solução podada.** O que há é o
+  filtro e um Metropolis no modelo linear. gEconpy, via PyMC, continua sendo o lugar da
+  estimação com o ecossistema de amostradores. `target_jacobian` continua sendo o diagnóstico
+  da calibração.
+* **Iteração de valor e grade esparsa.** O que há é colocação de Chebyshev no resíduo, até três
+  estados. dolo cobre o resto dos métodos globais.
 * **Agentes heterogêneos no sentido de uma distribuição.** sequence-jacobian ou econpizza.
   `vec` escreve um número finito de grupos, que é o que o modelo aplicado é. Uma distribuição
   sobre os grupos é outro algoritmo.
@@ -136,7 +136,7 @@ governo), está no roadmap dele, na seção *Extensions that call dsgekit*.
 ## Em volta do pacote
 
 O `cgekit` e o `dsgekit` são repositórios separados. Este está em
-`https://github.com/GustavoHM/dsgekit`, versão 0.1.0. Os testes rodam na integração contínua
+`https://github.com/GustavoHM/dsgekit`, versão 0.2.0. Os testes rodam na integração contínua
 deste repositório.
 
 A página de replicação está em [`site/replications.html`](site/replications.html). Ela executa

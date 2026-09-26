@@ -29,28 +29,17 @@ alimentar as regras cúbicas de volta no sistema não linear tem de deixar resí
 mesmo teste que separa a segunda ordem da primeira, um grau acima, e um coeficiente cúbico errado
 não o sobrevive.
 
-**NÃO implementado:** os termos ``g_ssk`` e ``h_ssk``, o risco entrando na INCLINAÇÃO das regras — e
-é honesto dizer por quê, porque é uma limitação da forma de solução e não uma lacuna de esforço.
+**Implementado também:** ``g_ssk`` e ``h_ssk``. A inovação continua a entrar na primeira ordem por
+``Q eps``. A curvatura de segunda ordem dessa inovação, ``h_ee``, é resolvida antes de tomar a
+esperança, e a sua derivada em relação ao estado, contraída com a covariância, é ``h_ssk``. No
+AR(1) logarítmico isso tem de dar ``h_ssk[a, a] = ρ σ²``, com sinal positivo: a média condicional
+é ``(1+â)^ρ exp(σ²/2)``, e o termo cruzado entre ``â`` e ``σ²`` tem esse coeficiente. Uma derivação
+anterior acertava o módulo e invertia o sinal porque lia o termo pelo canal aditivo, que não o
+guarda. Aqui o canal é a curvatura em ``eps``, e o sinal sai da equação, não de um ajuste.
 
-Este pacote escreve a solução como ``k_{t+1} = h(k_t, sigma) + Q eps_{t+1}``, com a inovação entrando
-ADITIVAMENTE no estado. O Dynare escreve ``y_t = g(y_{t-1}, u_t, sigma)``, com a inovação como
-ARGUMENTO da regra, o que lhe dá ``g_u``, ``g_uu``, ``g_xu`` e afins. As duas formas coincidem em
-primeira ordem. Em segunda, a curvatura em ``eps`` entra apenas pela MÉDIA, e é absorvida por
-``h_sigma_sigma``, que aqui é resolvido a partir das equações e não suposto — o que se confere: no
-AR lognormal a correção sai exatamente ``sigma^2``, e num modelo aplicado de 71 variáveis as
-correções de média batem com o Dynare a 9,4e-06 e com o MacroModelling.jl a 8,8e-06 pontos
-percentuais.
-
-Em TERCEIRA ordem isso deixa de bastar: o termo ``sigma^2 k`` precisa de como a curvatura em ``eps``
-varia com o estado, e a forma aditiva não tem onde guardar isso. A derivação que tentei devolve o
-módulo certo — no RBC de referência, ``|h_ssk[a,a]| = rho*sigma^2`` a quatro algarismos — com o
-SINAL trocado, que é a assinatura de captar o termo por um canal errado. Incluí-lo seria embarcar um
-coeficiente que sei estar errado.
-
-Consequência prática: a terceira ordem daqui melhora a aproximação DETERMINÍSTICA e não entrega
-prêmio de risco variável no tempo, que é o motivo econômico usual para ir à terceira ordem. Para
-isso, use o Dynare (``order=3``) — e o :mod:`dsgekit.export` escreve o ``.mod`` para você, com a
-ida e volta verificada a 5e-14.
+O que isto não é: o tensor completo do Dynare, ``g(y_{-1}, u, σ)``, com ``g_uuu`` e ``g_σσu``.
+O termo que a regra de decisão usa para o prêmio de risco variar com o estado é ``σ² k``, e é esse
+que entra em ``jumps`` e ``next_states``.
 """
 
 from __future__ import annotations
@@ -70,12 +59,15 @@ __all__ = ["ThirdOrderSolution", "solve_third_order"]
 
 @dataclass
 class ThirdOrderSolution:
-    """A solução de segunda ordem mais os termos cúbicos determinísticos ``g_kkk`` e ``h_kkk``."""
+    """Segunda ordem, mais o bloco cúbico e a inclinação de risco ``σ² k``."""
 
     second: SecondOrderSolution
     g_kkk: np.ndarray            # (n_u, n_k, n_k, n_k)
     h_kkk: np.ndarray            # (n_k, n_k, n_k, n_k)
+    g_ssk: np.ndarray            # (n_u, n_k)   risco na inclinação dos saltos
+    h_ssk: np.ndarray            # (n_k, n_k)   risco na inclinação dos estados
     sylvester_residual: float = 0.0
+    risk_slope_residual: float = 0.0
     Sigma: np.ndarray = field(repr=False, default=None)
 
     @property
@@ -101,7 +93,7 @@ class ThirdOrderSolution:
                + 0.5 * np.einsum("rab,a,b->r", self.second.g_kk, k, k)
                + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.g_kkk, k, k, k))
         if risk:
-            out = out + 0.5 * self.second.g_ss
+            out = out + 0.5 * self.second.g_ss + 0.5 * self.g_ssk @ k
         return out
 
     def next_states(self, k, eps=None, risk: bool = True) -> np.ndarray:
@@ -110,7 +102,7 @@ class ThirdOrderSolution:
                + 0.5 * np.einsum("rab,a,b->r", self.second.h_kk, k, k)
                + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.h_kkk, k, k, k))
         if risk:
-            out = out + 0.5 * self.second.h_ss
+            out = out + 0.5 * self.second.h_ss + 0.5 * self.h_ssk @ k
         if eps is not None and self.Q is not None:
             out = out + self.Q @ eps
         return out
@@ -145,13 +137,15 @@ class ThirdOrderSolution:
             ks[t] = (self.P @ s_ant + 0.5 * np.einsum("rab,a,b->r", hkk, f_ant, f_ant)
                      + 0.5 * self.second.h_ss)
             kt[t] = (self.P @ t_ant + np.einsum("rab,a,b->r", hkk, f_ant, s_ant)
-                     + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.h_kkk, f_ant, f_ant, f_ant))
+                     + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.h_kkk, f_ant, f_ant, f_ant)
+                     + 0.5 * self.h_ssk @ f_ant)
             k = kf[t] + ks[t] + kt[t]
             u[t] = (self.F @ k
                     + 0.5 * np.einsum("rab,a,b->r", gkk, kf[t], kf[t])
                     + np.einsum("rab,a,b->r", gkk, kf[t], ks[t])
                     + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.g_kkk, kf[t], kf[t], kf[t])
-                    + 0.5 * self.second.g_ss)
+                    + 0.5 * self.second.g_ss
+                    + 0.5 * self.g_ssk @ kf[t])
         k_tot = (kf + ks + kt)[burn:]
         u = u[burn:]
         paths = {n: k_tot[:, i] for i, n in enumerate(self.model.states)}
@@ -196,8 +190,8 @@ def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
     second : SecondOrderSolution
         Saída de :func:`dsgekit.solve_second_order`.
     cov : mapping, array ou None
-        Covariância dos choques, guardada para a simulação. Não entra nos coeficientes:
-        ``g_ssk`` e ``h_ssk`` não são calculados. Ver o cabeçalho deste módulo.
+        Covariância dos choques. Entra em ``g_ssk`` e ``h_ssk`` pela contração da curvatura
+        em ``eps`` com ``Σ``. A simulação usa a mesma matriz.
     h, h_hess : float
         Passos externo e interno da terceira derivada; ver
         :func:`dsgekit.linearize.third_derivatives`.
@@ -263,6 +257,99 @@ def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
     resid = float(np.max(np.abs(np.einsum("ea,aijl->eijl", Abar, W3)
                                 + np.einsum("ea,aijl->eijl", Bbar, WPPP) + K3)))
 
-    Sigma = shock_covariance(model.shocks, cov)
+    Sigma = shock_covariance(model.shocks, cov if cov is not None else second.Sigma)
+    g_ssk, h_ssk, slope_resid = _risk_slope(
+        nk, nu, n, ne, f1, f2, H, T, P, F, Q, g_kk, g_kkk, Sigma)
     return ThirdOrderSolution(second=second, g_kkk=g_kkk, h_kkk=h_kkk,
-                              sylvester_residual=resid, Sigma=Sigma)
+                              g_ssk=g_ssk, h_ssk=h_ssk,
+                              sylvester_residual=resid, risk_slope_residual=slope_resid,
+                              Sigma=Sigma)
+
+
+def _risk_slope(nk, nu, n, ne, f1, f2, H, T, P, F, Q, g_kk, g_kkk, Sigma):
+    """``g_ssk``, ``h_ssk`` a partir da curvatura da regra em relação à inovação.
+
+    A regra de primeira ordem escreve ``k' = P k + Q eps``. A segunda derivada dessa regra em
+    ``eps``, ``h_ee``, resolve o resíduo ex post diferenciado duas vezes. A esperança
+    ``h_ee : Σ`` é a correção de média. Diferenciar essa curvatura em relação ao estado e
+    contrair de novo com ``Σ`` é ``h_ssk``. ``g_ssk`` fecha o mesmo sistema linear que a
+    correção de média, agora em cada direção do estado.
+    """
+    A1 = f1[:, :nk] + f1[:, nk:] @ F
+    A2 = f1[:, nk:]
+    A3 = f2[:, nk:]
+    lhs = np.hstack([A1, A2 + A3]) if nu else A1
+    Z = np.vstack([np.vstack([P, F @ P]),
+                   np.vstack([np.eye(nk), F]),
+                   np.zeros((ne, nk))])
+    L = np.vstack([Q, F @ Q, np.zeros((n, ne)), np.eye(ne)])
+
+    def solve_state(rhs):
+        coef, *_ = np.linalg.lstsq(A1, rhs, rcond=None)
+        return coef, float(np.max(np.abs(A1 @ coef - rhs)))
+
+    worst = 0.0
+    H_ee = np.einsum("epq,pa,qb->eab", H, L, L)
+    g_qq = np.einsum("rab,ia,jb->rij", g_kk, Q, Q) if nu else np.zeros((0, ne, ne))
+    h_ee = np.zeros((nk, ne, ne))
+    for a in range(ne):
+        for b in range(ne):
+            rhs = -H_ee[:, a, b]
+            if nu:
+                rhs = rhs - A2 @ g_qq[:, a, b]
+            h_ee[:, a, b], err = solve_state(rhs)
+            worst = max(worst, err)
+    h_ee = 0.5 * (h_ee + np.transpose(h_ee, (0, 2, 1)))
+
+    h_ke = np.zeros((nk, nk, ne))
+    for i in range(nk):
+        for a in range(ne):
+            Ht = np.einsum("epq,p,q->e", H, Z[:, i], L[:, a])
+            rhs = -Ht
+            if nu:
+                rhs = rhs - A2 @ np.einsum("rab,a,b->r", g_kk, P[:, i], Q[:, a])
+            h_ke[:, i, a], err = solve_state(rhs)
+            worst = max(worst, err)
+
+    def d2_ee(a, b):
+        hk = h_ee[:, a, b]
+        hu = F @ hk
+        if nu:
+            hu = hu + np.einsum("rab,a,b->r", g_kk, Q[:, a], Q[:, b])
+        return np.concatenate([hk, hu, np.zeros(n + ne)])
+
+    def d2_ke(i, a):
+        hk = h_ke[:, i, a]
+        hu = F @ hk
+        if nu:
+            hu = hu + np.einsum("rab,a,b->r", g_kk, P[:, i], Q[:, a])
+        return np.concatenate([hk, hu, np.zeros(n + ne)])
+
+    h_ssk = np.zeros((nk, nk))
+    g_ssk = np.zeros((nu, nk))
+    for i in range(nk):
+        acc = np.zeros(n)
+        for a in range(ne):
+            for b in range(ne):
+                weight = Sigma[a, b]
+                if weight == 0.0:
+                    continue
+                extra = np.zeros(nu)
+                if nu:
+                    extra = (np.einsum("rab,a,b->r", g_kk, h_ke[:, i, a], Q[:, b])
+                             + np.einsum("rab,a,b->r", g_kk, Q[:, a], h_ke[:, i, b])
+                             + np.einsum("rab,a,b->r", g_kk, P[:, i], h_ee[:, a, b])
+                             + np.einsum("rabc,a,b,c->r", g_kkk, P[:, i], Q[:, a], Q[:, b]))
+                Hpart = (np.einsum("epq,p,q->e", H, d2_ke(i, a), L[:, b])
+                         + np.einsum("epq,p,q->e", H, d2_ke(i, b), L[:, a])
+                         + np.einsum("epq,p,q->e", H, d2_ee(a, b), Z[:, i]))
+                Tpart = np.einsum("epqr,p,q,r->e", T, Z[:, i], L[:, a], L[:, b])
+                known = Hpart + Tpart
+                if nu:
+                    known = known + A2 @ extra
+                acc += weight * known
+        solved = np.linalg.solve(lhs, -acc)
+        h_ssk[:, i] = solved[:nk]
+        if nu:
+            g_ssk[:, i] = solved[nk:]
+    return g_ssk, h_ssk, worst

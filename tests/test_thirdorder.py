@@ -52,6 +52,24 @@ def test_simulacao_podada_de_terceira_ordem_nao_explode():
     assert np.max(np.abs(sim["k"])) < 1.0
 
 
+def test_a_inclinacao_de_risco_do_ar1_logaritmico_e_rho_sigma2():
+    """E[a'|a] = a^ρ exp(σ²/2). No desvio, o cruzamento entre â e σ² é ρ σ².
+
+    h_ssk[a, a] tem de sair com esse valor e com esse sinal. A linha do capital,
+    cuja regra é exata e não carrega risco, tem de sair em zero. O mesmo para o
+    salto do consumo.
+    """
+    model, params, _, _, third = _solucoes(sigma=0.02)
+    ia = model.states.index("a")
+    ik = model.states.index("k")
+    target = params.rho * 0.02 ** 2
+    assert third.h_ssk[ia, ia] == pytest.approx(target, rel=1e-4, abs=1e-8)
+    assert np.max(np.abs(third.h_ssk[ik])) < 1e-6
+    assert np.max(np.abs(third.h_ssk[:, ik])) < 1e-6
+    assert np.max(np.abs(third.g_ssk)) < 1e-6
+    assert third.risk_slope_residual < 1e-6
+
+
 def test_modelo_linear_tem_terceira_ordem_desprezivel():
     """No NK, escrito em desvios logarítmicos, não há o que a terceira ordem acrescente.
 

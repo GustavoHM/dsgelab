@@ -35,11 +35,13 @@ from .linearize import (Coordinates, LinearSystem, first_order_system, second_de
 from .model import Model, VarView, get_param, set_params
 from .secondorder import SecondOrderSolution, solve_second_order
 from .thirdorder import ThirdOrderSolution, solve_third_order
+from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
+from .projection import Projection, solve_projection
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, steady_state
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -49,6 +51,8 @@ __all__ = [
     "first_order_system", "second_derivatives", "LinearSystem", "Coordinates",
     "solve_second_order", "SecondOrderSolution",
     "solve_third_order", "ThirdOrderSolution", "third_derivatives",
+    "estimate", "EstimationResult", "log_likelihood", "log_posterior",
+    "solve_projection", "Projection",
     "perfect_foresight", "TransitionPath",
     "calibrate", "CalibrationResult", "target_jacobian",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",

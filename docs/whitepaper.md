@@ -250,7 +250,7 @@ Estão calculados \(g_{kkk}\) e \(h_{kkk}\). Eles resolvem a mesma Sylvester, co
 
 e a simetria nos três índices é imposta pela média das seis permutações. O termo conhecido \(K_3\) junta a hessiana contraída com as derivadas segundas do mapa e o tensor de terceira derivada contraído com \(Z\). A terceira derivada é uma diferença central da hessiana, com passo externo \(10^{-3}\) maior que o interno, porque diferenciar um objeto já obtido por diferenças pede um passo que domine o ruído desse objeto. Quando a hessiana é simbólica, essa diferença herda a exatidão dela. O tensor denso de terceira ordem tem ordem \(n m^3\). Num modelo de dezenas de variáveis ele não cabe como objeto simbólico, e o caminho desse tamanho é o exportador para o Dynare com `order=3`.
 
-\(g_{ssk}\) e \(h_{ssk}\) não são calculados. A solução guarda a inovação somada ao estado, \(k' = h(k, \sigma) + Q\varepsilon\). O termo em que o risco muda a inclinação vive na derivada cruzada em relação à inovação, e essa forma não tem onde guardá-la. O Dynare escreve \(y_t = g(y_{t-1}, u_t, \sigma)\), com a inovação como argumento. As duas formas coincidem em primeira ordem. Em segunda, a curvatura em \(\varepsilon\) entra pela média e é absorvida por \(h_{ss}\), que aqui é resolvido a partir das equações. Em terceira, uma derivação no RBC de referência recuperou o módulo, \(|h_{ssk}[a,a]| = \rho\sigma^2\) a quatro algarismos, com o sinal trocado. O coeficiente não entra na matriz.
+\(g_{ssk}\) e \(h_{ssk}\) são calculados a partir da curvatura da regra em \(\varepsilon\), antes de tomar a esperança. No AR(1) logarítmico, \(h_{ssk}[a,a] = \rho\sigma^2\), que é o termo cruzado de \((1+\hat a)^{\rho}\exp(\sigma^2/2)\). A solução de primeira ordem continua a somar \(Q\varepsilon\). O tensor em que a inovação é argumento de todos os monômios, \(y_t = g(y_{t-1}, u_t, \sigma)\), não é montado. O termo \(\sigma^2 k\) da regra de decisão é.
 
 A simulação de terceira ordem é a poda em três camadas de Andreasen, Fernández-Villaverde e Rubio-Ramírez (2018). Cada camada é alimentada só pelas anteriores. O teste de acurácia, com o risco desligado, exige resíduo de ordem \(\|k\|^4\). Dividir o deslocamento por dois divide o resíduo por cerca de dezesseis.
 
@@ -302,9 +302,13 @@ Estoques predeterminados, os estados cuja linha de \(Q\) é nula, entram no Dyna
 
 No Dynare os desvios-padrão vão no bloco `shocks`, inclusive as covariâncias fora da diagonal. No MacroModelling as inovações são normais padrão, e o desvio-padrão entra na equação como parâmetro `sig`. Omiti-lo produz variâncias unitárias.
 
-## 13. O que esta matemática não faz
+## 13. Estimação, projeção, e o que continua de fora
 
-Estimação, filtro de Kalman, métodos globais e agentes heterogêneos no sentido de uma distribuição não estão neste sistema de equações. A terceira ordem não entrega prêmio de risco variável no tempo, pela razão da seção 8. O mapa do que falta, e do que fica de fora de propósito, está em `ROADMAP.md`.
+A solução de primeira ordem é um espaço de estados linear. O filtro de Kalman lê a verossimilhança de séries em nível, centradas no estado estacionário dos parâmetros correntes. A moda da posteriori é um máximo numérico. As extrações são um Metropolis–Hastings de passeio aleatório. Um parâmetro que viola Blanchard–Kahn contribui com verossimilhança nula. Não há suavizador nem filtro de partículas.
+
+A projeção coloca o mesmo resíduo numa grade de Chebyshev. As linhas da jacobiana sem salto futuro determinam o estado seguinte a cada nó de Gauss–Hermite. As outras são integradas. A política dos saltos é o polinômio. A grade tensorial para em três estados e a quadratura em dois choques.
+
+Agentes heterogêneos no sentido de uma distribuição continuam fora. O mapa do que cada rotina não cobre está em `ROADMAP.md`.
 
 Um equilíbrio de período calibrado numa matriz de contabilidade social não é uma instância de \(f\). Se um modelo desse tipo precisar de uma Euler ou de uma trajetória anunciada, o resíduo intertemporal é que viria para cá. A matriz permaneceria no outro pacote. A seção correspondente está no roadmap do `cgekit`.
 
