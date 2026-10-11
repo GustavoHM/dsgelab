@@ -1,146 +1,222 @@
 # Roadmap
 
-O que o `dsgelab` ainda não faz. Cada item diz por que importa. A maior parte apareceu quando o
-pacote encontrou um modelo aplicado: o DSGE de grupos da geração distribuída, com cerca de 71
-variáveis, e o porte do Heutel. Nada aqui é promessa nem data. Um item sobe quando um modelo
-aplicado precisa dele.
+Plano revisto em 11 de outubro de 2026. O objetivo é deixar o `dsgelab` **o mais completo
+possível**: a **versão 1.0** cobre o que as ferramentas de referência oferecem — Dynare,
+MacroModelling.jl, gEconpy, dolo, sequence-jacobian — e ainda os buracos que os modelos aplicados
+revelaram nos objetos que o pacote já tem. O **release público** acontece na **versão 0.5**.
 
-O núcleo a que o pacote se propôs está feito. Estado estacionário com positividade e âncora
-externa, Klein/QZ com Blanchard–Kahn imposto, impulso, momentos, decomposição de variância,
-segunda ordem com correção de risco, média ergódica em forma fechada e simulação podada,
-terceira ordem com o bloco cúbico e a inclinação de risco, previsão perfeita com trajetória anunciada de
-parâmetros, calibração conjunta com diagnóstico de posto, estimação linear por Kalman e
-Metropolis, projeção de Chebyshev, verificações, equações em texto com
-derivadas exatas até a hessiana, derivação de condições de primeira ordem de um problema e
-exportação para Dynare e MacroModelling.jl. O que segue é o que esses objetos ainda não
-entregam.
+Este plano substitui o de 25 de setembro, que deixava de fora, de propósito, a estimação completa,
+os métodos globais, os agentes heterogêneos, o estado estacionário analítico declarado e as
+defasagens e avanços no texto, apontando para as ferramentas que já os têm. Em 11 de outubro a
+decisão foi revertida: tudo isso entra. Os argumentos da exclusão não foram descartados. Viraram
+**condições de desenho** dos itens correspondentes, registradas junto de cada um.
 
-## Em seguida: buracos dos objetos que já existem
+A comparação item a item com as outras ferramentas está em
+[`docs/comparison.md`](docs/comparison.md). O `cgelab` avança pelos mesmos marcos, no roadmap dele:
+"0.3" quer dizer a 0.3 de cada um.
 
-**Impulso de segunda ordem.** `irf` existe na solução de primeira ordem. Na de segunda há
-`simulate`, `mean_correction` e as regras, e não há impulso. O motivo de pagar a segunda ordem é
-uma média e um sinal que a primeira não vê. O objeto que um artigo desenha para isso é o impulso
-generalizado: simulações podadas com e sem o choque, a diferença média, porque a resposta depende
-do estado em que o choque chega e do sinal do choque. O impulso de primeira ordem continua sendo
-o caso em que essa média não depende de nenhum dos dois.
+## Onde estamos
 
-**Uma sequência de inovações na previsão perfeita.** `perfect_foresight` chama o resíduo com a
-inovação igual a zero em toda data. Uma trajetória anunciada de parâmetros funciona, e foi o que
-o modelo aplicado precisou para as rampas. Uma seca de tamanho conhecido no ano 3, ou um choque
-noticiado, não entra, a não ser disfarçada de parâmetro ou de estado inicial. A função de
-resíduos já recebe a inovação. Falta o argumento, uma sequência de comprimento `T+1`, no mesmo
-lugar em que `params` e `ctx` já aceitam sequência.
+Versão 0.2.0, em `https://github.com/GustavoHM/dsgelab`. Estado estacionário com positividade e
+âncora externa; Klein/QZ com Blanchard–Kahn imposto e, opcionalmente, o critério de raiz unitária
+do Dynare; impulso, momentos e decomposição de variância; segunda ordem com correção de risco,
+média ergódica em forma fechada, simulação podada e impulso generalizado; terceira ordem com o
+bloco cúbico e a inclinação de risco; previsão perfeita com trajetória anunciada de parâmetros e de
+inovações; decomposição histórica e previsão condicional; calibração conjunta com diagnóstico de
+posto; estimação linear por Kalman e Metropolis; projeção de Chebyshev; equações em texto com
+derivadas exatas até a hessiana; derivação de CPOs; **o planejador de Ramsey**; **leitura de
+`.mod`**; exportação para Dynare e MacroModelling.jl.
 
-**Decomposição histórica e previsão condicional, na solução linear.** `state_path` propaga
-inovações que o usuário já tem. Falta o caminho de volta: dadas as variáveis observadas, as
-inovações que as reproduzem, e uma previsão em que parte das variáveis é fixada numa trajetória.
-As duas contas usam `P`, `Q` e `F`, que a solução já devolve. É o que a seção estocástica de um
-artigo aplicado pede depois que os momentos incondicionais estão na mesa.
+A validação contra o Dynare cobre onze modelos: três portados à mão, oito `.mod` lidos sem porte
+(entre eles cinco da pasta `examples/` do próprio Dynare) e três problemas de Ramsey, um deles do
+conjunto de testes de política ótima do Dynare. Detalhes em [`validation/`](validation/README.md).
 
-**O bem-estar da função-objetivo que a derivação já viu.** `optimality_conditions` devolve as
-equações e larga o retorno do período. O bem-estar de segunda ordem — a utilidade incondicional
-na média podada e na variância de primeira ordem — volta a ser derivado à mão no artigo. O
-objetivo declarado tem de viajar com o modelo. A variação equivalente de consumo é uma conta em
-cima desse número e da utilidade marginal no estado estacionário, que a mesma função já fornece.
-A transformação pede a variável que desfaz o buraco de bem-estar. Não se assume log nem uma
-variável chamada consumo.
+## O que conta como pronto
 
-**Vários agentes num equilíbrio só.** `optimality_conditions` trata um problema recursivo. Um
-modelo é vários desses mais as condições de fechamento, e a concatenação à mão é onde um sinal
-errado volta depois de as condições terem saído certas. Falta um montador fino: problemas mais as
-equações de fechamento que o usuário escreve, um `Model` só, pronto para `from_equations` e para
-o exportador. Os limites são os que `Problem` já tem. Restrições de igualdade, nada em `t+2`, e
-o fechamento de mercado continua sendo texto do modelador. Não é uma linguagem de blocos.
+Um item só sai do roadmap quando cumpre as seis condições abaixo. A garantia que o pacote oferece
+é que cada número foi conferido contra uma referência independente, e um recurso sem essa
+conferência rebaixaria o pacote inteiro.
 
-## Fechado, com o alcance do teste
+1. Implementado com API pública em `__all__`.
+2. **Validado contra uma referência independente**: outra implementação (Dynare,
+   MacroModelling.jl, gEconpy, dolo, sequence-jacobian), uma solução fechada ou um resultado
+   publicado. A validação fica num script que qualquer pessoa consegue rodar.
+3. Testes na suíte do pacote, sem dependência de ferramentas externas. O que precisa do Dynare ou
+   do Julia fica em `validation/`.
+4. Documentado na referência da API, com exemplo executável no site, conferido por
+   `tools/check_site_examples.py`.
+5. Linha correspondente atualizada em `docs/comparison.md`.
+6. Entrada no [`CHANGELOG.md`](CHANGELOG.md).
 
-**Inclinação de risco, terceira ordem.** `g_ssk` e `h_ssk` são calculados. A curvatura da regra
-em relação à inovação é resolvida antes da esperança, e a derivada dessa curvatura no estado,
-contraída com a covariância, é o termo `σ² k`. No AR(1) logarítmico, `h_ssk[a, a] = ρ σ²`. A
-linha do capital no RBC de solução fechada sai em zero. O tensor em que a inovação é argumento de
-todos os monômios, como no Dynare, não é calculado. O termo que entra na regra de decisão é.
+## Marcos
 
-**Estimação bayesiana do modelo linear.** `estimate` maximiza a posteriori do filtro de Kalman
-sobre a solução de primeira ordem e, se pedido, corre um Metropolis–Hastings. A verossimilhança
-do AR(1) gaussiano bate com a fórmula condicional. Não há filtro de partículas nem suavizador.
+### 0.2 — política ótima, bem-estar e os buracos dos objetos que já existem
 
-**Projeção.** `solve_projection` coloca o resíduo expectacional numa grade de Chebyshev, até três
-estados e dois choques na quadratura tensorial. No crescimento estocástico de solução fechada a
-política reproduz `c = (1 − αβ) a k^α`. Grade esparsa e iteração de valor ficam de fora.
+- [x] **Ramsey com compromisso**, perspectiva atemporal, e o seu estado estacionário
+  (`ramsey_model`, `ramsey_steady_state`). Validado contra a regra de metas e a forma fechada de
+  Galí (2015, cap. 5) e contra o `ramsey_model` do Dynare em três modelos, inclusive o
+  `tests/optimal_policy/nk_ramsey_model.mod` do Dynare, sem alteração: estado estacionário a 5e-11,
+  IRFs das variáveis e dos multiplicadores a 5e-13.
+- [ ] **Regras simples ótimas** (OSR): perda quadrática nos momentos incondicionais, minimizada sobre
+  os coeficientes de uma regra, com aviso quando o ótimo cai na fronteira. Validação contra o `osr`
+  do Dynare (`tests/optimal_policy/OSR/osr_example.mod`, já baixado por `fetch.sh`).
+- [ ] **Política discricionária** em aproximação linear-quadrática. Validação contra o
+  `discretionary_policy` do Dynare (`tests/discretionary_policy/dennis_1.mod`, já baixado).
+- [ ] **Bem-estar**: a função-objetivo declarada viaja com o modelo; bem-estar de segunda ordem,
+  condicional e incondicional; variação equivalente de consumo. A transformação pede a variável que
+  desfaz o buraco de bem-estar, sem assumir log nem uma variável chamada consumo. Validação contra
+  o `evaluate_planner_objective` do Dynare, que o `nk_ramsey_model.mod` já chama.
+- [x] **Impulso generalizado de segunda ordem** (`SecondOrderSolution.irf`): simulações podadas com
+  e sem o choque, porque a resposta depende do estado em que o choque chega e do seu sinal.
+- [x] **Sequência de inovações na previsão perfeita** (`perfect_foresight(..., shocks=)`).
+  *Falta a validação contra o `perfect_foresight_solver` do Dynare.*
+- [ ] **Previsão perfeita com erros de expectativa**: choques que surpreendem no meio da trajetória.
+  Validação contra o `perfect_foresight_with_expectation_errors_solver` do Dynare.
+- [ ] **Ramsey a partir do `.mod`**: `from_mod` ler `planner_objective` e `ramsey_model`, de modo que
+  os testes de política ótima do Dynare rodem sem tradução manual.
 
-**Terceira ordem no tamanho do modelo aplicado.** No sistema de 71 variáveis, `m = 2n + n_ε` fica
-perto de 150. O tensor denso de terceiras derivadas tem ordem `n m³` e não cabe como objeto
-simbólico, nem como diferença finita repetida de uma hessiana. O front end simbólico para na
-hessiana de propósito: ela já custa `n m²` expressões. Para a terceira ordem rodar aqui nesse
-tamanho, o tensor tem de ser esparso. Enquanto não for, o caminho desse modelo é o `.mod`. Nos
-modelos pequenos, o bloco cúbico e a inclinação de risco já rodam e já são verificados.
+### 0.3 — estimação, previsão e decomposição
 
-## Só se um modelo aplicado pedir
+- [x] Filtro de Kalman sobre a solução linear, moda da posteriori e Metropolis–Hastings de passeio
+  aleatório (`estimate`, `log_likelihood`).
+- [x] **Decomposição histórica** e **previsão condicional** a trajetórias fixadas
+  (`historical_decomposition`, `conditional_forecast`). *Falta a validação contra o
+  `shock_decomposition` e o `conditional_forecast` do Dynare.*
+- [ ] **Equações de observação** declaradas com o modelo, e erro de medida.
+- [ ] **Suavizador de Kalman** e inicialização difusa para estados não estacionários.
+- [ ] **Máxima verossimilhança** como objeto próprio, com erros-padrão pela hessiana.
+- [ ] **Estimação bayesiana completa**: SMC além do Metropolis; diagnósticos de convergência (R-hat,
+  tamanho efetivo de amostra); verificação preditiva a priori, incluindo a fração dos sorteios em que
+  o modelo tem solução determinada. Validação simulando dados com parâmetros conhecidos e contra o
+  `estimation` do Dynare no `fs2000.mod`, que `from_mod` já lê.
+- [ ] **Verossimilhança marginal** (Laplace e média harmônica modificada) e comparação de modelos.
+- [ ] **Decomposição histórica em tempo real** e **previsão com bandas**.
 
-**Restrições que às vezes seguram.** `check_slack` já diz quando um `max` suavizado saiu da
-região em que a perturbação vale, ao longo do impulso e não só no estado estacionário. Não
-resolve o modelo nessa região. O algoritmo que cabe no que o pacote tem é o linear por partes de
-Guerrieri e Iacoviello, em primeira ordem, sobre o mesmo Klein. Entra no dia em que o diagnóstico
-falhar num impulso que o artigo precisa reportar.
+### 0.4 — não linearidades e declaração do modelo
 
-**Trajetória estendida.** Previsão perfeita com a expectativa de choque a um período, iterada.
-Fica entre a perturbação e um método global. Faz sentido quando a transição precisa ser não
-linear e estocástica ao mesmo tempo e a restrição ativa no ponto errado não é o problema, porque
-a não linearidade é suave e o choque é grande.
+- [x] **Importar `.mod`** (`from_mod`), com macros, variáveis locais, `steady_state()`, avanços e
+  defasagens de qualquer ordem. Validado em oito `.mod`, lidos sem alteração, contra o Dynare.
+- [x] **Defasagens e avanços arbitrários**, no caminho do `.mod`, com toda variável auxiliar listada
+  em `ModFile.auxiliary`. *Falta o mesmo em `from_equations`. Condição de desenho, herdada da
+  exclusão anterior: o que é predeterminado continua declarado num lugar só, e nenhuma auxiliar
+  nasce em silêncio.*
+- [ ] **Restrições ocasionalmente ativas** pelo método linear por partes de Guerrieri e Iacoviello,
+  sobre o mesmo Klein. Validação contra o `+occbin` do Dynare.
+- [ ] **Trajetória estendida** (*extended path*). Validação contra o `extended_path` do Dynare.
+- [ ] **Estado estacionário analítico declarado**, inclusive o `steady_state_model` de um `.mod`.
+  *Condição de desenho:* um bloco analítico é um segundo modelo do mesmo ponto, e por isso o pacote
+  confere que ele anula o resíduo do modelo dinâmico antes de usá-lo; se não anular, recusa.
+- [ ] **Equações de calibração dentro do modelo**, à maneira do MacroModelling.jl.
+- [ ] **Vários agentes num equilíbrio só**: um montador que junta problemas de otimização às
+  equações de fechamento num único `Model`. Os limites são os de `Problem`; não é uma linguagem de
+  blocos.
+- [ ] **Homotopia e continuação** para estados estacionários difíceis.
+- [ ] **Modelos não estacionários**: tendências declaradas, com verificação do crescimento
+  balanceado. Validação contra o `+bgp` do Dynare. A raiz unitária já é aceita por
+  `qz_criterium`; falta a declaração da tendência.
+- [ ] **Diagnóstico do modelo**: singularidades, equações redundantes, variáveis que não aparecem.
 
-## De propósito, fora
+### 0.5 — release público
 
-Cada um destes é uma célula vazia numa tabela de capacidades, e o lugar certo de fazê-lo já está
-nomeado em [`docs/comparison.md`](docs/comparison.md).
+Nenhum recurso novo. Os itens abaixo são condição para publicar.
 
-* **Suavizador de Kalman, filtro de partículas e estimação da solução podada.** O que há é o
-  filtro e um Metropolis no modelo linear. gEconpy, via PyMC, continua sendo o lugar da
-  estimação com o ecossistema de amostradores. `target_jacobian` continua sendo o diagnóstico
-  da calibração.
-* **Iteração de valor e grade esparsa.** O que há é colocação de Chebyshev no resíduo, até três
-  estados. dolo cobre o resto dos métodos globais.
-* **Agentes heterogêneos no sentido de uma distribuição.** sequence-jacobian ou econpizza.
-  `vec` escreve um número finito de grupos, que é o que o modelo aplicado é. Uma distribuição
-  sobre os grupos é outro algoritmo.
-* **Um segundo bloco de estado estacionário analítico.** `solve(..., steady=)` já aceita o estado
-  estacionário que o usuário calculou, e o exportador escreve esse ponto num `initval`. Um bloco
-  simbólico paralelo seria um segundo modelo do mesmo estado estacionário.
-* **Defasagem `(-1)` e avanço `(+2)` no texto.** Recusados de propósito. Defasagem é um estado
-  com a sua equação de transição. Um termo em `t+2` significa que o problema não cabe em dois
-  períodos, e `optimality_conditions` já recusa dizendo qual estado o causou.
-* **A calibração a partir da matriz de contabilidade social, da POF, do ONS e da ANEEL.** Isso é
-  o pipeline do artigo. O pacote começa na função de resíduos.
+**Bloqueantes**
 
-## O cgekit como chamador
+- [x] **Renomear.** `dsgekit` estava tomado no PyPI por um pacote concorrente, *"A Python toolkit
+  for DSGE models"*. O pacote agora é `dsgelab`, livre no PyPI em 11 de outubro de 2026. Falta
+  reservar o nome com um primeiro upload ao TestPyPI e ao PyPI.
+- [x] **Um repositório canônico.** `https://github.com/GustavoHM/dsgelab`. As cópias do repositório de pesquisa foram arquivadas.
+- [ ] **Idioma.** Código, docstrings e `docs/api.md` estão em inglês; o site, o roadmap, a
+  comparação e a validação, em português. O site público precisa de versão em inglês, como o do
+  `cgelab` já tem.
+- [ ] **Validação reproduzível por terceiros.** A evidência publicada roda na mão de qualquer um:
+  os `.mod` do Dynare, as soluções fechadas e o Heutel (2012). Falta tirar da documentação pública
+  as afirmações que só o modelo do artigo sustenta, ou marcá-las como tal.
 
-O equilíbrio de um período, calibrado numa matriz de contabilidade social, continua no
-`cgekit`. O que passaria para cá é o resíduo intertemporal, nos pontos em que um agente olha
-para a frente. A matriz não entra neste pacote. A dependência seria opcional: só o módulo-ponte
-do `cgekit` importaria o `dsgelab`, e um modelo estático seguiria com numpy, scipy e pandas.
+**Engenharia de publicação**
 
-Quatro usos, todos do lado de lá e resolvidos com o que este pacote já tem:
+- [ ] Integração contínua: testes em Python 3.10 a 3.14, em Linux, macOS e Windows;
+  `check_site_examples.py`. Há um `tests.yml`; falta a matriz completa.
+- [ ] Validações externas como tarefa agendada na CI: Octave e Dynare no Ubuntu; Julia com
+  MacroModelling.jl.
+- [ ] Instalação testada a partir da *wheel*: no Python 3.14 a instalação editável pode quebrar em
+  silêncio no macOS.
+- [ ] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes.
+- [ ] DOI no Zenodo a cada release; `CITATION.cff` com ORCID e DOI.
+- [ ] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
+- [ ] `py.typed` e anotações de tipo na API pública.
+- [ ] Seção de limitações conhecidas no README.
 
-* uma trajetória anunciada de imposto, tarifa ou preço de carbono, por `perfect_foresight`, que
-  já aceita uma sequência de parâmetros;
-* choques agregados sobre os estoques de capital que a dinâmica recursiva já carrega, por
-  `solve` e `solve_second_order`, com os saldos contábeis substituídos pelo equilíbrio do
-  período;
-* o deslocamento de bem-estar que vem do risco agregado, por `mean_correction` sobre o consumo
-  que o período devolve;
-* o estado estacionário em que a Euler fecha, por `steady_state`. Esse ponto é outro que o
-  ano-base da matriz, e os dois têm de continuar distintos.
+**Política de versões a partir da 0.5.** Versionamento semântico. Antes da 1.0 uma versão menor
+ainda pode mudar a API, mas toda remoção ou mudança incompatível passa antes por um aviso de
+descontinuação que dura pelo menos uma versão menor. A API pública é o que está em `__all__`.
 
-A lista completa, e o que segue sendo conta do `cgekit` (ninhos, tarifas, regiões, fechamento do
-governo), está no roadmap dele, na seção *Extensions that call dsgelab*.
+### 0.6 — identificação, momentos e dados
 
-## Em volta do pacote
+- [ ] **Identificação local** (Iskrev; Komunjer e Ng). Validação contra o `+identification` do Dynare.
+- [ ] **Sensibilidade global**: região de estabilidade e determinação no espaço de parâmetros,
+  filtragem de Monte Carlo. Validação contra o `+gsa` do Dynare.
+- [ ] **Método dos momentos**: GMM, SMM e ajuste de IRF. Validação contra o `+mom` do Dynare.
+- [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
+- [ ] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda).
+- [ ] **Dados de frequência mista**.
+- [ ] **Gráficos**: impulsos, simulações, decomposições, previsões, posteriores.
 
-O `cgekit` e o `dsgelab` são repositórios separados. Este está em
-`https://github.com/GustavoHM/dsgelab`, versão 0.2.0. Os testes rodam na integração contínua
-deste repositório.
+### 0.7 — terceira ordem completa e derivadas
 
-A página de replicação está em [`site/replications.html`](site/replications.html). Ela executa
-quatro contas que a suíte já confere: o crescimento estocástico com utilidade logarítmica e
-depreciação total, contra a solução fechada; a correção de risco do AR(1) lognormal, que sai
-`σ²`; o princípio de Taylor no modelo de três equações; e o Heutel (2012) contra a Tabela 2, os
-coeficientes publicados das regras com informação defasada e o sistema linear do autor.
+- [ ] **Núcleo de perturbação na forma de regra de decisão do Dynare**, com a inovação como
+  argumento (`g_u`, `g_uu`, `g_ku`). A inclinação de risco `g_σσk` já está; o tensor com a inovação
+  em todos os monômios, não.
+- [ ] **Estado estacionário estocástico** e IRFs generalizadas analíticas. A prova é a ida e volta
+  contra o Dynare em `order=3`.
+- [ ] **Terceira ordem no tamanho do modelo aplicado**: tensores esparsos. No sistema de 71
+  variáveis, `m = 2n + n_ε` fica perto de 150 e o tensor denso não cabe.
+- [ ] **Derivadas da solução em relação aos parâmetros**, por diferenciação automática, e
+  **estimação com gradiente** (HMC/NUTS).
+- [ ] **Filtros não lineares**: inversão e partículas, para estimar em segunda e terceira ordem.
+  Validação contra o MacroModelling.jl.
+
+### 0.8 — métodos globais
+
+- [ ] **Iteração de tempo, de função-valor, grade endógena, grade esparsa.** A colocação de
+  Chebyshev até três estados já existe e reproduz a solução fechada do crescimento estocástico.
+  Validação contra o dolo.
+- [ ] **Discretização de processos** (Tauchen, Rouwenhorst).
+
+### 0.9 — a fronteira
+
+- [ ] **Troca de regime de Markov** na solução e na estimação. Validação contra o RISE.
+- [ ] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências. Validação contra o
+  sequence-jacobian. *Condição de desenho, herdada da exclusão anterior:* `vec` continua sendo a
+  forma de escrever um número finito de grupos; uma distribuição é outro algoritmo, num módulo
+  próprio.
+- [ ] **BVAR e DSGE-VAR**. Validação contra o `+bvar` e o `dsge_var` do Dynare.
+
+### 1.0
+
+Toda a lista acima coberta, API congelada, e a partir daí versionamento semântico estrito.
+
+## O `cgelab` como chamador
+
+O equilíbrio de um período, calibrado numa matriz de contabilidade social, continua no `cgelab`.
+O que passaria para cá é o resíduo intertemporal, nos pontos em que um agente olha para a frente.
+A matriz não entra neste pacote, e a dependência seria opcional: só o módulo-ponte do `cgelab`
+importaria o `dsgelab`. A lista completa está no roadmap do `cgelab`, na seção *Extensions that
+call dsgelab*.
+
+## Riscos
+
+**Escopo.** Vários itens equivalem cada um a um pacote inteiro: agentes heterogêneos é o escopo do
+sequence-jacobian; métodos globais, o do dolo; troca de regime, o do RISE. Com o padrão de
+validação deste roadmap, cada um é trabalho de meses. Se algum travar, a saída é publicar primeiro
+uma ponte validada para a ferramenta que já o faz — como o exportador para o Dynare já faz com a
+terceira ordem — e manter o item aberto até a implementação própria passar na mesma validação.
+
+**Dependências.** Estimação, diferenciação automática e métodos globais puxam dependências pesadas.
+O núcleo continua com numpy e scipy; o resto entra como extra opcional, para que quem só resolve
+modelos não pague por isso.
+
+**Validação dependente de ferramentas externas.** Quase toda a evidência vem de comparar com o
+Dynare e o MacroModelling.jl. Se uma dessas ferramentas mudar de comportamento entre versões, as
+validações quebram sem que o pacote tenha mudado. Por isso os `.mod` vêm de tags fixas do Dynare
+(6.4 para os exemplos, 7.1 para os testes), e a versão usada fica registrada nos scripts.

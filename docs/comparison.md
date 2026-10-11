@@ -1,10 +1,15 @@
 # Como estes pacotes se comparam aos que já existem
 
-Levantamento feito em 9 de setembro de 2026 e **revisto no mesmo dia**, depois de o
-`dsgelab` ganhar derivação de CPOs, terceira ordem determinística e exportadores para
-Dynare e MacroModelling.jl. As linhas que mudaram estão marcadas com †. A pergunta que o originou — *já existia pacote para
-DSGE e CGE em Python?* — tem resposta diferente dos dois lados, e vale registrar por escrito em vez
-de deixar implícito.
+Levantamento feito em 9 de setembro de 2026 e revisto em 11 de outubro de 2026, depois de o
+`dsgelab` ganhar o planejador de Ramsey, a leitura de `.mod`, o impulso generalizado de segunda
+ordem, a decomposição histórica e a previsão condicional. As linhas que mudaram em 11 de outubro
+estão marcadas com ‡; as de 9 de setembro, com †. A seção [Lacunas, também contra ferramentas de
+outras linguagens](#lacunas-também-contra-ferramentas-de-outras-linguagens) amplia a régua para o
+Dynare e o MacroModelling.jl, e cada lacuna ali tem uma versão no [`ROADMAP.md`](../ROADMAP.md).
+
+A pergunta que originou o levantamento — *já existia pacote para DSGE e CGE em Python?* — tem
+resposta diferente dos dois lados, e vale registrar por escrito em vez de deixar implícito. A
+tabela do lado CGE está no repositório do `cgelab`.
 
 ## Como ler as tabelas
 
@@ -40,14 +45,20 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Métodos globais / projeção | ✅ † colocação de Chebyshev | — | 📄 iteração de tempo, valor, expectativas | — | 📄 | — | — |
 | Agentes heterogêneos (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Restrições ocasionalmente ativas | — | — | 📄 | 📄 ZLB | 📄 | — | 📄 OccBin |
+| Raiz unitária aceita (`qz_criterium`) | ✅ ‡ opcional; estrito por omissão | ? | ? | ? | ? | ? | ✅ por omissão |
 | **Previsão perfeita não linear** | ✅ Newton de tempo empilhado | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 *shooting* | ? | ✅ |
 | Trajetória ANUNCIADA de parâmetros | ✅ | ✅ `param_paths` | ? | ? | ? | ? | 📄 |
+| Trajetória anunciada de INOVAÇÕES | ✅ ‡ | ? | ? | ? | ? | ? | ✅ |
 | IRFs | ✅ | ✅ | ? | 📄 | 📄 | 📄 | ✅ |
 | IRFs ortogonalizadas (Cholesky) | ✅ | ✅ `orthogonalize_shocks` | ? | ? | ? | ? | ✅ |
 | Momentos por Lyapunov | ✅ | ✅ `stationary_covariance_matrix` | ? | ? | — | 📄 | ✅ |
 | Autocorrelações | ✅ | ✅ `autocorrelation_matrix` | ? | ? | — | 📄 | ✅ |
 | Decomposição de variância | ✅ | ? | ? | ? | — | ? | ✅ |
 | Simulação com poda (*pruning*) | ✅ | — (só 1ª ordem) | ? | ? | — | ? | ✅ |
+| Impulso generalizado de 2ª ordem | ✅ ‡ | — | ? | ? | — | ? | ✅ |
+| Decomposição histórica e previsão condicional | ✅ ‡ na solução linear | ? | — | ? | — | — | ✅ |
+| **Política ótima: Ramsey com compromisso** | ✅ ‡ atemporal, contra o Dynare a 5e-13 | — | — | — | — | — | ✅ |
+| Regras simples ótimas, discrição | — | — | — | — | — | — | ✅ |
 | **Estimação bayesiana** | ✅ † Kalman e Metropolis | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
 | Filtro de Kalman / *smoothing* | ✅ † filtro, sem suavizador | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibração por alvos** | ✅ conjunta, com limites | ✅ parâmetros calibrados por razões-alvo | ? | ? | ? | ? | 📄 |
@@ -55,6 +66,7 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Blanchard-Kahn | ✅ **imposto**, com margem | ✅ `check_bk_condition` | ? | ? | — | ? | ✅ relatado |
 | **Ordem de acurácia autoverificada** | ✅ ordens 2, 3 e 4 | ? | ? | ? | ? | ? | — |
 | Exportar `.mod` do Dynare | ✅ † ida e volta a 5e-14 | ✅ `make_mod_file` | 📄 | — | — | — | — |
+| **Ler `.mod` do Dynare** | ✅ ‡ oito exemplos do Dynare lidos sem porte | — | — | — | — | — | n/a |
 | Dependências | numpy, scipy (sympy opcional) | sympy, pytensor, PyMC, preliz | numpy, scipy, pandas (pin antigo) | dolo, numpy | **JAX** | numpy, scipy | — |
 | Instala hoje (Python 3.14) | ✅ | ✅ | ❌ falha: fixa um pandas que não compila | ? | ? | ❌ o sdist não tem `setup.py` nem `pyproject.toml` | n/a |
 | Licença | MIT | GPL-3.0 | BSD-2 | ? | ? | ? | GPL |
@@ -78,6 +90,11 @@ anterior, mas não confirmei.
 
 **O `econpizza` e o `sequence-jacobian` resolvem outro problema** — agentes heterogêneos —, e não
 concorrem com o `dsgelab` em modelo de agente representativo.
+
+**Um concorrente direto escapou ao primeiro levantamento.** Há no PyPI um pacote chamado `dsgekit`,
+*"A Python toolkit for DSGE models"*, de Gustavo Vargas (0.1.0rc1). Não foi instalado nem lido, e
+por isso não está na tabela. Foi por causa dele que este pacote, que se chamava `dsgekit`, passou
+a se chamar `dsgelab` em 11 de outubro de 2026.
 
 ### O que mudou, e o que continua faltando
 
@@ -130,55 +147,40 @@ tempo, o Dynare pela porta do exportador.
 
 ---
 
-# CGE
+# Lacunas, também contra ferramentas de outras linguagens
 
-Aqui a situação é outra, e a diferença não é de opinião: é de escala.
+A tabela acima compara com pacotes em Python. Esta seção amplia a régua para o que existe em
+qualquer linguagem. A régua foi conferida nas versões instaladas nesta máquina: os subsistemas e os
+arquivos de função do Dynare 7.1 (`lib/dynare/matlab/`) e a lista de funções exportadas do
+MacroModelling.jl. Desde 11 de outubro de 2026 o objetivo é cobrir **toda** esta lista até a 1.0;
+a versão de cada item é a do [`ROADMAP.md`](../ROADMAP.md).
 
-| Capacidade | cgekit | pycge | PSLmodels/CGE | python-cge | GAMS / GEMPACK (ref.) |
-|---|---|---|---|---|---|
-| **Origem** | escrito para uma MCS aplicada | ✅ porte do `splcge.gams` da biblioteca do GAMS | ✅ "o modelo CGE mais simples de Hosoe, Gawana e Hashimoto (2010)" | ✅ transcrição direta do livro de Hosoe, p. 72 | plataformas de propósito geral |
-| **Escala demonstrada** | ✅ 225 contas: 69 atividades, 131 mercadorias, 20 domicílios | ✅ 3 exemplos didáticos + um regional | ✅ MCS de **16×18**: 4 setores, 3 fatores | ✅ **2 bens** (`BRD`, `MLK`) | milhares de contas (GTAP) |
-| Backend | ✅ `scipy.optimize.root` sobre poucas incógnitas | ✅ Pyomo + IPOPT | ✅ `scipy` `root` | ✅ próprio | resolvedores dedicados |
-| Linhas de Python | ~2.100 | ✅ 3.267 | ✅ 2.660 | ✅ 533 | n/a |
-| **MCS: leitura, verificação de balanço, balanceamento** | ✅ longo/quadrado, porta dura, RAS que preserva sinais | ? | ✅ lê `SAM.xlsx` | ✅ tem `balance.py` | ✅ |
-| Ninho de valor adicionado configurável (CES / CD / Leontief) | ✅ | ? | ✅ CES e Leontief | — | ✅ |
-| Armington | ✅ | ✅ | ✅ | — | ✅ |
-| CET nas exportações | ✅ (variante; o padrão fixa participações) | ? | ✅ | — | ✅ |
-| **Bloco de margens de comércio e transporte** | ✅ | ? | — | — | ✅ |
-| **Valor adicionado negativo tratado** | ✅ duas regras | ? | — | — | — |
-| Demanda LES / Stone-Geary | ✅ com calibração por Frisch | ? | — | — | ✅ |
-| **Atividades de conta própria** | ✅ detectadas e escaláveis | — | — | — | — |
-| Split creditável/não creditável do tributo | ✅ | — | — | — | ✅ |
-| **Fechamentos alternativos** | ✅ 5 combinações, cada uma com a sua variável de ajuste | ? | — | — | ✅ |
-| **Walras como verificação e não equação** | ✅ mercado do numerário fora do sistema | ? | — | — | convenção do modelador |
-| **Teste de reprodução do ano-base** | ✅ automático | 📄 "compara base e simulação" | — | — | convenção do modelador |
-| **Teste de homogeneidade de grau zero** | ✅ automático | — | — | — | convenção do modelador |
-| **Dinâmica recursiva** | ✅ com acumulação de capital e duas convenções de deflator | — | ✅ tem laço de iteração temporal | — | ✅ |
-| **Bem-estar: VE e VC** | ✅ | — | — | — | convenção do modelador |
-| Agregação por grupo imune à composição | ✅ | — | — | — | — |
-| Licença | MIT | ? | CC0-1.0 | ? | proprietário/comercial |
-| Estado declarado pelos autores | — | — | ✅ "muito preliminar… por favor não cite" | livro-texto | maduro |
-
-### O que a tabela diz
-
-Os três pacotes de EGC em Python que encontrei são **implementações do modelo-texto de Hosoe, Gawana
-e Hashimoto (2010)** ou do `splcge` da biblioteca do GAMS — dois a quatro setores. O `PSLmodels/CGE`
-diz de si mesmo, no README, que é "muito preliminar" e pede que não seja citado. Não há, até onde
-apurei, um pacote de EGC em Python de escala aplicada.
-
-Isso não faz do `cgekit` uma contribuição: faz dele **o preenchimento de uma lacuna que existe porque
-quem faz EGC aplicado usa GAMS ou GEMPACK**, e com bons motivos — resolvedores dedicados,
-comunidade, bases como a GTAP. A afirmação defensável é estreita: se você quer um EGC de escala
-aplicada *em Python*, sem licença comercial e com as portarias contábeis embutidas, não achei
-alternativa.
-
-### Uma advertência
-
-O `cgekit` foi validado contra uma réplica independente em JuMP/Ipopt do mesmo equilíbrio e contra o
-pipeline que o originou, e reproduz o ano-base, a homogeneidade e Walras à precisão de máquina numa
-MCS de 225 contas. Isso é evidência de que o que ele faz, faz certo. **Não** é evidência de que
-cubra o que um GAMS cobre: não tem CET calibrado em série, nem múltiplas regiões, nem estimação de
-elasticidades, nem a maturidade de uma plataforma com trinta anos de uso.
+| Item | Quem tem | Estado no `dsgelab` | Versão |
+|---|---|---|---|
+| Ramsey (compromisso) | ✅ Dynare (`ramsey_model`) | **feito**: `ramsey_model`, contra o Dynare em três modelos | 0.2 |
+| Regras simples ótimas; discrição | ✅ Dynare (`+osr`, `discretionary_policy`) | falta | 0.2 |
+| Bem-estar de segunda ordem e variação equivalente | ✅ Dynare (`evaluate_planner_objective`) | falta | 0.2 |
+| Impulso generalizado de segunda ordem | ✅ MacroModelling (`get_girf`) | **feito** | 0.2 |
+| Inovações em sequência na previsão perfeita | ✅ Dynare (`perfect_foresight_solver`) | **feito**; falta a validação contra o Dynare | 0.2 |
+| Erros de expectativa na previsão perfeita | ✅ Dynare (`perfect_foresight_with_expectation_errors_solver`) | falta | 0.2 |
+| Kalman, moda, Metropolis | ✅ Dynare (`+estimate`), MacroModelling, gEconpy | **feito** no modelo linear | 0.3 |
+| Suavizador, máxima verossimilhança, SMC, diagnósticos | ✅ Dynare | falta | 0.3 |
+| Verossimilhança marginal e comparação de modelos | ✅ Dynare | falta | 0.3 |
+| Decomposição histórica; previsão condicional | ✅ Dynare (`shock_decomposition`, `+conditional_forecasts`), MacroModelling | **feito** na solução linear; falta a versão em tempo real e a validação | 0.3 |
+| **Ler `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **feito**: `from_mod`, oito `.mod` do Dynare | 0.4 |
+| Defasagens e avanços arbitrários | 📄 Dynare, 📄 MacroModelling | **feito** pelo caminho do `.mod`; falta em `from_equations` | 0.4 |
+| Restrições ocasionalmente ativas | ✅ Dynare (`+occbin`) | falta; `check_slack` só diagnostica | 0.4 |
+| Trajetória estendida | ✅ Dynare (`extended_path`) | falta | 0.4 |
+| Estado estacionário analítico declarado | 📄 Dynare (`steady_state_model`), ✅ gEconpy | falta como objeto; `from_mod` usa o bloco como ponto de partida | 0.4 |
+| Equações de calibração no modelo | ✅ MacroModelling | falta; `calibrate` faz o mesmo de fora | 0.4 |
+| Homotopia; crescimento balanceado; diagnóstico do modelo | ✅ Dynare | falta; a raiz unitária já é aceita | 0.4 |
+| Identificação local; sensibilidade global | ✅ Dynare (`+identification`, `+gsa`) | falta; `target_jacobian` cobre alvos de estado estacionário | 0.6 |
+| Método dos momentos; restrições sobre IRFs e momentos | ✅ Dynare (`+mom`, `irf_calibration`) | falta | 0.6 |
+| Momentos filtrados; frequência mista; gráficos | ✅ Dynare, gEconpy, MacroModelling | falta | 0.6 |
+| Terceira ordem na forma de regra do Dynare; estado estacionário estocástico | ✅ Dynare, MacroModelling | inclinação de risco feita; o resto falta | 0.7 |
+| Terceira ordem esparsa; derivadas em relação aos parâmetros; filtros não lineares | 📄 Dynare (k-order), ✅ MacroModelling | falta | 0.7 |
+| Métodos globais | 📄 dolo | colocação de Chebyshev até três estados; o resto falta | 0.8 |
+| Troca de regime; agentes heterogêneos; BVAR e DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | falta | 0.9 |
 
 ---
 
@@ -190,7 +192,5 @@ elasticidades, nem a maturidade de uma plataforma com trinta anos de uso.
 - [pydsge](https://github.com/gboehl/pydsge) e [os seus docs](https://pydsge.readthedocs.io/en/latest/index.html)
 - [econpizza](https://github.com/gboehl/econpizza)
 - [PyMacLab](https://pythonhosted.org/pymaclab/) — documentação de janeiro de 2013
-- [pycge](https://github.com/juanfung/pycge), [PSLmodels/CGE](https://github.com/PSLmodels/CGE),
-  [python-cge](https://github.com/DavoudTaghawiNejad/python-cge) — clonados e lidos
-- [Banco Mundial sobre EGC](https://www.worldbank.org/en/programs/economicpolicy-macro-modeling/cge) e
-  [GEMPACK](https://en.wikipedia.org/wiki/Gempack)
+- [Dynare](https://www.dynare.org/) 7.1, instalado; os `.mod` de validação vêm das tags 6.4 e 7.1
+- [MacroModelling.jl](https://github.com/thorek1/MacroModelling.jl), instalado
