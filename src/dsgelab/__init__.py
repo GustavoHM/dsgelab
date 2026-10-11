@@ -28,12 +28,12 @@ with the Blanchard-Kahn condition enforced rather than reported.
 from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, steady_state_invariance)
-from .foresight import TransitionPath, perfect_foresight
+from .foresight import News, TransitionPath, perfect_foresight, perfect_foresight_with_expectation_errors
 from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
                         third_derivatives)
 from .model import Model, VarView, get_param, set_params
-from .dynare import DynareImportError, ModFile, from_mod
+from .dynare import DynareImportError, ModFile, from_mod, read_expectation_errors_csv
 from .optimal import (DiscretionError, DiscretionSolution, OSRError, OSRResult, PrivateBlock,
                       RamseyError, discretionary_policy, osr, ramsey_model, ramsey_multipliers,
                       ramsey_steady_state)
@@ -58,7 +58,7 @@ __all__ = [
     "solve_third_order", "ThirdOrderSolution", "third_derivatives",
     "estimate", "EstimationResult", "log_likelihood", "log_posterior",
     "solve_projection", "Projection",
-    "perfect_foresight", "TransitionPath",
+    "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance",
@@ -66,7 +66,7 @@ __all__ = [
     "discretionary_policy", "DiscretionSolution", "DiscretionError", "PrivateBlock",
     "osr", "OSRResult", "OSRError",
     "welfare", "welfare_model", "Welfare", "WelfareError", "consumption_equivalent",
-    "from_mod", "ModFile", "DynareImportError",
+    "from_mod", "ModFile", "DynareImportError", "read_expectation_errors_csv",
     "__version__",
     "from_equations", "optimality_conditions", "to_dynare", "to_macromodelling",
 ]

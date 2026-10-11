@@ -3,6 +3,8 @@
 Todos os modelos são lidos por `dsgelab.from_mod` a partir dos arquivos do próprio Dynare, menos o
 RBC com imposto, escrito nesta pasta. O que se compara:
 
+  nk_osr_planner.mod   (escrito aqui)  osr com planner_objective: a perda é menos o bem-estar
+                       incondicional de 2ª ordem. Mesma conferência: a perda no ótimo do Dynare.
   osr_example.mod      (tests/optimal_policy/OSR)  a função de perda do dsgelab no ótimo do Dynare,
                        contra o valor que o Dynare reporta; e o ótimo do dsgelab, que tem de ter
                        perda menor ou igual. Com Octave e Dynare à mão, a perda do PRÓPRIO Dynare
@@ -154,6 +156,33 @@ def check_osr(with_dynare: bool) -> bool:
     return ok
 
 
+def check_osr_welfare() -> bool:
+    ex = _load("nk_osr_planner")
+    if ex is None:
+        print("nk_osr_planner: sem out_policy/nk_osr_planner.mat — rode run_policy.sh")
+        return False
+    mf = from_mod(HERE / "ramsey" / "nk_osr_planner.mod")
+    dy_par = {k: float(getattr(ex.osr.optim_params, k)) for k in ex.osr.optim_params._fieldnames}
+    dy_loss = float(ex.osr.objective_function)
+    sf = lambda p: mf.steady_state(params=p)       # noqa: E731
+    U, beta = mf.planner["objective"], mf.planner["discount"]
+    p = set_params(mf.params, dy_par)
+    ours_at_dy = -welfare(mf.model, p, steady=sf(p), cov=mf.cov, objective=U,
+                          discount=beta).unconditional
+    r = osr(mf.model, mf.params, rule_params=mf.osr_params, objective=U, discount=beta,
+            cov=mf.cov, steady_fn=sf)
+    d_fun = _rel(ours_at_dy, dy_loss)
+    better = r.loss <= dy_loss * (1 + 1e-12)
+    print("\nOSR sobre o bem-estar — nk_osr_planner.mod (planner_objective, ordem 2)")
+    print(f"  perda do dsgelab no ótimo do Dynare   {ours_at_dy:.16f}")
+    print(f"  perda reportada pelo Dynare           {dy_loss:.16f}   desvio relativo {d_fun:.1e}")
+    print(f"  ótimo do dsgelab                      {r.loss:.16f}   "
+          f"{'menor ou igual' if better else 'MAIOR'} que o do Dynare")
+    for k in mf.osr_params:
+        print(f"     {k:<11} dsgelab {r.params[k]:>12.6f}   Dynare {dy_par[k]:>12.6f}")
+    return d_fun < 1e-10 and better
+
+
 # ------------------------------------------------------------------- discretion
 def check_discretion() -> bool:
     ex = _load("dennis_1")
@@ -253,7 +282,8 @@ def check_welfare_capital() -> bool:
 
 def main() -> int:
     with_dynare = "--sem-dynare" not in sys.argv
-    res = {"OSR": check_osr(with_dynare), "discrição": check_discretion(),
+    res = {"OSR": check_osr(with_dynare), "OSR sobre o bem-estar": check_osr_welfare(),
+           "discrição": check_discretion(),
            "Ramsey do .mod": check_ramsey_mod(), "bem-estar com capital": check_welfare_capital()}
     print("\n" + "  ".join(f"{k}: {'OK' if v else 'FALHOU'}" for k, v in res.items()))
     return 0 if all(res.values()) else 1

@@ -172,6 +172,26 @@ coordinates. Uses `model.hessian_fn` when available.
 | `guess` | `(T+1, n_vars)` initial iterate, e.g. a neighbouring solution |
 | `jacobian` | `"forward"` (default) or `"central"` |
 
+### `perfect_foresight_with_expectation_errors(model, start, terminal, *, params, T, news, shocks=None, ctx=None, initial_states=None, constant_simulation_length=False, **kwargs) -> TransitionPath`
+
+Perfect foresight in which agents learn, at the dates in `news`, that they were
+wrong. At each date they take the states the realised path has brought them to,
+form a new plan, and follow it until the next news; the path returned is the
+REALISED one, spliced from the plans (`result.plans`, starting at
+`result.plan_dates`). Every plan ends at date `T`, or, with
+`constant_simulation_length`, runs `T` periods past its own date -- Dynare's
+`perfect_foresight_with_expectation_errors_solver` and its option of the same name.
+`kwargs` go to `perfect_foresight`.
+
+### `News(period, shocks=None, params=None, terminal=None, states=None)`
+
+What arrives at date `period`: the innovations now expected (absolute clock, entry
+`t` links `t` to `t+1`; entry `period-1` is the one just realised, so a surprise
+at `period` is a revision of it), parameters from `period` on, the steady state now
+expected, and levels of states revealed directly. `None` keeps the previous value.
+The states at `period` are otherwise recomputed from the realised `y_{period-1}`
+through the model's transition rows.
+
 ### `TransitionPath`
 
 `levels` `(T+1, n_vars)`, `path["k"]`, `values()`, `periods`, `converged`,
@@ -211,6 +231,21 @@ equation. `predetermined_variables` are re-dated as Dynare does.
 | `block` | the private block, a `PrivateBlock`; `model` is `None` when instruments are left without an equation |
 | `planner` | `planner_objective`, `planner_discount`, `instruments` and the command (`"ramsey"` or `"discretion"`) |
 | `osr_params`, `optim_weights`, `osr_bounds` | the `osr` problem, ready for `dk.osr` |
+| `det_shocks`, `histval` | the deterministic `shocks` block (`{e: {period: level}}`) and `histval` (`{(v, period): level}`) |
+
+A Dynare exogenous variable is a LEVEL with a steady state of its own: the state
+`SHK_e` follows `SHK_e(+1) = EXO_SS_e + e`, and `EXO_SS_e` (from `initval`, zero by
+default) is a parameter, so a permanent change in the level is a change in it.
+`e(+1)` is read as the next value of that state.
+
+`deterministic(T, steady)` returns `(shocks, initial_states)` for `perfect_foresight`,
+reproducing `perfect_foresight_setup(periods=T)`: date `t` is Dynare's period `t+1`,
+date `T` the terminal period. `news(table, T)` returns `(news, start)` for
+`perfect_foresight_with_expectation_errors` from Dynare's information sets
+(`read_expectation_errors_csv(path)` reads the CSV that
+`perfect_foresight_with_expectation_errors_setup(datafile=...)` takes); a set that
+only confirms what was expected is skipped, as in Dynare. `initial_states(steady,
+histval=None, exo_first=None)` builds the first date's states.
 
 `steady_state(guess=None, params=None, **kwargs)` solves the steady state,
 iterating on `steady_state()` terms and writing their values into `params`.
@@ -299,7 +334,10 @@ levels=False)`, `irf_impulse(vector)`, `covariance(cov)`, `moments(cov)`,
 Dynare's conditional welfare uses the first innovation of its own simulation when
 one was run; `shock=` reproduces it.
 
-### `osr(model, params, *, rule_params, weights, cov=None, guess=None, steady=None, steady_fn=None, bounds=None, qz_criterium=None, method=None, options=None, penalty=1e8) -> OSRResult`
+### `osr(model, params, *, rule_params, weights=None, objective=None, discount=None, cov=None, guess=None, steady=None, steady_fn=None, bounds=None, qz_criterium=None, method=None, options=None, penalty=1e8) -> OSRResult`
+
+With `objective=` and `discount=` instead of `weights=`, the loss is minus
+unconditional welfare at second order -- Dynare's `osr` with `planner_objective`.
 
 Optimal simple rule: the coefficients `rule_params` that minimise
 `sum_ij W_ij Cov(y_i, y_j)`, the first-order unconditional covariance in levels --

@@ -4,6 +4,7 @@
 # Uso:  bash run_policy.sh
 #
 #   mods/ramsey/osr_example.mod      tests/optimal_policy/OSR do Dynare, sem a 3ª chamada de osr
+#   ramsey/nk_osr_planner.mod       osr com planner_objective (perda = menos o bem-estar), escrito aqui
 #   mods/ramsey/dennis_1.mod         tests/discretionary_policy do Dynare, sem alteração
 #   mods/ramsey/nk_ramsey_model.mod  bem-estar do Ramsey em 2ª ordem (a ordem por omissão do .mod)
 #   ramsey/rbc_labortax.mod          idem, com um estoque de capital; aqui com order=2
@@ -55,6 +56,7 @@ run() {   # run <origem.mod> <comando extra antes da exportação>
 mkdir -p tmp_osr && grep -v "opt_algo=1" mods/ramsey/osr_example.mod > tmp_osr/osr_example.mod
 run tmp_osr/osr_example.mod ""
 rm -rf tmp_osr
+run ramsey/nk_osr_planner.mod ""
 run mods/ramsey/dennis_1.mod "oo_.planner_objective_value = evaluate_planner_objective(M_, options_, oo_);"
 run mods/ramsey/nk_ramsey_model.mod ""
 sed 's/stoch_simul(order=1, irf=40, nograph);/stoch_simul(order=2, irf=40, nograph);\nevaluate_planner_objective;/' \

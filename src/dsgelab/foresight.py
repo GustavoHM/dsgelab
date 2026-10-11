@@ -25,7 +25,8 @@ from scipy.sparse.linalg import spsolve
 from .model import Model
 from .steady import SteadyState
 
-__all__ = ["TransitionPath", "perfect_foresight", "path_of"]
+__all__ = ["TransitionPath", "perfect_foresight", "path_of", "News",
+           "perfect_foresight_with_expectation_errors"]
 
 
 @dataclass
@@ -225,3 +226,182 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
                            f"or a `guess` from a nearby solution.")
     return TransitionPath(levels=Yn, model=model, converged=False, iterations=it + 1,
                           residual=nrm, params_path=params_path, ctx_path=ctx_path)
+
+
+# ------------------------------------------------------- expectation errors
+@dataclass
+class News:
+    """Information that arrives at date ``period`` and replaces what agents expected.
+
+    Every field left at ``None`` keeps the previous information set's value.
+
+    Attributes
+    ----------
+    period : int
+        The date, on the transition's own clock (``0`` is its first date), at
+        which agents learn this and re-plan.
+    shocks : array, optional
+        The innovations agents now expect, on the ABSOLUTE clock: entry ``t``
+        links date ``t`` to date ``t+1``, exactly as in :func:`perfect_foresight`.
+        Entry ``period - 1`` is the innovation that has just been realised, so a
+        surprise at ``period`` is a revision of that entry.
+    params : object or sequence, optional
+        Parameters from ``period`` on: a constant, or a path on the absolute
+        clock. A permanent change -- a new tax rate, a new level of an exogenous
+        variable -- is a change here together with a new ``terminal``.
+    terminal : SteadyState, optional
+        The steady state agents now expect to converge to.
+    states : mapping, optional
+        Levels of states revealed at ``period`` directly, overriding the ones the
+        realised path implies. :mod:`dsgelab.dynare` uses it for an exogenous
+        variable whose value at the date of the news is itself news.
+    """
+
+    period: int
+    shocks: object = None
+    params: object = None
+    terminal: SteadyState | None = None
+    states: dict | None = None
+
+
+def _expost_states(model: Model, y_prev, y_guess, eps, params, ctx, h: float = 1e-7,
+                   tol: float = 1e-12, maxiter: int = 50):
+    """States at ``t`` from the realised ``y_{t-1}`` and the innovation into ``t``.
+
+    The rows of the residual with no next-period jump -- the transitions -- pin
+    the states down once the past is known. Newton on those rows alone.
+    """
+    nk = model.n_states
+    if nk == 0:
+        return np.zeros(0)
+    y = np.array(y_guess, dtype=float)
+    base = model.residuals(y, y_prev, eps, params, ctx)
+
+    def sens(cols_range):
+        cols = []
+        for j in cols_range:
+            a = y.copy(); a[j] += h
+            cols.append((model.residuals(a, y_prev, eps, params, ctx) - base) / h)
+        return np.max(np.abs(np.column_stack(cols)), axis=1) if cols else np.zeros(len(base))
+
+    dj = sens(range(nk, model.n_vars))          # next-period jumps
+    dk = sens(range(nk))                        # next-period states
+    floor = 1e-9 * max(1.0, float(np.max(np.r_[dj, dk], initial=0.0)))
+    # a transition: no next-period jump, and it does determine a next-period state
+    rows = np.where((dj < floor) & (dk > floor))[0]
+    if rows.size != nk:
+        raise RuntimeError(f"expected {nk} transition rows free of next-period jumps, "
+                           f"found {rows.size}; pass the news' states= explicitly")
+    k = y[:nk].copy()
+    for _ in range(maxiter):
+        y[:nk] = k
+        r = model.residuals(y, y_prev, eps, params, ctx)[rows]
+        if np.max(np.abs(r)) < tol:
+            break
+        J = np.empty((nk, nk))
+        for j in range(nk):
+            a = y.copy(); a[j] += h
+            J[:, j] = (model.residuals(a, y_prev, eps, params, ctx)[rows] - r) / h
+        k = k - np.linalg.solve(J, r)
+    return k
+
+
+def perfect_foresight_with_expectation_errors(
+        model: Model, start: SteadyState, terminal: SteadyState, *, params, T: int,
+        news: Sequence[News], shocks=None, ctx=None, initial_states=None,
+        constant_simulation_length: bool = False, **kwargs) -> TransitionPath:
+    """Perfect foresight in which agents learn, at given dates, that they were wrong.
+
+    At each date in ``news`` the agents take the states the realised path has
+    brought them to, form a new perfect-foresight plan with the information
+    they now have, and follow it until the next date of news. The path returned
+    is the REALISED one, spliced from those plans -- Dynare's
+    ``perfect_foresight_with_expectation_errors_solver``.
+
+    ``shocks``, ``params`` and ``terminal`` are the information held before the
+    first news; a news item at ``period=0`` replaces them from the start. With
+    ``constant_simulation_length`` every plan runs ``T`` periods past its own
+    date and the path is longer; otherwise every plan ends at date ``T``, as in
+    Dynare by default.
+
+    The plans are kept in ``result.plans``, each a :class:`TransitionPath` on
+    the absolute clock offset by ``result.plan_dates``.
+    """
+    items = sorted(news, key=lambda x: x.period)
+    if any(x.period < 0 or x.period >= T for x in items):
+        raise ValueError(f"news must arrive at a date in [0, {T})")
+    if len({x.period for x in items}) != len(items):
+        raise ValueError("two news items at the same date: merge them")
+    last = items[-1].period if items else 0
+    L = (last + T) if constant_simulation_length else T
+
+    def shocks_abs(arr):
+        if arr is None:
+            return np.zeros((L, model.n_shocks))
+        a = np.asarray(arr, dtype=float)
+        if a.ndim == 1:
+            a = a.reshape(-1, 1) if model.n_shocks == 1 else a.reshape(1, -1)
+        out = np.zeros((L, model.n_shocks))
+        out[:min(L, a.shape[0])] = a[:L]
+        return out
+
+    def params_abs(p):
+        if isinstance(p, (list, tuple)) or (isinstance(p, np.ndarray) and p.ndim >= 1):
+            seq = list(p)
+            return seq + [seq[-1]] * max(0, L + 1 - len(seq))
+        if callable(p):
+            return [p(t) for t in range(L + 1)]
+        return [p] * (L + 1)
+
+    info = dict(shocks=shocks_abs(shocks), params=params_abs(params), terminal=terminal)
+    ctx_abs = path_of(ctx, L + 1) if not callable(ctx) else [ctx(t) for t in range(L + 1)]
+    levels = np.zeros((L + 1, model.n_vars))
+    dates = [0] + [x.period for x in items if x.period > 0]
+    by_date = {x.period: x for x in items}
+    plans, prev_plan = [], None
+    nk = model.n_states
+    for i, tau in enumerate(dates):
+        item = by_date.get(tau)
+        if item is not None:
+            if item.shocks is not None:
+                info["shocks"] = shocks_abs(item.shocks)
+            if item.params is not None:
+                fresh = params_abs(item.params)
+                info["params"] = info["params"][:tau] + fresh[tau:] \
+                    if len(fresh) == L + 1 else info["params"][:tau] + fresh
+            if item.terminal is not None:
+                info["terminal"] = item.terminal
+        if tau == 0:
+            k0 = (np.asarray(initial_states, dtype=float) if initial_states is not None
+                  else start.x[:nk].copy())
+        else:
+            k0 = _expost_states(model, levels[tau - 1], prev_plan.levels[tau - prev_start],
+                                info["shocks"][tau - 1], info["params"][tau - 1],
+                                ctx_abs[tau - 1])
+        if item is not None and item.states:
+            for name, v in item.states.items():
+                k0[model.states.index(name)] = float(v)
+        end = (tau + T) if constant_simulation_length else T
+        n_t = end - tau
+        guess = None
+        if prev_plan is not None:
+            off = tau - prev_start
+            g = prev_plan.levels[off:]
+            if g.shape[0] >= n_t + 1:
+                guess = g[:n_t + 1].copy()
+            else:
+                guess = np.vstack([g, np.tile(info["terminal"].x, (n_t + 1 - g.shape[0], 1))])
+        plan = perfect_foresight(model, start, info["terminal"], params=info["params"][tau:end + 1],
+                                 T=n_t, ctx=ctx_abs[tau:end + 1], initial_states=k0,
+                                 shocks=info["shocks"][tau:end], guess=guess, **kwargs)
+        stop = dates[i + 1] if i + 1 < len(dates) else end + 1
+        levels[tau:stop] = plan.levels[:stop - tau]
+        plans.append(plan)
+        prev_plan, prev_start = plan, tau
+    out = TransitionPath(levels=levels, model=model, converged=all(p.converged for p in plans),
+                         iterations=sum(p.iterations for p in plans),
+                         residual=max(p.residual for p in plans),
+                         params_path=info["params"], ctx_path=ctx_abs)
+    out.plans = plans
+    out.plan_dates = dates
+    return out

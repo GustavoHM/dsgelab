@@ -12,6 +12,17 @@ before 1.0, a minor version may add to the API and a patch version only fixes.
 
 ### Added
 
+- `perfect_foresight_with_expectation_errors` and `News`: agents re-plan at each date of
+  news from the states they have reached; constant or shrinking horizon. Validated
+  against Dynare's `pfwee.mod` and `pfwee_constant_sim_length.mod` to 3e-12.
+- `perfect_foresight(..., shocks=)` validated against Dynare's `rbc_det1`–`3`
+  (anticipated shocks, initial conditions) to 1e-13.
+- `from_mod`: exogenous variables carry their level (`EXO_SS_e`, from `initval`), may
+  appear one period ahead, and the deterministic `shocks` block and `histval` are read;
+  `ModFile.deterministic`, `ModFile.news`, `ModFile.initial_states` and
+  `read_expectation_errors_csv` turn them into arguments for the solvers.
+- `osr(..., objective=, discount=)`: an optimal simple rule on welfare (minus
+  unconditional welfare at second order), Dynare's `osr` with `planner_objective`.
 - `discretionary_policy` and `DiscretionSolution`: optimal policy under discretion
   (Dennis, 2007, as Dynare implements it), with IRFs, moments and welfare. Validated
   against Galí's closed form and Dynare's `tests/discretionary_policy/dennis_1.mod`.

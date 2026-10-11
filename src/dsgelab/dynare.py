@@ -55,7 +55,7 @@ import numpy as np
 from .model import Model
 from .steady import SteadyState, steady_state
 
-__all__ = ["DynareImportError", "ModFile", "from_mod"]
+__all__ = ["DynareImportError", "ModFile", "from_mod", "read_expectation_errors_csv"]
 
 
 class DynareImportError(ValueError):
@@ -398,6 +398,9 @@ class ModFile:
     osr_params: list = field(default_factory=list)
     optim_weights: dict = field(default_factory=dict)
     osr_bounds: dict = field(default_factory=dict)
+    histval: dict = field(default_factory=dict)
+    det_shocks: dict = field(default_factory=dict)
+    histval_unread: list = field(default_factory=list)
 
     def full_guess(self, values: Mapping[str, float] | None = None) -> dict:
         """A value for every model variable, given values for the Dynare ones."""
@@ -408,8 +411,115 @@ class ModFile:
         for v in self.endogenous:
             out[v] = float(base.get(v, 0.0))
         for name, (kind, of) in self.auxiliary.items():
-            out[name] = 0.0 if kind == "shock" or of not in out else out[of]
+            if kind == "shock":
+                out[name] = float(self.params.get(f"EXO_SS_{of}", 0.0))
+            else:
+                out[name] = out.get(of, 0.0)
         return out
+
+    def initial_states(self, steady: SteadyState, *, histval: Mapping | None = None,
+                       exo_first: Mapping[str, float] | None = None) -> np.ndarray:
+        """States at the first date of a transition, from Dynare's ``histval``.
+
+        The first date of a transition here is Dynare's period 1. ``LAG<k>_v``
+        there is Dynare's ``v`` in period ``1-k``, taken from ``histval`` (this
+        file's by default, keyed ``(name, period)``) or else from ``steady``;
+        ``SHK_e`` is the exogenous level in period 1, ``exo_first[e]`` or else its
+        steady state.
+        """
+        hv = dict(self.histval if histval is None else histval)
+        out = []
+        for name in self.model.states:
+            kind, of = self.auxiliary.get(name, (None, name))
+            if kind == "lag":
+                k = int(name[3:name.index("_")])
+                out.append(float(hv.get((of, 1 - k), steady.values[of])))
+            elif kind == "shock" and name.startswith("SHK_"):
+                out.append(float((exo_first or {}).get(of, steady.values[name])))
+            else:
+                out.append(float(steady.values[name]))
+        return np.array(out)
+
+    def deterministic(self, T: int, steady: SteadyState, *,
+                      det_shocks: Mapping | None = None) -> tuple:
+        """Dynare's ``perfect_foresight_setup(periods=T)`` as arguments for
+        :func:`dsgelab.perfect_foresight`.
+
+        Returns ``(shocks, initial_states)``. ``det_shocks`` (this file's
+        ``shocks`` block by default) maps each exogenous variable to
+        ``{period: level}``, Dynare's periods counted from 1; the path is known
+        from the start. ``histval`` sets the initial states. Date ``t`` of the
+        transition is Dynare's period ``t+1``, and date ``T`` is Dynare's
+        terminal period ``T+1``.
+        """
+        ds = dict(self.det_shocks if det_shocks is None else det_shocks)
+
+        def level(e, period):
+            return float(ds.get(e, {}).get(period, self.params[f"EXO_SS_{e}"]))
+
+        shocks = np.zeros((T, len(self.model.shocks)))
+        for e in self.exogenous:
+            j = self.model.shocks.index(e)
+            for t in range(T):
+                if t + 2 <= T:
+                    shocks[t, j] = level(e, t + 2) - self.params[f"EXO_SS_{e}"]
+        k0 = self.initial_states(steady, exo_first={e: level(e, 1) for e in self.exogenous})
+        return shocks, k0
+
+    def news(self, table: Mapping[int, Mapping], T: int, params=None) -> tuple:
+        """Dynare's information sets as :class:`~dsgelab.foresight.News`.
+
+        ``table`` maps each period in which information arrives (Dynare's
+        ``learnt_in``, from 1) to ``{"paths": {e: {period: level}}, "terminal":
+        {e: level}}``: the levels of the exogenous variables agents now expect,
+        and the steady-state levels they now expect to converge to -- one column
+        of the CSV that ``perfect_foresight_with_expectation_errors_setup`` reads
+        (:func:`read_expectation_errors_csv`). A period with no level stated is
+        expected at the terminal level.
+
+        An information set that only confirms what agents already expected is
+        not news and starts no new plan, as in Dynare -- which matters under
+        ``constant_simulation_length``, where every plan extends the horizon.
+
+        Returns ``(news, start)`` for
+        :func:`dsgelab.perfect_foresight_with_expectation_errors`, ``start`` being
+        the steady state at the file's own exogenous levels.
+        """
+        from .foresight import News
+        from .model import set_params
+
+        base = dict(self.params if params is None else params)
+        start = self.steady_state(params=base)
+        out = []
+        expected = None                      # (path from the news date on, terminal) held so far
+        for learnt in sorted(table):
+            entry = table[learnt]
+            term = {e: float(entry.get("terminal", {}).get(e, base[f"EXO_SS_{e}"]))
+                    for e in self.exogenous}
+            seen = {e: {t: float(entry.get("paths", {}).get(e, {}).get(t, term[e]))
+                        for t in range(learnt, T + 1)} for e in self.exogenous}
+            if expected is not None:
+                held_path, held_term = expected
+                if held_term == term and all(seen[e][t] == held_path[e].get(t, held_term[e])
+                                             for e in self.exogenous for t in seen[e]):
+                    continue                 # nothing new: Dynare does not re-plan either
+            expected = (seen, term)
+            p_k = set_params(base, {f"EXO_SS_{e}": v for e, v in term.items()})
+            terminal = self.steady_state(guess={**start.values}, params=p_k)
+            paths = entry.get("paths", {})
+
+            def level(e, period):
+                return float(paths.get(e, {}).get(period, term[e]))
+
+            shocks = np.zeros((T, len(self.model.shocks)))
+            for e in self.exogenous:
+                j = self.model.shocks.index(e)
+                for t in range(learnt - 1, T):        # entry t sets SHK_e at t+1 = period t+2
+                    shocks[t, j] = (level(e, t + 2) - term[e]) if t + 2 <= T else 0.0
+            states = {f"SHK_{e}": level(e, learnt) for e in self.exogenous}
+            out.append(News(period=learnt - 1, shocks=shocks, params=p_k, terminal=terminal,
+                            states=states))
+        return out, start
 
     def steady_state(self, guess: Mapping[str, float] | None = None, params=None,
                      **kwargs) -> SteadyState:
@@ -474,12 +584,14 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     if re.search(r"^\s*@#\s*(include|includepath|for)\b", text, flags=re.M):
         raise DynareImportError("@#include, @#includepath and @#for are not read")
     src = _macro(_strip_comments(text), defines)
+    # verbatim blocks are MATLAB, whose own `end` would end the block early
+    src = re.sub(r"^\s*verbatim\s*;.*?^\s*end\s*;", " ", src, flags=re.S | re.M)
 
     stmts = _statements(src)
     endo, exo, params, predet = [], [], [], []
     param_text: list[tuple[str, str]] = []
     model_stmts, model_opts = None, ""
-    ssm, initval, shocks = [], [], []
+    ssm, initval, shocks, histval_body = [], [], [], []
     planner_text, policy_cmd, policy_opts = None, None, {}
     osr_params_list, weights_body, bounds_body = [], [], []
     i = 0
@@ -501,6 +613,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 model_stmts, model_opts = body, opts
             elif head == "steady_state_model":
                 ssm = body
+            elif head == "histval":
+                histval_body = body
             elif head == "initval":
                 initval = body
             elif head == "shocks":
@@ -528,6 +642,10 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             policy_opts = _options(st[len(word):])
         elif word == "osr_params":
             osr_params_list += _declared(st, "osr_params")
+        elif word == "osr":
+            osr_opts = _options(st[len(word):])
+            if "planner_discount" in osr_opts:
+                policy_opts.setdefault("planner_discount", osr_opts["planner_discount"])
         else:
             m = re.match(r"([A-Za-z_]\w*)\s*=(?!=)(.*)$", st, flags=re.S)
             if m and m.group(1) not in endo and m.group(1) not in exo:
@@ -590,8 +708,9 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     def dated(sym_name):
         nm, off = refs[sym_name]
         if nm in exo:
-            if off > 0:
-                raise DynareImportError(f"a lead of the shock {nm!r} is not read")
+            if off > 1:
+                raise DynareImportError(f"a lead of more than one period of the exogenous "
+                                        f"{nm!r} is not read")
             shock_lag[nm] = max(shock_lag.get(nm, 0), -off)
             return nm, off
         off -= shift[nm]
@@ -610,7 +729,9 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 continue
             nm, off = dated(sname)
             if nm in exo:
-                base = f"SHK_{nm}" if off == 0 else f"LAG{-off}_SHK_{nm}"
+                # e(+1) is the next value of the state that carries the level of e
+                base = (f"SHK_{nm}__next" if off == 1 else f"SHK_{nm}" if off == 0
+                        else f"LAG{-off}_SHK_{nm}")
                 sub[s_] = S(base)
             elif off == 0:
                 sub[s_] = S(nm)
@@ -645,8 +766,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
         n_ = f"SHK_{e_}"
         states.append(n_)
         auxiliary[n_] = ("shock", e_)
-        exprs.append(S(f"{n_}__next") - S(e_))
-        labels.append(f"{n_}(+1) = {e_}")
+        exprs.append(S(f"{n_}__next") - S(f"EXO_SS_{e_}") - S(e_))
+        labels.append(f"{n_}(+1) = EXO_SS_{e_} + {e_}")
         for k in range(1, shock_lag.get(e_, 0) + 1):
             m_ = f"LAG{k}_SHK_{e_}"
             states.append(m_)
@@ -661,7 +782,15 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     del used_shocks
 
     steady_params = [f"STEADY_STATE_{v}" for v in sorted(parser.steady_refs)]
-    all_params = list(params) + steady_params
+    # A Dynare exogenous variable is a LEVEL with a steady state of its own (zero unless
+    # initval says otherwise); this package's innovation has mean zero. The level is the
+    # state SHK_e, with SHK_e(+1) = EXO_SS_e + e, and a permanent change in it is a
+    # change in the parameter EXO_SS_e.
+    exo_params = [f"EXO_SS_{e_}" for e_ in exo]
+    clash = [q for q in exo_params if q in params]
+    if clash:
+        raise DynareImportError(f"parameter names reserved for exogenous levels: {clash}")
+    all_params = list(params) + steady_params + exo_params
     model = None
     if len(exprs) == len(states) + len(jumps):
         model = model_from_expressions(exprs, states=states, jumps=jumps, shocks=list(exo),
@@ -693,8 +822,9 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             planner["instruments"] = _declared(policy_opts["instruments"].strip("()"), "")
 
     # --- steady state guess: steady_state_model first, then initval
-    env = {**matlab, **pvals}
+    env = {**matlab, **pvals, **{e_: 0.0 for e_ in exo}}
     guess: dict[str, float] = {}
+    exo_level: dict[str, float] = {}
     for body in (initval, ssm):
         local_env = dict(env)
         local_env.update(guess)
@@ -712,14 +842,30 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             local_env[nm] = val
             if nm in endo:
                 guess[nm] = val
+            elif nm in exo:
+                exo_level[nm] = val
             elif nm in pvals and body is ssm:
                 pvals[nm] = val     # Dynare lets steady_state_model set parameters
     missing = [v for v in endo if v not in guess]
+    for e_ in exo:
+        pvals[f"EXO_SS_{e_}"] = exo_level.get(e_, 0.0)
+    histval, histval_unread = {}, []
+    for st in histval_body:
+        m = re.match(r"([A-Za-z_]\w*)\s*\(\s*([+-]?\d+)\s*\)\s*=(.*)$", st, flags=re.S)
+        if not m:
+            raise DynareImportError(f"histval: cannot read {st!r}")
+        try:
+            histval[(m.group(1), int(m.group(2)))] = _numeric(
+                sympy, m.group(3), {**env, **guess, **pvals}, funcs)
+        except Exception:
+            histval_unread.append(st)     # a MATLAB variable of the script: left to the caller
 
     # --- shocks
     cov = np.zeros((len(exo), len(exo)))
     cur = None
-    env_all = {**env, **guess}
+    det_periods: list = []
+    det_shocks: dict = {}
+    env_all = {**env, **pvals, **guess}
     for st in shocks:
         m = re.match(r"var\s+([A-Za-z_]\w*)\s*$", st)
         if m:
@@ -744,7 +890,28 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 val *= math.sqrt(cov[i_, i_] * cov[j_, j_])
             cov[i_, j_] = cov[j_, i_] = val
             continue
-        # periods/values: deterministic shocks, not read here
+        m = re.match(r"periods\s+(.*)$", st, flags=re.S)
+        if m and cur is not None:
+            det_periods = []
+            for part in re.split(r"[\s,]+", m.group(1).strip()):
+                if ":" in part:
+                    a, b_ = part.split(":")
+                    det_periods.append(list(range(int(a), int(b_) + 1)))
+                elif part:
+                    det_periods.append([int(part)])
+            continue
+        m = re.match(r"values\s+(.*)$", st, flags=re.S)
+        if m and cur is not None:
+            vals = [_numeric(sympy, v, env_all, funcs)
+                    for v in re.split(r"\s*,\s*|\s+(?![^()]*\))", m.group(1).strip()) if v]
+            if len(vals) == 1:
+                vals = vals * len(det_periods)
+            if len(vals) != len(det_periods):
+                raise DynareImportError(f"shocks: {len(det_periods)} periods and {len(vals)} values for {cur}")
+            for group, v in zip(det_periods, vals):
+                for t in group:
+                    det_shocks.setdefault(cur, {})[t] = v
+            continue
 
     weights = {}
     for st in weights_body:
@@ -762,6 +929,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                             _numeric(sympy, parts[2], env_all, funcs))
 
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
+                   histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
                    auxiliary=auxiliary, linear=linear,
@@ -769,3 +937,30 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                    unset_params=[p_ for p_ in params if math.isnan(pvals[p_])],
                    missing_guess=missing, source=label)
 
+
+
+def read_expectation_errors_csv(path) -> dict:
+    """Read the CSV of ``perfect_foresight_with_expectation_errors_setup(datafile=...)``.
+
+    The file has one column per (exogenous variable, period of information), a
+    row per real period and a last row ``Terminal``. Returns the ``table`` that
+    :meth:`ModFile.news` takes.
+    """
+    import csv
+
+    rows = list(csv.reader(open(path)))
+    names = rows[0][1:]
+    learnt = [int(float(x)) for x in rows[1][1:]]
+    table: dict = {}
+    for row in rows[2:]:
+        label = row[0].strip()
+        for e, l, cell in zip(names, learnt, row[1:]):
+            if cell.strip() == "":
+                continue
+            entry = table.setdefault(l, {"paths": {}, "terminal": {}})
+            if label.lower().startswith("terminal"):
+                entry["terminal"][e] = float(cell)
+            else:
+                period = int(re.search(r"(\d+)", label).group(1))
+                entry["paths"].setdefault(e, {})[period] = float(cell)
+    return table

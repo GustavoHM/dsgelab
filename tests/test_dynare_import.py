@@ -140,7 +140,7 @@ def test_steady_state_operator_and_unit_root():
 
 
 @pytest.mark.parametrize("text, match", [
-    ("var x; varexo e; model; x = x(+1) + e(+1); end;", "lead of the shock"),
+    ("var x; varexo e; model; x = x(+1) + e(+2); end;", "more than one period"),
     ("var x; varexo e; model; x = expectation(-1)(x) + e; end;", "expectation"),
     ("var x y; varexo e; model; x = e; end;", "1 equations for 2"),
     ("@#include \"other.mod\"\nvar x; varexo e; model; x = e; end;", "include"),

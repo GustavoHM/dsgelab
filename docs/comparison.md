@@ -49,6 +49,7 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | **Previsão perfeita não linear** | ✅ Newton de tempo empilhado | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 *shooting* | ? | ✅ |
 | Trajetória ANUNCIADA de parâmetros | ✅ | ✅ `param_paths` | ? | ? | ? | ? | 📄 |
 | Trajetória anunciada de INOVAÇÕES | ✅ ‡ | ? | ? | ? | ? | ? | ✅ |
+| Previsão perfeita com erros de expectativa | ✅ ‡ contra o Dynare | ? | ? | ? | ? | ? | ✅ |
 | IRFs | ✅ | ✅ | ? | 📄 | 📄 | 📄 | ✅ |
 | IRFs ortogonalizadas (Cholesky) | ✅ | ✅ `orthogonalize_shocks` | ? | ? | ? | ? | ✅ |
 | Momentos por Lyapunov | ✅ | ✅ `stationary_covariance_matrix` | ? | ? | — | 📄 | ✅ |
@@ -162,8 +163,8 @@ a versão de cada item é a do [`ROADMAP.md`](../ROADMAP.md).
 | Regras simples ótimas; discrição | ✅ Dynare (`+osr`, `discretionary_policy`) | **feito**: `osr`, `discretionary_policy`, contra os testes do Dynare | 0.2 |
 | Bem-estar de segunda ordem e variação equivalente | ✅ Dynare (`evaluate_planner_objective`) | **feito**: `welfare`, `consumption_equivalent` | 0.2 |
 | Impulso generalizado de segunda ordem | ✅ MacroModelling (`get_girf`) | **feito** | 0.2 |
-| Inovações em sequência na previsão perfeita | ✅ Dynare (`perfect_foresight_solver`) | **feito**; falta a validação contra o Dynare | 0.2 |
-| Erros de expectativa na previsão perfeita | ✅ Dynare (`perfect_foresight_with_expectation_errors_solver`) | falta | 0.2 |
+| Inovações em sequência na previsão perfeita | ✅ Dynare (`perfect_foresight_solver`) | **feito**, contra o Dynare a 1e-13 | 0.2 |
+| Erros de expectativa na previsão perfeita | ✅ Dynare (`perfect_foresight_with_expectation_errors_solver`) | **feito**, contra o Dynare a 3e-12 | 0.2 |
 | Kalman, moda, Metropolis | ✅ Dynare (`+estimate`), MacroModelling, gEconpy | **feito** no modelo linear | 0.3 |
 | Suavizador, máxima verossimilhança, SMC, diagnósticos | ✅ Dynare | falta | 0.3 |
 | Verossimilhança marginal e comparação de modelos | ✅ Dynare | falta | 0.3 |

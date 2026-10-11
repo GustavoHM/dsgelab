@@ -735,16 +735,19 @@ def _weight_matrix(names, weights):
     return W
 
 
-def osr(model: Model, params, *, rule_params: Sequence[str], weights, cov=None,
-        guess=None, steady: SteadyState | None = None, steady_fn=None, bounds=None,
-        qz_criterium: float | None = None, method: str | None = None,
-        options: Mapping | None = None, penalty: float = 1e8) -> OSRResult:
+def osr(model: Model, params, *, rule_params: Sequence[str], weights=None, objective=None,
+        discount=None, cov=None, guess=None, steady: SteadyState | None = None,
+        steady_fn=None, bounds=None, qz_criterium: float | None = None,
+        method: str | None = None, options: Mapping | None = None,
+        penalty: float = 1e8) -> OSRResult:
     """Optimal simple rule: the rule coefficients that minimise a quadratic loss.
 
     The loss is ``sum_ij W_ij Cov(y_i, y_j)``, the unconditional covariance at
-    first order, in levels -- Dynare's ``osr`` with ``optim_weights``. A
-    parameter vector at which the model has no determinate solution gets the
-    loss ``penalty``, as in Dynare.
+    first order, in levels -- Dynare's ``osr`` with ``optim_weights``. Given
+    ``objective`` and ``discount`` instead, the loss is minus unconditional
+    welfare at second order (:func:`dsgelab.welfare`) -- Dynare's ``osr`` with
+    ``planner_objective``. A parameter vector at which the model has no
+    determinate solution gets the loss ``penalty``, as in Dynare.
 
     Parameters
     ----------
@@ -769,8 +772,17 @@ def osr(model: Model, params, *, rule_params: Sequence[str], weights, cov=None,
     rule_params = list(rule_params)
     if not rule_params:
         raise OSRError("no rule parameters to optimise")
-    W = _weight_matrix(model.names, weights)
+    if (weights is None) == (objective is None):
+        raise OSRError("pass either weights= (a quadratic loss in moments) or objective= "
+                       "and discount= (minus unconditional welfare), not both")
     Sigma = shock_covariance(model.shocks, cov)
+    if weights is not None:
+        W = _weight_matrix(model.names, weights)
+    else:
+        from .welfare import welfare as _welfare, welfare_model
+        if discount is None:
+            raise OSRError("objective= needs discount=")
+        aug = welfare_model(model, objective, discount)
     x0 = np.array([float(get_param(params, p)) for p in rule_params])
     if steady is None and guess is None and steady_fn is None:
         raise OSRError("pass steady=, guess= or steady_fn=")
@@ -786,11 +798,15 @@ def osr(model: Model, params, *, rule_params: Sequence[str], weights, cov=None,
                 start = last["ss"].values if last["ss"] is not None else guess
                 ss = steady_state(model, start, p)
             sol = solve(model, p, steady=ss, qz_criterium=qz_criterium)
-            V = sol.covariance(Sigma)
+            if weights is not None:
+                V = sol.covariance(Sigma)
+                s = sol.coords.scale
+                loss = float(np.sum(W * (V * np.outer(s, s))))
+            else:
+                loss = -_welfare(aug, p, steady=ss, cov=Sigma,
+                                 qz_criterium=qz_criterium).unconditional
         except Exception:
             return penalty, None, None
-        s = sol.coords.scale
-        loss = float(np.sum(W * (V * np.outer(s, s))))
         if not np.isfinite(loss):
             return penalty, None, None
         last["ss"] = ss

@@ -4,7 +4,7 @@
 # Os arquivos NÃO são versionados aqui: são GPL, e este pacote é MIT. Vendorizá-los misturaria
 # licenças sem necessidade, já que são públicos e estáveis.
 set -euo pipefail
-mkdir -p "$(dirname "$0")/mods/ramsey" "$(dirname "$0")/mods/examples"
+mkdir -p "$(dirname "$0")/mods/ramsey" "$(dirname "$0")/mods/examples" "$(dirname "$0")/mods/foresight"
 cd "$(dirname "$0")/mods"
 
 get() { curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o "$2" "$1" && echo "ok  $2" || echo "FALHOU  $2  ($1)"; }
@@ -29,3 +29,7 @@ get "$DY/7.1/tests/optimal_policy/nk_ramsey_model.mod"  ramsey/nk_ramsey_model.m
 get "$DY/7.1/tests/optimal_policy/Ramsey/ramsey_ex.mod" ramsey/ramsey_ex.mod
 get "$DY/7.1/tests/optimal_policy/OSR/osr_example.mod" ramsey/osr_example.mod
 get "$DY/7.1/tests/discretionary_policy/dennis_1.mod"  ramsey/dennis_1.mod
+# Previsão perfeita, com e sem erros de expectativa (tests/deterministic_simulations, 7.1)
+for f in pfwee.mod pfwee.csv pfwee_constant_sim_length.mod rbc_det1.mod rbc_det2.mod rbc_det3.mod; do
+  get "$DY/7.1/tests/deterministic_simulations/$f" "foresight/$f"
+done

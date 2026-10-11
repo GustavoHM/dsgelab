@@ -138,17 +138,28 @@ def welfare(model: Model, params, *, steady: SteadyState, cov, objective=None,
     """
     from .secondorder import solve_second_order
     from .solve import solve
+    from .symbolic import _require_sympy
 
-    sympy, U, beta = _objective(model, objective, discount)
-    aug = welfare_model(model, U, beta, name=name)
-    pnames = model.symbolic["parameters"]
+    pre = getattr(model, "welfare", None)
+    if pre is not None and objective is None and discount is None:
+        # already augmented by welfare_model: reused as is, which is what makes a loop
+        # over parameters (osr on welfare) cheap -- the symbolic work is done once
+        sympy = _require_sympy()
+        aug, name = model, pre["name"]
+        U, beta = pre["objective"], pre["discount"]
+        base_names = [v for v in model.names if v != name]
+    else:
+        sympy, U, beta = _objective(model, objective, discount)
+        aug = welfare_model(model, U, beta, name=name)
+        base_names = list(model.names)
+    pnames = aug.symbolic["parameters"]
     pvals = {sympy.Symbol(p): float(get_param(params, p)) for p in pnames}
-    point = {sympy.Symbol(v): float(steady.values[v]) for v in model.names}
+    point = {sympy.Symbol(v): float(steady.values[v]) for v in base_names}
     b = float(beta.xreplace(pvals))
     if not 0 < b < 1:
         raise WelfareError(f"the discount factor must lie in (0, 1); it is {b}")
     u_ss = float(U.xreplace({**pvals, **point}))
-    values = dict(steady.values)
+    values = {v: steady.values[v] for v in base_names}
     values[name] = u_ss / (1 - b)
     ss = steady_state(aug, values, params)
     first = solve(aug, params, steady=ss, qz_criterium=qz_criterium)
@@ -165,7 +176,7 @@ def welfare(model: Model, params, *, steady: SteadyState, cov, objective=None,
     start = dict(initial or {})
     conditional = at(start)
     zero = None
-    info = getattr(model, "ramsey", None)
+    info = getattr(aug, "ramsey", None)
     if info is not None:
         zero = at({**start, **{lm: 0.0 for lm in info["lagged_multipliers"]}})
     unconditional = float(so.ergodic_mean(cov)[name])

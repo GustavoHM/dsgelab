@@ -293,6 +293,30 @@ ot.loss < ot.initial_loss</code></pre>
   quadrática nos momentos incondicionais, como o <code>osr</code> do Dynare. O bem-estar de
   segunda ordem, condicional e incondicional, é o do <code>evaluate_planner_objective</code>.</p>
 
+  <h3>13. Notícias e surpresas na previsão perfeita</h3>
+<pre><code>rbc_pf = dk.from_equations(
+    ["1/c = beta/c(+1)*(alpha*a(+1)*k(+1)**(alpha-1) + 1 - delta)",
+     "c + k(+1) = a*k**alpha + (1-delta)*k",
+     "a(+1) = 1 - rho + rho*a + e"],
+    states=["k", "a"], jumps=["c"], shocks=["e"],
+    parameters=["alpha", "beta", "delta", "rho"])
+ppf = dict(alpha=0.33, beta=0.99, delta=0.025, rho=0.9)
+kss = ((1/0.99 - 1 + 0.025)/0.33)**(1/(0.33 - 1))
+ss_pf = dk.steady_state(rbc_pf, dict(k=kss, a=1.0, c=kss**0.33 - 0.025*kss), ppf)
+
+anunciado = np.zeros((80, 1)); anunciado[9, 0] = 0.02         # sabido desde o início
+antecipada = dk.perfect_foresight(rbc_pf, ss_pf, ss_pf, params=ppf, T=80, shocks=anunciado)
+surpresa = dk.perfect_foresight_with_expectation_errors(       # só se sabe em t = 10
+    rbc_pf, ss_pf, ss_pf, params=ppf, T=80,
+    news=[dk.News(period=10, shocks=anunciado)])
+
+antecipada["c"][0] != ss_pf.values["c"]      # o consumo reage ao anúncio
+abs(surpresa["c"][0] - ss_pf.values["c"]) < 1e-12   # e não reage ao que ninguém sabe</code></pre>
+  <p>Uma notícia é uma nova trajetória esperada de choques e parâmetros, e um novo estado estacionário
+  terminal; a cada uma os agentes replanejam a partir dos estados já realizados. É o
+  <code>perfect_foresight_with_expectation_errors_solver</code> do Dynare, e um <code>.mod</code> com a
+  tabela de informação em CSV vira a lista de notícias por <code>ModFile.news</code>.</p>
+
   <h3>7. Verificações independentes</h3>
 <pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
 
@@ -342,7 +366,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
 
   <h3>Contra respostas conhecidas no papel</h3>
-  <p>97 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <p>103 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
   <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
   um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
   <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
@@ -409,6 +433,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
     <thead><tr><th>Teste</th><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
       <tr><td>osr_example.mod</td><td>perda no ótimo do Dynare</td><td class="num">2,5e-15</td><td class="ok">OK*</td></tr>
+      <tr><td>nk_osr_planner.mod</td><td>regra simples ótima sobre o bem-estar</td><td class="num">2,5e-15</td><td class="ok">OK</td></tr>
       <tr><td>dennis_1.mod</td><td>IRFs sob discrição; bem-estar</td><td class="num">4,3e-08; 6,1e-10</td><td class="ok">OK</td></tr>
       <tr><td>nk_ramsey_model.mod</td><td>Ramsey lido do .mod; bem-estar de 2ª ordem</td><td class="num">2,6e-14; 1,4e-12</td><td class="ok">OK</td></tr>
       <tr><td>rbc_labortax.mod</td><td>bem-estar de 2ª ordem com capital</td><td class="num">3,4e-13</td><td class="ok">OK</td></tr>
@@ -419,6 +444,23 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   a 5e-15: é o otimizador do Dynare que para antes, numa superfície plana. No ótimo, a regra
   neutraliza o choque de demanda, <code>gamma_y_ = 1/|σ| = 16,667</code>. O piso de 4e-08 nas IRFs
   da discrição é a tolerância do Dynare, <code>sqrt(eps)</code>.</p>
+
+  <h3>Previsão perfeita contra o Dynare</h3>
+  <p>Os arquivos de <code>tests/deterministic_simulations</code> do Dynare, lidos por
+  <code>from_mod</code>; toda variável, todo período.</p>
+  <table>
+    <thead><tr><th>Teste</th><th>O que exercita</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>rbc_det1.mod</td><td>condição inicial (<code>histval</code>)</td><td class="num">6,6e-15</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_det2.mod</td><td>choque no primeiro período</td><td class="num">6,6e-15</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_det3.mod</td><td>choques antecipados, períodos 4 a 8</td><td class="num">8,0e-14</td><td class="ok">OK</td></tr>
+      <tr><td>pfwee.mod</td><td>erros de expectativa, choques transitórios e permanentes</td><td class="num">2,8e-12</td><td class="ok">OK</td></tr>
+      <tr><td>pfwee_constant_sim_length.mod</td><td>idem, horizonte constante</td><td class="num">3,0e-12</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">O Dynare para por omissão em resíduo 1e-5 e recalcula
+  o estado estacionário terminal com tolerância <code>eps^(1/3)</code>; com elas, o <code>k</code> terminal
+  do <code>pfwee</code> erra a solução fechada em 4e-5. A validação roda o Dynare com 1e-12.</p>
 
   <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de

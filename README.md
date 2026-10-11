@@ -75,9 +75,10 @@ expensive class of error in this kind of code; naming removes the class.
 | First-order solution (Klein/QZ, Blanchard–Kahn enforced) | `solve` |
 | Impulse responses, simulation, moments, variance decomposition | `FirstOrderSolution` |
 | Second-order perturbation and risk corrections | `solve_second_order` |
-| Nonlinear perfect-foresight transitions, announced policy paths | `perfect_foresight` |
+| Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
+| Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
-| Optimal policy under discretion; optimal simple rules | `discretionary_policy`, `osr` |
+| Optimal policy under discretion; optimal simple rules, on moments or on welfare | `discretionary_policy`, `osr` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
 | Calibration on targets, with an identification diagnostic | `calibrate`, `target_jacobian` |

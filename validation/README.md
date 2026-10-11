@@ -221,6 +221,55 @@ toma como inovação do primeiro período `oo_.exo_simul(1,:)` quando uma simula
 `run_policy.sh` exporta esse sorteio, e `DiscretionSolution.welfare(shock=...)` o reproduz; sem
 choque inicial o valor é outro, e é o que `welfare()` devolve por omissão.
 
+**A regra simples sobre o bem-estar.** `ramsey/nk_osr_planner.mod`, escrito aqui, é o
+`osr` com `planner_objective`: a perda é menos o bem-estar incondicional de segunda ordem. A
+função de perda do `dsgelab` no ótimo do Dynare reproduz o valor dele a 2,5e-15, e o ótimo do
+`dsgelab` tem perda menor ou igual. Limites nos coeficientes (`osr_params_bounds`) exigem no Dynare
+um otimizador com restrições que no Octave depende de pacotes extras; o arquivo não os usa.
+
 **O piso da discrição.** As IRFs batem a 4e-08 porque o Dynare para a iteração de Dennis em
 `sqrt(eps)`. O `dsgelab` itera até 1e-12 por omissão, e contra a forma fechada de Galí (2015, cap.
 5) o erro fica abaixo de 1e-12 (`tests/test_policy.py`).
+
+## Previsão perfeita, com e sem erros de expectativa
+
+```bash
+bash fetch.sh                # mods/foresight/, de tests/deterministic_simulations do Dynare 7.1
+bash run_foresight.sh
+python compare_foresight.py
+```
+
+```
+rbc_det1                    condição inicial (histval)             desvio relativo máx 6.6e-15 (Capital)  OK
+rbc_det2                    choque no período 1                    desvio relativo máx 6.6e-15 (Capital)  OK
+rbc_det3                    choques antecipados, períodos 4 a 8    desvio relativo máx 8.0e-14 (Output)  OK
+pfwee                       erros de expectativa                   desvio relativo máx 2.8e-12 (c)  OK
+pfwee_constant_sim_length   idem, horizonte constante              desvio relativo máx 3.0e-12 (c)  OK
+```
+
+`rbc_det1`–`3` validam `perfect_foresight` e `ModFile.deterministic`: condição inicial por `histval`,
+choque no primeiro período e choques **antecipados** (`shocks=`). `pfwee` e
+`pfwee_constant_sim_length` validam `perfect_foresight_with_expectation_errors`: a tabela de
+informação de `pfwee.csv` — notícias nos períodos 1 a 7, choques transitórios na exógena e mudanças
+permanentes no seu nível terminal — vira a lista de `News` por `ModFile.news`.
+
+**Três coisas que a comparação teve de acertar.**
+
+1. **A tolerância do Dynare.** O solver de previsão perfeita para em resíduo `1e-5`
+   (`options_.dynatol`) e, com erros de expectativa, recalcula o estado estacionário terminal com
+   `options_.simul.steady_tolf = eps^(1/3)` — e esta opção é copiada de `solve_tolf` quando as opções
+   são inicializadas, de modo que mudar `solve_tolf` depois não a afeta. Com as tolerâncias por
+   omissão o `k` terminal do `pfwee` erra a solução fechada `((δ+β)/(aαx))^(1/(α−1))` em `4e-5`, e
+   é essa a origem inteira da diferença. `run_foresight.sh` pede `1e-12` (e `1e-14` no estado
+   estacionário) antes de cada `setup` e de cada `solver`.
+2. **O teste interno do `pfwee.mod`.** O arquivo termina com uma réplica manual e um teste de
+   igualdade exata entre as duas simulações, que deixa de valer com outra tolerância e aborta o
+   script. A cópia para em `pfwee_simul`, que é o que se exporta.
+3. **Notícia que não é notícia.** A tabela tem colunas que só confirmam o que se esperava (períodos
+   4, 5 e 7), e o Dynare não replaneja nelas. Com horizonte constante isso muda o comprimento da
+   simulação, e `ModFile.news` as descarta pela mesma regra.
+
+**A exógena como nível.** No Dynare `x` é um nível com estado estacionário próprio (`x = 1` no
+`initval` do `pfwee`). `from_mod` a carrega no estado `SHK_x`, com `SHK_x(+1) = EXO_SS_x + x`, e
+uma mudança permanente no nível é uma mudança no parâmetro `EXO_SS_x`. O `x(+1)` da Euler é o
+próximo valor desse estado.

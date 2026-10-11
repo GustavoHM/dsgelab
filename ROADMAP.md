@@ -60,7 +60,7 @@ conferência rebaixaria o pacote inteiro.
 - [x] **Regras simples ótimas** (`osr`): perda quadrática nos momentos incondicionais, com aviso
   quando o ótimo cai na fronteira. No `osr_example.mod` do Dynare a perda bate com a do Dynare a
   2,5e-15 no ótimo dele, e o `dsgelab` acha um ótimo de perda menor, que o próprio Dynare confirma.
-  *Falta o `osr` com `planner_objective` (perda = menos o bem-estar incondicional).*
+  Também sobre o bem-estar (`objective=`), o `osr` com `planner_objective` do Dynare.
 - [x] **Política discricionária** (`discretionary_policy`), linear-quadrática, pelo algoritmo de
   Dennis. Validada contra a forma fechada de Galí e contra o `dennis_1.mod` do Dynare.
 - [x] **Bem-estar** (`welfare`, `consumption_equivalent`): a função-objetivo viaja com o modelo;
@@ -69,10 +69,10 @@ conferência rebaixaria o pacote inteiro.
   Bate com o `evaluate_planner_objective` do Dynare a 1e-12.
 - [x] **Impulso generalizado de segunda ordem** (`SecondOrderSolution.irf`): simulações podadas com
   e sem o choque, porque a resposta depende do estado em que o choque chega e do seu sinal.
-- [x] **Sequência de inovações na previsão perfeita** (`perfect_foresight(..., shocks=)`).
-  *Falta a validação contra o `perfect_foresight_solver` do Dynare.*
-- [ ] **Previsão perfeita com erros de expectativa**: choques que surpreendem no meio da trajetória.
-  Validação contra o `perfect_foresight_with_expectation_errors_solver` do Dynare.
+- [x] **Sequência de inovações na previsão perfeita** (`perfect_foresight(..., shocks=)`), validada
+  contra o `perfect_foresight_solver` do Dynare nos `rbc_det1`–`3` dele a 1e-13.
+- [x] **Previsão perfeita com erros de expectativa** (`perfect_foresight_with_expectation_errors`),
+  validada contra o solver do Dynare nos `pfwee.mod` e `pfwee_constant_sim_length.mod` a 3e-12.
 - [x] **Ramsey e discrição a partir do `.mod`**: `from_mod` lê `planner_objective`,
   `ramsey_model`, `discretionary_policy`, `osr_params` e `optim_weights`; os testes de política
   ótima do Dynare rodam sem tradução manual.
