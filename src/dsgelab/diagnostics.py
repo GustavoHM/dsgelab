@@ -16,7 +16,7 @@ from .model import Model
 from .solution import FirstOrderSolution
 
 __all__ = ["check_identity", "blanchard_kahn_report", "check_slack", "compare_irfs",
-           "steady_state_invariance"]
+           "steady_state_invariance", "diagnose"]
 
 
 def check_identity(model: Model, fn: Callable, points, params, ctx=None,
@@ -143,3 +143,130 @@ def steady_state_invariance(build: Callable, values: Sequence, variables: Sequen
             worst = max(worst, rel)
         rows.append(row)
     return dict(rows=rows, worst=worst, ok=bool(worst < tol), tolerance=tol)
+
+
+def _jacobian_blocks(model: Model, x, params, ctx=None, h: float = 1e-7):
+    """``(J_next, J_now)`` of the residuals at ``(x, x, 0)``, exact when the model has them."""
+    eps = np.zeros(model.n_shocks)
+    n = model.n_vars
+    J = model.jacobian(x, x, eps, params, ctx) if model.jacobian_fn is not None else None
+    if J is not None:
+        return np.asarray(J[:, :n], float), np.asarray(J[:, n:2 * n], float)
+    base = model.residuals(x, x, eps, params, ctx)
+    Jn, Jc = np.zeros((len(base), n)), np.zeros((len(base), n))
+    for j in range(n):
+        step = h * max(1.0, abs(x[j]))
+        a = x.copy(); a[j] += step
+        Jn[:, j] = (model.residuals(a, x, eps, params, ctx) - base) / step
+        Jc[:, j] = (model.residuals(x, a, eps, params, ctx) - base) / step
+    return Jn, Jc
+
+
+def _nullspace(M: np.ndarray, tol: float) -> np.ndarray:
+    u, s, vt = np.linalg.svd(M)
+    rank = int(np.sum(s > tol * max(1.0, s[0] if s.size else 0.0)))
+    return vt[rank:].T
+
+
+def diagnose(model: Model, params, point, *, ctx=None, tol: float = 1e-9) -> dict:
+    """What Dynare's ``model_diagnostics`` checks, at ``point`` (a steady state or a guess).
+
+    * variables that do not appear in any equation at the current date (Dynare's
+      "aren't present at the current period"), and variables that appear nowhere;
+    * a point with ``nan`` or ``inf``, or residuals that are not finite;
+    * the STATIC Jacobian -- of ``f(y, y, 0)`` -- and its rank. A singular one has
+      collinear relationships, reported both ways: the groups of VARIABLES the
+      equations cannot tell apart (the right null space), and the groups of
+      EQUATIONS that are linearly dependent (the left null space). One redundant
+      equation with another missing, often by Walras' law, is the usual cause;
+    * whether a root of the dynamic system lies at one, which makes the static
+      Jacobian singular on its own (a price level, a random walk);
+    * the DYNAMIC Jacobian -- next and current values together -- and its rank: an
+      equation that is a combination of others at every date is redundant;
+    * a dynamic Jacobian with ``nan`` or ``inf`` entries.
+
+    ``point`` is a :class:`~dsgelab.SteadyState`, a mapping, or a vector. The
+    report has ``ok`` False when anything above was found.
+    """
+    from .steady import SteadyState
+
+    if isinstance(point, SteadyState):
+        x = np.asarray(point.x, float)
+    elif isinstance(point, Mapping):
+        x = model.vector(point)
+    else:
+        x = np.asarray(point, float)
+    names = model.names
+    labels = list(getattr(model, "symbolic", {}).get("equations", [])) if \
+        getattr(model, "symbolic", None) else [f"equation {i + 1}" for i in range(model.n_vars)]
+    report = {"ok": True, "messages": []}
+
+    def note(msg):
+        report["ok"] = False
+        report["messages"].append(msg)
+
+    if not np.all(np.isfinite(x)):
+        bad = [n for n, v in zip(names, x) if not np.isfinite(v)]
+        note(f"the point contains nan or inf in {bad}")
+        report["nonfinite_point"] = bad
+        return report
+    res = model.residuals(x, x, np.zeros(model.n_shocks), params, ctx)
+    report["residual"] = float(np.max(np.abs(res))) if np.all(np.isfinite(res)) else np.inf
+    if not np.all(np.isfinite(res)):
+        note("the residuals at the point are not finite")
+    Jn, Jc = _jacobian_blocks(model, x, params, ctx)
+    if not (np.all(np.isfinite(Jn)) and np.all(np.isfinite(Jc))):
+        rows, cols = np.where(~np.isfinite(Jn) | ~np.isfinite(Jc))
+        note("the dynamic Jacobian contains nan or inf")
+        report["nonfinite_jacobian"] = sorted({(labels[r] if r < len(labels) else r, names[c])
+                                               for r, c in zip(rows, cols)})
+        return report
+    scale = max(1.0, float(np.max(np.abs(np.hstack([Jn, Jc])))))
+    absent_now = [names[j] for j in range(len(names)) if np.max(np.abs(Jc[:, j])) <= tol * scale]
+    nowhere = [v for v in absent_now if np.max(np.abs(Jn[:, names.index(v)])) <= tol * scale]
+    # a state of this package appears at t through its own transition; what Dynare calls
+    # "not present at the current period" is a variable whose CURRENT value enters nothing
+    report["absent_current"] = absent_now
+    report["absent"] = nowhere
+    if nowhere:
+        note(f"variables that appear in no equation: {nowhere}")
+    if absent_now:
+        report["messages"].append(f"variables not present at the current date: {absent_now}")
+    # dynamic Jacobian: an equation that is a combination of others at every date
+    Jd = np.hstack([Jn, Jc])
+    sd = np.linalg.svd(Jd, compute_uv=False)
+    drank = int(np.sum(sd > tol * max(1.0, sd[0])))
+    report["redundant_equations"] = Jd.shape[0] - drank
+    if drank < Jd.shape[0]:
+        note(f"the dynamic Jacobian is singular: {Jd.shape[0] - drank} redundant equation(s)")
+        Nd = _nullspace(Jd.T, tol)
+        report["redundant_groups"] = [[(int(i) + 1, labels[i] if i < len(labels) else "")
+                                       for i in np.where(np.abs(v) > 1e-8)[0]] for v in Nd.T]
+    Js = Jn + Jc
+    s = np.linalg.svd(Js, compute_uv=False)
+    rank = int(np.sum(s > tol * max(1.0, s[0])))
+    report["static_rank"] = rank
+    report["relations"] = Js.shape[0] - rank
+    if rank < Js.shape[0]:
+        note(f"the static Jacobian is singular: {Js.shape[0] - rank} collinear "
+             f"relationship(s) between variables and equations")
+        Nv = _nullspace(Js, tol)
+        Ne = _nullspace(Js.T, tol)
+        report["collinear_variables"] = [[names[i] for i in np.where(np.abs(v) > 1e-8)[0]]
+                                         for v in Nv.T]
+        report["collinear_equations"] = [[(int(i) + 1, labels[i] if i < len(labels) else "")
+                                           for i in np.where(np.abs(v) > 1e-8)[0]]
+                                          for v in Ne.T]
+        # a unit root makes I - (dynamic transition) singular by itself
+        try:
+            from scipy.linalg import eigvals
+            lam = eigvals(Jc, -Jn)
+            near = np.abs(np.abs(lam[np.isfinite(lam)]) - 1) < 1e-6
+            report["unit_root"] = bool(np.any(near))
+            if report["unit_root"]:
+                report["messages"].append(
+                    "a root of the dynamic system is at one: the singularity may be (partly) a "
+                    "unit root, which is expected if the model has one")
+        except Exception:
+            report["unit_root"] = None
+    return report

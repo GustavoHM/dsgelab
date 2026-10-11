@@ -591,9 +591,14 @@ class ModFile:
         kw.update(kwargs)
         return EstimationProblem(**kw)
 
-    def steady_state(self, guess: Mapping[str, float] | None = None, params=None,
-                     **kwargs) -> SteadyState:
+    def steady_state(self, guess: Mapping[str, float] | None = None, params=None, *,
+                     analytic: bool = False, **kwargs) -> SteadyState:
         """Solve the steady state, iterating on ``steady_state(x)`` terms if any.
+
+        With ``analytic=True`` the file's ``steady_state_model`` (or ``initval``)
+        IS the steady state: it is evaluated, checked against the model's
+        equations by :func:`dsgelab.analytic_steady_state`, and refused if it
+        leaves a variable out or does not solve them -- Dynare's behaviour.
 
         ``guess`` overrides :attr:`guess` for the Dynare names it lists. When the
         model has ``steady_state(x)`` terms, their values are written into
@@ -605,6 +610,27 @@ class ModFile:
             raise DynareImportError(
                 "this .mod leaves instruments without an equation: pass it to "
                 "dsgelab.ramsey_model or dsgelab.discretionary_policy first")
+        if analytic:
+            # the file's steady_state_model AS the steady state: no Newton step, and
+            # refused unless it zeroes the dynamic model's residuals
+            from .steady import SteadyStateError, analytic_steady_state
+            from .symbolic import _require_sympy
+            sympy = _require_sympy()
+            g, exo_lv, upd = _run_program(sympy, self.program, dict(params),
+                                          _sympy_functions(sympy))
+            if isinstance(params, dict):
+                params.update(upd)
+            missing = [v for v in self.endogenous if v not in g]
+            if missing:
+                raise SteadyStateError(
+                    f"steady_state_model / initval give no closed form for {missing} "
+                    f"(a MATLAB helper, or not declared): use analytic=False to solve for them")
+            vals = self.full_guess(g)
+            for name, (kind, of) in self.auxiliary.items():
+                if kind == "shock":
+                    vals[name] = float(params.get(f"EXO_SS_{of}", 0.0))
+            return analytic_steady_state(self.model, params, vals,
+                                         tol=kwargs.get("tol", 1e-10))
         if guess is None and self.program and params is not self.params:
             # the file's steady_state_model / initval, evaluated at THESE parameters:
             # an exact start where the file gives closed forms, and the parameters it

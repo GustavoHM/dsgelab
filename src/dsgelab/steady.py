@@ -25,7 +25,7 @@ from scipy.optimize import root
 
 from .model import Model
 
-__all__ = ["SteadyState", "steady_state"]
+__all__ = ["SteadyState", "steady_state", "analytic_steady_state", "SteadyStateError"]
 
 
 @dataclass
@@ -74,8 +74,10 @@ def steady_state(model: Model, guess, params, *, ctx=None,
 
     Parameters
     ----------
-    guess : mapping or array
-        Starting point, in the model's variable order if an array.
+    guess : mapping, array or None
+        Starting point, in the model's variable order if an array. ``None`` uses
+        the model's declared ``steady_state_model`` (see
+        :func:`analytic_steady_state`), checked and not solved.
     ctx : object, optional
         Side information handed to the equations as their fifth argument.
     ctx_update : callable, optional
@@ -90,6 +92,11 @@ def steady_state(model: Model, guess, params, *, ctx=None,
         finite-difference Jacobian stops improving, and that includes the case
         where the starting point already is the solution.
     """
+    if guess is None:
+        program = getattr(model, "steady_state_model", None)
+        if program is None:
+            raise ValueError("no guess, and the model declares no steady_state_model")
+        return analytic_steady_state(model, params, program, ctx=ctx, tol=tol)
     x0 = model.vector(guess) if isinstance(guess, Mapping) else np.asarray(guess, dtype=float)
     if x0.size != model.n_vars:
         raise ValueError(f"guess has {x0.size} entries for {model.n_vars} variables")
@@ -196,3 +203,42 @@ def _equal_or_infinite(a, b) -> float:
     except Exception:
         same = a is b
     return 0.0 if same else np.inf
+
+
+class SteadyStateError(RuntimeError):
+    """A declared (analytic) steady state that does not solve the model."""
+
+
+def analytic_steady_state(model: Model, params, values, *, ctx=None,
+                          tol: float = 1e-10) -> SteadyState:
+    """A steady state given in closed form, CHECKED against the model's own equations.
+
+    ``values`` is a mapping of every variable to its steady-state level, or a
+    callable ``values(params) -> mapping``. A closed form is a second model of
+    the same point -- it is written separately from the equations and can drift
+    from them -- so it is used only if it zeroes the dynamic model's residuals
+    at ``(y, y, 0)`` to ``tol``; otherwise this raises, naming the equations it
+    violates. Nothing is solved: a model whose closed form is right never sees a
+    Newton step.
+    """
+    vals = values(params) if callable(values) else values
+    vals = dict(vals)
+    aux = getattr(model, "auxiliary", None) or {}
+    for name, (kind, of) in aux.items():
+        if name not in vals and of in vals:
+            vals[name] = vals[of]
+    missing = [v for v in model.names if v not in vals]
+    if missing:
+        raise SteadyStateError(f"the closed form leaves {missing} without a value")
+    x = model.vector(vals)
+    zero = np.zeros(model.n_shocks)
+    r = np.asarray(model.residuals(x, x, zero, params, ctx), float)
+    worst = float(np.max(np.abs(r))) if r.size else 0.0
+    if not np.isfinite(worst) or worst > tol:
+        labels = (getattr(model, "symbolic", None) or {}).get("equations", [])
+        order = np.argsort(-np.abs(r))[:3]
+        where = "; ".join(f"equation {i + 1} ({labels[i] if i < len(labels) else ''}) "
+                          f"residual {r[i]:.3e}" for i in order if abs(r[i]) > tol)
+        raise SteadyStateError(f"the closed-form steady state does not solve the model: {where}")
+    return SteadyState(x=x, values=model.dict(x), residual=worst, ctx=ctx, success=True,
+                       message="closed form, checked", model=model)

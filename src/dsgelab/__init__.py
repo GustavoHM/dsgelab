@@ -27,7 +27,7 @@ with the Blanchard-Kahn condition enforced rather than reported.
 
 from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
-                          compare_irfs, steady_state_invariance)
+                          compare_irfs, diagnose, steady_state_invariance)
 from .foresight import News, TransitionPath, perfect_foresight, perfect_foresight_with_expectation_errors
 from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
@@ -52,13 +52,13 @@ from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
-from .steady import SteadyState, steady_state
+from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
 __version__ = "0.3.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
-    "steady_state", "SteadyState",
+    "steady_state", "SteadyState", "analytic_steady_state", "SteadyStateError",
     "solve", "FirstOrderSolution", "shock_covariance",
     "klein", "KleinSolution", "BlanchardKahnError",
     "first_order_system", "second_derivatives", "LinearSystem", "Coordinates",
@@ -75,7 +75,7 @@ __all__ = [
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
-    "steady_state_invariance",
+    "steady_state_invariance", "diagnose",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",
     "discretionary_policy", "DiscretionSolution", "DiscretionError", "PrivateBlock",
     "osr", "OSRResult", "OSRError",

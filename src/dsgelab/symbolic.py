@@ -265,7 +265,8 @@ def _expand_dating(equations, states, jumps, shocks):
 def from_equations(equations: Sequence[str], *, states: Sequence[str],
                    jumps: Sequence[str], shocks: Sequence[str],
                    parameters: Sequence[str], name: str = "model",
-                   derivatives: str = "both") -> Model:
+                   derivatives: str = "both",
+                   steady_state_model: Sequence[str] | None = None) -> Model:
     """Build a :class:`~dsgelab.model.Model` from text equations.
 
     Parameters
@@ -287,6 +288,13 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         ``n_eq * (2n + n_shocks)^2`` expressions to differentiate and lambdify,
         so it is worth skipping for a large model that will only be solved to
         first order.
+    steady_state_model : sequence of str, optional
+        The steady state in closed form, as assignments ``"name = expr"``
+        evaluated in order -- Dynare's ``steady_state_model`` block. Intermediate
+        names are allowed; every variable must end up with a value. It is
+        attached as ``model.steady_state_model`` and used by
+        ``dsgelab.steady_state(model, None, params)``, which CHECKS it against
+        the equations and refuses it if it does not solve them.
     """
     states, jumps = list(states), list(jumps)
     n = len(states) + len(jumps)
@@ -301,4 +309,44 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
                                    shocks=shocks, parameters=parameters, name=name,
                                    derivatives=derivatives, source_equations=eqs)
     model.auxiliary = aux
+    if steady_state_model is not None:
+        model.steady_state_model = _closed_form(list(steady_state_model), parameters)
     return model
+
+
+def _closed_form(assignments, parameters):
+    """``params -> {name: value}`` from assignments evaluated in order."""
+    sympy = _require_sympy()
+    from sympy.parsing.sympy_parser import parse_expr, standard_transformations
+    funcs = {"log": sympy.log, "exp": sympy.exp, "sqrt": sympy.sqrt, "Abs": sympy.Abs,
+             "abs": sympy.Abs, "min": sympy.Min, "max": sympy.Max}
+    parsed = []
+    known = set(parameters)
+    for k, line in enumerate(assignments):
+        if "=" not in line:
+            raise SymbolicError(f"steady_state_model line {k + 1}: expected 'name = expr'")
+        lhs, rhs = line.split("=", 1)
+        lhs = lhs.strip()
+        local = {n: sympy.Symbol(n) for n in known}
+        local.update(funcs)
+        expr = parse_expr(rhs.replace("^", "**"), local_dict=local,
+                          global_dict={"Symbol": sympy.Symbol, "Integer": sympy.Integer,
+                                       "Float": sympy.Float, "Rational": sympy.Rational},
+                          transformations=standard_transformations)
+        unknown = sorted(str(sym) for sym in expr.free_symbols if str(sym) not in known)
+        if unknown:
+            raise SymbolicError(f"steady_state_model line {k + 1}: {unknown} used before "
+                                f"being assigned")
+        parsed.append((lhs, expr))
+        known.add(lhs)
+
+    def evaluate(params):
+        env = {sympy.Symbol(p): float(get_param(params, p)) for p in parameters}
+        out = {}
+        for lhs, expr in parsed:
+            val = float(expr.xreplace(env))
+            env[sympy.Symbol(lhs)] = val
+            out[lhs] = val
+        return out
+
+    return evaluate
