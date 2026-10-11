@@ -23,3 +23,7 @@ validation/heutel/out/
 validation/out_import/
 validation/work/
 validation/out_policy/
+# What Dynare's preprocessor writes next to a .mod run from validation/
+validation/*/checksum
+validation/*/model/
+validation/+*/

@@ -55,6 +55,6 @@ for m in "${MODS[@]}"; do
     printf('gravado out/${base}.mat (info=%d)\n', info);
   " > "out/${base}.log" 2>&1 || { echo "FALHOU $m — ver out/${base}.log"; tail -20 "out/${base}.log"; exit 1; }
   tail -1 "out/${base}.log"
-  rm -f "$m"
+  rm -rf "$m" "$base" "+$base"     # o .mod copiado e o que o pré-processador do Dynare gera
 done
 echo "pronto."
