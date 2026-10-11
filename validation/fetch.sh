@@ -22,6 +22,9 @@ DY=https://git.dynare.org/Dynare/dynare/-/raw
 for f in fs2000 NK_baseline Gali_2015 example3 agtrend; do
   get "$DY/6.4/examples/$f.mod" "examples/$f.mod"
 done
+# auxiliares em MATLAB que dois deles chamam para o estado estacionário
+get "$DY/6.4/examples/NK_baseline_steadystate.m" examples/NK_baseline_steadystate.m
+get "$DY/6.4/examples/example3_steady_state_helper.m" examples/example3_steady_state_helper.m
 get "$DY/7.1/tests/optimal_policy/nk_ramsey_model.mod"  ramsey/nk_ramsey_model.mod
 get "$DY/7.1/tests/optimal_policy/Ramsey/ramsey_ex.mod" ramsey/ramsey_ex.mod
 get "$DY/7.1/tests/optimal_policy/OSR/osr_example.mod" ramsey/osr_example.mod

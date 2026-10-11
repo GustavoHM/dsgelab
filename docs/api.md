@@ -73,7 +73,7 @@ rather than absolute deviations.
 
 ## First-order solution
 
-### `solve(model, params, *, steady=None, guess=None, ctx=None, ctx_update=None, positive=(), h=1e-6, equilibrate=True, tol=1e-11) -> FirstOrderSolution`
+### `solve(model, params, *, steady=None, guess=None, ctx=None, ctx_update=None, positive=(), h=1e-6, equilibrate=True, tol=1e-11, qz_criterium=None) -> FirstOrderSolution`
 
 Pass either a solved `steady` or a `guess`. `h` is the differencing step;
 `equilibrate` scales the rows of the pencil, which does not change the solution
@@ -98,7 +98,7 @@ and does change its conditioning.
 | `accuracy(sizes=(0.02, 0.01, 0.005), seed=0)` | implied order of accuracy against the nonlinear system |
 | `summary()` | one-screen report |
 
-### `klein(A, B, n_k, C=None, tol=1e-9) -> KleinSolution`
+### `klein(A, B, n_k, C=None, tol=1e-9, qz_criterium=None) -> KleinSolution`
 
 The QZ solver on its own, for a system you assembled yourself. Raises
 `BlanchardKahnError` (with `.n_stable`, `.n_k`, `.eigenvalues`) when the stable
@@ -181,6 +181,46 @@ coordinates. Uses `model.hessian_fn` when available.
 ### `path_of(value, periods)`
 
 Normalises a constant, a sequence or a callable into a per-period list.
+
+---
+
+## Reading Dynare files
+
+Requires `sympy`. The module docstring of `dsgelab.dynare` lists what is read and
+what is refused.
+
+### `from_mod(source, *, defines=None, derivatives="jacobian", name=None) -> ModFile`
+
+`source` is a path to a `.mod` file or its text; `defines` are macro variables,
+as `-D` on Dynare's command line. Every Dynare endogenous variable becomes a jump
+with its Dynare dating, so its impulse response is Dynare's series with no shift.
+Lags become states `LAG<k>_v`, leads beyond one become jumps `LEAD<k>_v`, and a
+shock `e` becomes the state `SHK_e`, which is what lets it appear inside any
+equation. `predetermined_variables` are re-dated as Dynare does.
+
+### `ModFile`
+
+| Attribute | Meaning |
+|---|---|
+| `model` | the `Model` |
+| `params` | parameter values; one left to a MATLAB steady-state file is `nan` and listed in `unset_params` |
+| `guess` | endogenous values from `steady_state_model` or `initval`; names a MATLAB helper computes are in `missing_guess` |
+| `cov` | shock covariance in `model.shocks` order |
+| `auxiliary` | every variable the translation added, `name -> (kind, of)` |
+| `linear`, `steady_operators` | `model(linear)`; variables under `steady_state()` |
+
+`steady_state(guess=None, params=None, **kwargs)` solves the steady state,
+iterating on `steady_state()` terms and writing their values into `params`.
+`full_guess(values)` fills the auxiliaries from values of the Dynare variables.
+
+```python
+mf = dk.from_mod("fs2000.mod")
+ss = mf.steady_state()
+sol = dk.solve(mf.model, mf.params, steady=ss, qz_criterium=1 + 1e-6)
+```
+
+A model with a unit root -- a price level, a random-walk technology -- needs
+`qz_criterium=1 + 1e-6`, Dynare's default; `solve` is strict otherwise.
 
 ---
 

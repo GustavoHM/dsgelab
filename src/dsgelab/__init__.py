@@ -33,6 +33,7 @@ from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
                         third_derivatives)
 from .model import Model, VarView, get_param, set_params
+from .dynare import DynareImportError, ModFile, from_mod
 from .optimal import RamseyError, ramsey_model, ramsey_multipliers, ramsey_steady_state
 from .secondorder import SecondOrderSolution, solve_second_order
 from .thirdorder import ThirdOrderSolution, solve_third_order
@@ -59,6 +60,7 @@ __all__ = [
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",
+    "from_mod", "ModFile", "DynareImportError",
     "__version__",
     "from_equations", "optimality_conditions", "to_dynare", "to_macromodelling",
 ]

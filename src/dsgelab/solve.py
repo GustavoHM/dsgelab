@@ -15,7 +15,8 @@ __all__ = ["solve"]
 
 def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
           ctx_update=None, positive=(), h: float = 1e-6,
-          equilibrate: bool = True, tol: float = 1e-11) -> FirstOrderSolution:
+          equilibrate: bool = True, tol: float = 1e-11,
+          qz_criterium: float | None = None) -> FirstOrderSolution:
     """Solve ``model`` at ``params`` to first order.
 
     Either pass an already-solved ``steady`` state or a ``guess`` from which one
@@ -24,6 +25,9 @@ def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
     Returns a :class:`~dsgelab.solution.FirstOrderSolution` carrying the Klein
     matrices, the steady state, the coordinate map and the parameters, so
     impulse responses and moments need no further arguments.
+
+    ``qz_criterium`` is forwarded to :func:`dsgelab.klein`: set it to Dynare's
+    ``1 + 1e-6`` to accept a unit root.
     """
     if steady is None:
         if guess is None:
@@ -39,6 +43,6 @@ def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
         raise RuntimeError(
             f"the point handed to the linearisation is not a steady state "
             f"(residual {system.steady_residual:.3e}); solve it first")
-    ks = klein(system.A, system.B, model.n_states, C=system.C)
+    ks = klein(system.A, system.B, model.n_states, C=system.C, qz_criterium=qz_criterium)
     return FirstOrderSolution(model=model, steady=steady, system=system, klein=ks,
                               params=params, ctx=steady.ctx)

@@ -77,6 +77,7 @@ expensive class of error in this kind of code; naming removes the class.
 | Second-order perturbation and risk corrections | `solve_second_order` |
 | Nonlinear perfect-foresight transitions, announced policy paths | `perfect_foresight` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
+| Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
 | Calibration on targets, with an identification diagnostic | `calibrate`, `target_jacobian` |
 | Independent checks: identities, slackness, BK margin, cross-solution | `dsgelab.diagnostics` |
 | Text equations with exact analytic derivatives | `dsgelab.symbolic` |

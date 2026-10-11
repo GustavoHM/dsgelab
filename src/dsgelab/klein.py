@@ -70,7 +70,8 @@ class KleinSolution:
         return M
 
 
-def klein(A, B, n_k: int, C=None, tol: float = 1e-9) -> KleinSolution:
+def klein(A, B, n_k: int, C=None, tol: float = 1e-9,
+          qz_criterium: float | None = None) -> KleinSolution:
     """Solve ``A E_t x_{t+1} = B x_t + C eps_{t+1}`` for the saddle path.
 
     Parameters
@@ -86,6 +87,13 @@ def klein(A, B, n_k: int, C=None, tol: float = 1e-9) -> KleinSolution:
         returned as well.
     tol : float
         Modulus tolerance for counting a generalised eigenvalue as stable.
+    qz_criterium : float, optional
+        Count a root as stable when its modulus is below this number instead of
+        below ``1 - tol``. Dynare's default is ``1 + 1e-6``, which admits unit
+        roots: a price LEVEL in a model with an inflation target, a random-walk
+        technology. Left at ``None`` the count is strict, and a unit root is a
+        Blanchard-Kahn failure rather than a solution with a non-stationary
+        variable in it.
 
     Raises
     ------
@@ -103,10 +111,16 @@ def klein(A, B, n_k: int, C=None, tol: float = 1e-9) -> KleinSolution:
 
     # Stability is governed by the generalised eigenvalues of the pencil (B, A);
     # order the ones inside the unit circle into the leading block.
-    S, T, alpha, beta, Qz, Z = ordqz(B, A, sort="iuc", output="complex")
+    if qz_criterium is None:
+        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort="iuc", output="complex")
+        cut = 1.0 - tol
+    else:
+        cut = float(qz_criterium)
+        S, T, alpha, beta, Qz, Z = ordqz(
+            B, A, sort=lambda a, b: np.abs(a) < cut * np.abs(b), output="complex")
     with np.errstate(divide="ignore", invalid="ignore"):
         lam = np.abs(alpha) / np.where(np.abs(beta) < tol, tol, np.abs(beta))
-    n_stable = int(np.sum(lam < 1.0 - tol))
+    n_stable = int(np.sum(lam < cut))
 
     if n_stable < n_k:
         raise BlanchardKahnError(

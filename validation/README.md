@@ -112,3 +112,51 @@ omissão do Dynare é 2: as IRFs que ele produz são impulsos generalizados de s
 dos de primeira em `4e-05`. `run_ramsey.sh` fixa `order=1`. Além disso, `oo_.steady_state` guarda o
 `initval` do `.mod` (`c = n = 0,9671684882`), que erra a raiz exata `c = 0,875^{1/4}` na sétima casa;
 o ponto em que o Dynare de fato lineariza é `oo_.dr.ys`, e é contra ele que a comparação é feita.
+
+## Os exemplos do Dynare, lidos sem porte: `from_mod`
+
+`compare.py` confronta portes feitos à mão. Aqui o `.mod` é lido como está por
+`dsgelab.from_mod`, e o que se compara é o que os dois programas tiram do mesmo arquivo. Além dos
+três modelos acima, cinco da pasta `examples/` do repositório do Dynare (tag 6.4).
+
+```bash
+bash fetch.sh
+bash run_examples.sh       # strip_mod.py reduz cada .mod ao modelo; stoch_simul(order=1) igual para todos
+python compare_import.py
+```
+
+```
+modelo         vars  aux    parâm.     e.e.     IRFs  momentos
+RBC_baseline     15    5   3.6e-16  1.1e-13  6.8e-14   7.5e-14  OK
+example1          6    5   0.0e+00  1.2e-14  1.8e-14   1.9e-14  OK
+example2          6    5   0.0e+00  2.1e-05  4.3e-06   3.3e-06  OK  (e.e. do Dynare com resíduo 1e-06)
+Gali_2015        14    7   0.0e+00  0.0e+00  4.9e-15   2.2e-15  OK
+NK_baseline      28   16   1.8e-16  9.3e-14  5.9e-11   2.2e-11  OK
+              parâmetros que o .mod deixa ao MATLAB, tomados do Dynare: gammma1, Rbar, Lambdax, LambdaYd
+              ponto de partida do e.e. tomado do Dynare para 28 variável(is)
+agtrend          15    6   0.0e+00  3.9e-08  2.1e-07   2.3e-07  OK  (e.e. do Dynare com resíduo 4e-07)
+example3          6    5   0.0e+00  8.3e-15  1.7e-14   9.2e-15  OK
+              ponto de partida do e.e. tomado do Dynare para 4 variável(is)
+fs2000           14    8   3.2e-16  9.2e-15  2.6e-13   2.5e-13  OK
+```
+
+| Modelo | O que o leitor precisa entender |
+|---|---|
+| `fs2000` | `c(+2)`; choques **dentro** da produção e do crédito, não só num AR(1); parâmetro chamado `del`, palavra reservada do Python |
+| `Gali_2015` | `model(linear)`; variáveis locais `#`, uma delas chamada `lambda`; o operador `steady_state(y)`; o **nível de preços** com raiz unitária |
+| `agtrend` | o macroprocessador: `@#define`, `@#if`/`@#else` aninhados |
+| `example1`, `example3` | choques correlacionados, com a constante `phi` atribuída fora de `parameters` |
+| `NK_baseline` | 28 equações, indexação e rigidez de preços e salários, `predetermined_variables` |
+| `RBC_baseline` | parâmetros calculados dentro do `steady_state_model` |
+
+**O que veio do Dynare, e está dito na saída.** O `NK_baseline` calcula quatro parâmetros e o
+estado estacionário inteiro num arquivo MATLAB (`NK_baseline_steadystate.m`), e o `example3` resolve
+as horas num auxiliar MATLAB. Um leitor de `.mod` não executa MATLAB: esses parâmetros e esses
+pontos de partida vêm do Dynare. O estado estacionário em si é resolvido pelo `dsgelab` e comparado.
+Os parâmetros que o `.mod` define são lidos por `from_mod` e conferidos contra os do Dynare (coluna
+`parâm.`).
+
+**Raiz unitária.** O nível de preços do `Gali_2015` (`pi = p - p(-1)`) tem raiz exatamente 1. O
+Dynare a conta como estável (`qz_criterium = 1 + 1e-6`); o `dsgelab`, por omissão, não, e recusa
+com `BlanchardKahnError`. `solve(..., qz_criterium=1 + 1e-6)` reproduz a convenção do Dynare, e é
+o que `compare_import.py` usa.

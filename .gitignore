@@ -20,3 +20,5 @@ validation/heutel/original/
 validation/heutel/out/
 *.mat
 *.log
+validation/out_import/
+validation/work/

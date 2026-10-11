@@ -314,7 +314,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
 
   <h3>Contra respostas conhecidas no papel</h3>
-  <p>78 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <p>88 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
   <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
   um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
   <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
@@ -341,6 +341,24 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   independente está à mão — <code>example1</code> e <code>example2</code> são a mesma economia em
   coordenadas diferentes, e <code>exp(e.e. do example2)</code> bate com o <code>example1</code> em
   nível a <code>1e-15</code>.</p>
+
+  <h3>Os exemplos do Dynare, lidos sem porte</h3>
+  <p><code>dk.from_mod</code> lê o <code>.mod</code> como está — macros, variáveis locais, avanços e
+  defasagens de qualquer ordem, choques dentro de qualquer equação — e o resultado é comparado com o
+  que o Dynare tira do mesmo arquivo: estado estacionário, IRFs e desvios-padrão teóricos.</p>
+  <table>
+    <thead><tr><th>Modelo</th><th>Variáveis</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>fs2000 <span style="color:var(--muted)">(Schorfheide 2000)</span></td><td class="num">14</td><td class="num">9,2e-15</td><td class="num">2,6e-13</td><td class="num">2,5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>NK_baseline <span style="color:var(--muted)">(Fernández-Villaverde e Rubio-Ramírez)</span></td><td class="num">28</td><td class="num">9,3e-14</td><td class="num">5,9e-11</td><td class="num">2,2e-11</td><td class="ok">OK</td></tr>
+      <tr><td>Gali_2015 <span style="color:var(--muted)">(cap. 3, raiz unitária)</span></td><td class="num">14</td><td class="num">0</td><td class="num">4,9e-15</td><td class="num">2,2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>example3 <span style="color:var(--muted)">(Collard)</span></td><td class="num">6</td><td class="num">8,3e-15</td><td class="num">1,7e-14</td><td class="num">9,2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>agtrend <span style="color:var(--muted)">(Aguiar–Gopinath, macros)</span></td><td class="num">15</td><td class="num">3,9e-08</td><td class="num">2,1e-07</td><td class="num">2,3e-07</td><td class="ok">OK*</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* Limitado pelo estado estacionário do Dynare, que deixa
+  resíduo de <code>4e-07</code> nas equações. Os três modelos da tabela anterior também passam por este
+  caminho, com os mesmos números.</p>
 
   <h3>Política ótima contra o <code>ramsey_model</code> do Dynare</h3>
   <p>Estado estacionário e IRFs das variáveis privadas e dos multiplicadores, que o Dynare e o
