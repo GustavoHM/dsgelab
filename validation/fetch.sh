@@ -37,3 +37,9 @@ done
 # Estimação: os dados do fs2000 (script MATLAB que monta as séries) e o teste de previsão condicional
 get "$DY/6.4/examples/fs2000_data.m" examples/fs2000_data.m
 get "$DY/7.1/tests/conditional_forecasts/1/fs2000_cal.mod" forecast/fs2000_cal.mod
+# OccBin: uma restrição (borrcon) e duas (dynrbc), de tests/occbin do Dynare 7.1
+mkdir -p occbin
+for f in model_borrcon/borrcon.mod model_borrcon/borrcon_common.inc \
+         model_irrcap_twoconstraints/dynrbc.mod model_irrcap_twoconstraints/dynrbc_common.inc; do
+  get "$DY/7.1/tests/occbin/$f" "occbin/$(basename "$f")"
+done

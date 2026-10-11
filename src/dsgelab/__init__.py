@@ -34,6 +34,7 @@ from .linearize import (Coordinates, LinearSystem, first_order_system, second_de
                         third_derivatives)
 from .model import Model, VarView, get_param, set_params
 from .dynare import DynareImportError, ModFile, from_mod, read_expectation_errors_csv
+from .occbin import OccbinError, OccbinModel, OccbinResult, occbin_simulate
 from .optimal import (DiscretionError, DiscretionSolution, OSRError, OSRResult, PrivateBlock,
                       RamseyError, discretionary_policy, osr, ramsey_model, ramsey_multipliers,
                       ramsey_steady_state)
@@ -81,6 +82,7 @@ __all__ = [
     "osr", "OSRResult", "OSRError",
     "welfare", "welfare_model", "Welfare", "WelfareError", "consumption_equivalent",
     "from_mod", "ModFile", "DynareImportError", "read_expectation_errors_csv",
+    "OccbinModel", "OccbinResult", "OccbinError", "occbin_simulate",
     "__version__",
     "from_equations", "optimality_conditions", "assemble", "to_dynare", "to_macromodelling",
 ]

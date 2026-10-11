@@ -404,6 +404,7 @@ class ModFile:
     estimated: list = field(default_factory=list)
     homotopy: dict = field(default_factory=dict)
     occbin: dict | None = field(default=None, repr=False)
+    surprise: dict = field(default_factory=dict)
     varobs: list = field(default_factory=list)
     estimation_options: dict = field(default_factory=dict)
     program: dict = field(default_factory=dict, repr=False)
@@ -662,6 +663,38 @@ class ModFile:
                 break
         return ss
 
+    def occbin_model(self):
+        """The :class:`~dsgelab.occbin.OccbinModel` of the file's tagged equations."""
+        if self.occbin is None:
+            raise DynareImportError("this .mod has no occbin_constraints")
+        from .occbin import OccbinModel
+        om = OccbinModel(build=self.occbin["build"], constraints=self.occbin["constraints"])
+        om._models[frozenset()] = self.model
+        return om
+
+    def occbin_simulate(self, shocks=None, *, steady: SteadyState | None = None, **kwargs):
+        """:func:`dsgelab.occbin_simulate` with the file's surprise shocks and options.
+
+        ``occbin_setup(simul_periods=)`` and ``occbin_solver(simul_maxit=,
+        simul_curb_retrench, simul_check_ahead_periods=)`` set the defaults.
+        """
+        from .occbin import occbin_simulate
+        o = (self.occbin or {}).get("options", {})
+        kw = {}
+        if "simul_periods" in o:
+            kw["periods"] = int(o["simul_periods"])
+        if "simul_maxit" in o:
+            kw["maxit"] = int(o["simul_maxit"])
+        if "simul_check_ahead_periods" in o:
+            kw["check_ahead"] = int(o["simul_check_ahead_periods"])
+        if "simul_curb_retrench" in o:
+            kw["curb_retrench"] = o["simul_curb_retrench"] in ("", "1", "true")
+        kw.update(kwargs)
+        steady = self.steady_state() if steady is None else steady
+        return occbin_simulate(self.occbin_model(), self.params,
+                               self.surprise if shocks is None else shocks,
+                               steady=steady, **kw)
+
     def name_of(self, v: str) -> str:
         """The Dynare name behind a model variable, or the variable itself."""
         kind, of = self.auxiliary.get(v, (None, v))
@@ -711,6 +744,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     estim_body, varobs, estim_opts = [], [], {}
     homotopy_body = []
     occbin_body = []
+    surprise_body = []
+    occbin_opts: dict = {}
     i = 0
     while i < len(stmts):
         st = stmts[i]
@@ -734,6 +769,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 histval_body = body
             elif head == "initval":
                 initval = body
+            elif head == "shocks" and "surprise" in _csv(opts):
+                surprise_body += body       # shocks(surprise): OccBin's unforeseen shocks
             elif head == "shocks":
                 shocks += body
             elif head == "optim_weights":
@@ -769,6 +806,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             varobs += _declared(st, "varobs")
         elif word == "estimation":
             estim_opts = _options(st[len(word):])
+        elif word in ("occbin_setup", "occbin_solver"):
+            occbin_opts.update(_options(st[len(word):]))
         elif word == "osr":
             osr_opts = _options(st[len(word):])
             if "planner_discount" in osr_opts:
@@ -906,6 +945,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             labels.append(raw)
             exprs.append(e)
     n_dynare_eqs = len(exprs)
+    occbin_constraints = _occbin_constraints(occbin_body, parser, refs, exo, S)
 
     auxiliary: dict[str, tuple[str, str]] = {}
     states, jumps = [], list(endo)
@@ -1006,63 +1046,37 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
 
     # --- shocks
     cov = np.zeros((len(exo), len(exo)))
-    cur = None
-    det_periods: list = []
     det_shocks: dict = {}
     env_all = {**env, **pvals, **guess}
-    for st in shocks:
-        m = re.match(r"var\s+([A-Za-z_]\w*)\s*$", st)
-        if m:
-            cur = m.group(1)
-            continue
-        m = re.match(r"stderr\s+(.*)$", st, flags=re.S)
-        if m and cur is not None:
-            sd = _numeric(sympy, m.group(1), env_all, funcs)
-            i_ = exo.index(cur)
-            cov[i_, i_] = sd ** 2
-            continue
-        m = re.match(r"var\s+([A-Za-z_]\w*)\s*=(.*)$", st, flags=re.S)
-        if m:
-            i_ = exo.index(m.group(1))
-            cov[i_, i_] = _numeric(sympy, m.group(2), env_all, funcs)
-            continue
-        m = re.match(r"(var|corr)\s+([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*=(.*)$", st, flags=re.S)
-        if m:
-            i_, j_ = exo.index(m.group(2)), exo.index(m.group(3))
-            val = _numeric(sympy, m.group(4), env_all, funcs)
-            if m.group(1) == "corr":
-                val *= math.sqrt(cov[i_, i_] * cov[j_, j_])
-            cov[i_, j_] = cov[j_, i_] = val
-            continue
-        m = re.match(r"periods\s+(.*)$", st, flags=re.S)
-        if m and cur is not None:
-            det_periods = []
-            for part in re.split(r"[\s,]+", m.group(1).strip()):
-                if ":" in part:
-                    a, b_ = part.split(":")
-                    det_periods.append(list(range(int(a), int(b_) + 1)))
-                elif part:
-                    det_periods.append([int(part)])
-            continue
-        m = re.match(r"values\s+(.*)$", st, flags=re.S)
-        if m and cur is not None:
-            vals = [_numeric(sympy, v, env_all, funcs)
-                    for v in re.split(r"\s*,\s*|\s+(?![^()]*\))", m.group(1).strip()) if v]
-            if len(vals) == 1:
-                vals = vals * len(det_periods)
-            if len(vals) != len(det_periods):
-                raise DynareImportError(f"shocks: {len(det_periods)} periods and {len(vals)} values for {cur}")
-            for group, v in zip(det_periods, vals):
-                for t in group:
-                    det_shocks.setdefault(cur, {})[t] = v
-            continue
+    _read_shocks(shocks, cov, det_shocks, sympy, env_all, funcs, exo)
 
     estimated = [_estimated_entry(sympy, st, env_all, funcs, endo, exo) for st in estim_body]
+    surprise: dict = {}
+    _read_shocks(surprise_body, None, surprise, sympy, env_all, funcs, exo)
     occbin = None
     if occbin_body or any(not isinstance(sl, tuple) for sl in slots):
-        occbin = dict(constraints=_occbin_constraints(occbin_body, parser, refs, exo, S),
-                      slots=slots, n_dynare_eqs=n_dynare_eqs, aux_rows=exprs[n_dynare_eqs:],
-                      aux_labels=labels[n_dynare_eqs:])
+        aux_rows, aux_labels = list(exprs[n_dynare_eqs:]), list(labels[n_dynare_eqs:])
+
+        def build(binding, _slots=slots):
+            rows, labs = [], []
+            for sl in _slots:
+                raw, e = sl if isinstance(sl, tuple) else _pick_variant(sl, frozenset(binding))
+                rows.append(e)
+                labs.append(raw)
+            tag = ",".join(sorted(binding))
+            return model_from_expressions(rows + aux_rows, states=states, jumps=jumps,
+                                          shocks=list(exo), parameters=all_params,
+                                          name=f"{name}[{tag}]" if tag else name,
+                                          derivatives=derivatives,
+                                          source_equations=labs + aux_labels)
+
+        names_used = {n for sl in slots if not isinstance(sl, tuple)
+                      for b, r, _, _ in sl for n in b | r}
+        unknown = names_used - set(occbin_constraints)
+        if unknown:
+            raise DynareImportError(f"equation tags name constraints that occbin_constraints "
+                                    f"does not define: {sorted(unknown)}")
+        occbin = dict(constraints=occbin_constraints, build=build, options=occbin_opts)
     homotopy = {}
     for st in homotopy_body:
         parts = [x.strip() for x in _split_top(st)]
@@ -1095,7 +1109,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    estimated=estimated, varobs=varobs, estimation_options=estim_opts,
-                   homotopy=homotopy, occbin=occbin,
+                   homotopy=homotopy, occbin=occbin, surprise=surprise,
                    program=program,
                    optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
@@ -1295,3 +1309,57 @@ def _occbin_constraints(body, parser, refs, exo, S) -> dict:
                 sub[s_] = S(nm)
         out[cur][kind] = (e.xreplace(sub), op)
     return out
+
+
+def _read_shocks(body, cov, det, sympy, env_all, funcs, exo) -> None:
+    """A ``shocks`` block: variances into ``cov`` (if given), ``periods``/``values`` into ``det``."""
+    cur = None
+    det_periods: list = []
+    for st in body:
+        m = re.match(r"var\s+([A-Za-z_]\w*)\s*$", st)
+        if m:
+            cur = m.group(1)
+            if cur not in exo:
+                raise DynareImportError(f"shocks: {cur!r} is not an exogenous variable")
+            continue
+        m = re.match(r"stderr\s+(.*)$", st, flags=re.S)
+        if m and cur is not None and cov is not None:
+            sd = _numeric(sympy, m.group(1), env_all, funcs)
+            i_ = exo.index(cur)
+            cov[i_, i_] = sd ** 2
+            continue
+        m = re.match(r"var\s+([A-Za-z_]\w*)\s*=(.*)$", st, flags=re.S)
+        if m and cov is not None:
+            i_ = exo.index(m.group(1))
+            cov[i_, i_] = _numeric(sympy, m.group(2), env_all, funcs)
+            continue
+        m = re.match(r"(var|corr)\s+([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*=(.*)$", st, flags=re.S)
+        if m and cov is not None:
+            i_, j_ = exo.index(m.group(2)), exo.index(m.group(3))
+            val = _numeric(sympy, m.group(4), env_all, funcs)
+            if m.group(1) == "corr":
+                val *= math.sqrt(cov[i_, i_] * cov[j_, j_])
+            cov[i_, j_] = cov[j_, i_] = val
+            continue
+        m = re.match(r"periods\s+(.*)$", st, flags=re.S)
+        if m and cur is not None:
+            det_periods = []
+            for part in re.split(r"[\s,]+", m.group(1).strip()):
+                if ":" in part:
+                    a, b_ = part.split(":")
+                    det_periods.append(list(range(int(a), int(b_) + 1)))
+                elif part:
+                    det_periods.append([int(part)])
+            continue
+        m = re.match(r"values\s+(.*)$", st, flags=re.S)
+        if m and cur is not None:
+            vals = [_numeric(sympy, v, env_all, funcs)
+                    for v in re.split(r"\s*,\s*|\s+(?![^()]*\))", m.group(1).strip()) if v]
+            if len(vals) == 1:
+                vals = vals * len(det_periods)
+            if len(vals) != len(det_periods):
+                raise DynareImportError(f"shocks: {len(det_periods)} periods and {len(vals)} values for {cur}")
+            for group, v in zip(det_periods, vals):
+                for t in group:
+                    det.setdefault(cur, {})[t] = v
+            continue
