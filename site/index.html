@@ -245,6 +245,26 @@ jl = dk.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl"
   e volta — o pacote escreve o <code>.mod</code>, o Dynare resolve, comparamos — bate a
   <code>5e-14</code> em estado estacionário, IRFs e momentos, nos três modelos de referência.</p>
 
+  <h3>11. Política ótima: o planejador de Ramsey</h3>
+<pre><code>nk = dk.ramsey_model(
+    ["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",      # IS
+     "pi = beta*pi(+1) + kappa*x + u",              # Phillips
+     "u(+1) = rho*u + e"],                          # choque de custo: processo exógeno
+    states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
+    parameters=["beta", "sigma", "kappa", "lam", "rho"],
+    instruments=["i"],                              # a variável sem equação própria
+    objective="-(pi**2 + lam*x**2)/2", discount="beta")
+pn = dict(beta=0.99, sigma=1.0, kappa=0.1, lam=0.25, rho=0.5)
+ss_nk = dk.ramsey_steady_state(nk, dict(u=0, x=0, pi=0, i=0), pn)
+r = dk.solve(nk, pn, steady=ss_nk).irf("e", size=1.0, percent=False)
+
+x_lag = np.r_[0.0, r["x"][:-1]]
+abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() < 1e-12   # regra de metas</code></pre>
+  <p>As condições do planejador são derivadas simbolicamente das equações do setor privado; o que
+  volta é um <code>Model</code> comum, com multiplicadores e as suas defasagens como variáveis. A
+  perspectiva é a atemporal, a mesma do <code>ramsey_model</code> do Dynare. No novo-keynesiano a
+  resposta sai exatamente na regra de metas de Galí, <code>π_t = −(λ/κ)(x_t − x_{t−1})</code>.</p>
+
   <h3>7. Verificações independentes</h3>
 <pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
 
@@ -294,7 +314,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
 
   <h3>Contra respostas conhecidas no papel</h3>
-  <p>84 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <p>78 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
   <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
   um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
   <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
@@ -321,6 +341,21 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   independente está à mão — <code>example1</code> e <code>example2</code> são a mesma economia em
   coordenadas diferentes, e <code>exp(e.e. do example2)</code> bate com o <code>example1</code> em
   nível a <code>1e-15</code>.</p>
+
+  <h3>Política ótima contra o <code>ramsey_model</code> do Dynare</h3>
+  <p>Estado estacionário e IRFs das variáveis privadas e dos multiplicadores, que o Dynare e o
+  dsgelab numeram pela mesma equação e com o mesmo sinal.</p>
+  <table>
+    <thead><tr><th>Modelo</th><th>Estado estacionário</th><th>IRFs</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nk_linear <span style="color:var(--muted)">(Galí, cap. 5)</span></td>
+          <td class="num">0,0e+00</td><td class="num">1,4e-15</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_labortax <span style="color:var(--muted)">(capital como estoque escolhido)</span></td>
+          <td class="num">5,0e-11</td><td class="num">4,9e-13</td><td class="ok">OK</td></tr>
+      <tr><td>nk_ramsey_model <span style="color:var(--muted)">(testes do Dynare, não linear)</span></td>
+          <td class="num">2,7e-12</td><td class="num">2,1e-14</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
 
   <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de

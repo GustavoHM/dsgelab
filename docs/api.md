@@ -184,6 +184,57 @@ Normalises a constant, a sequence or a callable into a per-period list.
 
 ---
 
+## Optimal policy
+
+Requires `sympy`. See the module docstring of `dsgelab.optimal` for the derivation.
+
+### `ramsey_model(equations, *, states, jumps, shocks, parameters, instruments, objective, discount, name="ramsey", derivatives="both", multiplier_prefix="MULT_", auxiliary="auto") -> Model`
+
+The Ramsey planner under commitment, timeless perspective. `equations` are the
+private-sector conditions in the syntax of `from_equations`, one fewer per
+instrument than there are variables. Equations that carry a shock are exogenous
+processes: they are kept and get no multiplier. The planner's first-order
+conditions are derived symbolically and the result is an ordinary `Model`.
+
+| Argument | Meaning |
+|---|---|
+| `instruments` | the variables left without an equation |
+| `objective` | the period objective `U(x_t)`, MAXIMISED, in current-period variables |
+| `discount` | a parameter name, an expression in the parameters, or a number |
+| `auxiliary` | `"always"` routes every predetermined variable's condition through an auxiliary jump `FOC_<k>`; the solution is the same, the option is for verification |
+
+Layout of the returned model: states are the private states, then `lag_MULT_i`,
+then lagged copies `lag_<v>` that the conditions need; jumps are the private
+jumps, then `MULT_i`, then auxiliaries `FOC_<k>`. `MULT_i` belongs to the i-th
+non-exogenous equation, with the sign of a Lagrangian `U + MULT' c`; Dynare
+gives the same equation the same value. `model.ramsey` records the layout.
+
+### `ramsey_steady_state(model, private, params, **kwargs) -> SteadyState`
+
+Fits the multipliers to a guess of the private allocation by
+`ramsey_multipliers`, then solves the whole system with `steady_state`
+(`kwargs` forwarded, e.g. `positive=`).
+
+### `ramsey_multipliers(model, private, params) -> dict`
+
+At a steady state the conditions are linear in the multipliers, so they are
+fitted by least squares. The result is a full guess; `"_residual"` is the fit's
+residual, and a large one says that `private` is not the planner's steady state.
+
+```python
+m = dk.ramsey_model(
+    ["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",
+     "pi = beta*pi(+1) + kappa*x + u",
+     "u(+1) = rho*u + e"],
+    states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
+    parameters=["beta", "sigma", "kappa", "lam", "rho"], instruments=["i"],
+    objective="-(pi**2 + lam*x**2)/2", discount="beta")
+ss = dk.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), params)
+irf = dk.solve(m, params, steady=ss).irf("e", size=1.0)
+```
+
+---
+
 ## Calibration
 
 ### `calibrate(model, params, *, free, targets, guess, observables=None, bounds=None, ctx=None, ctx_update=None, positive=(), steady_tol=1e-11, tol=1e-10, maxiter=200, warm_start=True, raise_on_fail=True) -> CalibrationResult`

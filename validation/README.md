@@ -81,3 +81,34 @@ diferentes, e `exp(e.e. do example2)` bate com o e.e. do `example1` em nível a 
 o `.mod` diz `log_k = log(k)` referindo-se ao `k` CORRENTE do Dynare, que é o estoque de fim de
 período — o `k(+1)` na convenção do pacote. O estado estacionário coincidia exatamente; a IRF de
 `log_k` estava atrasada um período. É o argumento para comparar trajetórias e não pontos.
+
+## Política ótima: o planejador de Ramsey
+
+```bash
+bash fetch.sh            # inclui mods/ramsey/, do conjunto de testes do Dynare 7.1
+bash run_ramsey.sh       # ramsey_model + stoch_simul(order=1) no Octave + Dynare
+python compare_ramsey.py
+```
+
+```
+nk_linear         e.e. 0.0e+00   IRFs 1.4e-15   (6 séries; modelo com 8 variáveis, 4 do planejador)   OK
+rbc_labortax      e.e. 5.0e-11   IRFs 4.9e-13   (8 séries; modelo com 11 variáveis, 6 do planejador)   OK
+nk_ramsey_model   e.e. 2.7e-12   IRFs 2.1e-14   (8 séries; modelo com 13 variáveis, 8 do planejador)   OK
+```
+
+| Modelo | Origem | O que exercita |
+|---|---|---|
+| `ramsey/nk_linear.mod` | escrito aqui | O novo-keynesiano de livro-texto (Galí, 2015, cap. 5). Tem resposta analítica, a regra de metas `π_t = −(λ/κ)(x_t − x_{t−1})` e a forma fechada de `x_t`; `tests/test_optimal.py` confere as duas sem o Dynare. |
+| `ramsey/rbc_labortax.mod` | escrito aqui | Um RBC com imposto sobre o trabalho como instrumento. O equilíbrio com `τ = 0` é eficiente e o planejador o mantém em zero. Exercita a condição do planejador para um **estoque**, `k(+1)`, escolhido em `t` e válida em esperança. |
+| `mods/ramsey/nk_ramsey_model.mod` | testes do Dynare (`tests/optimal_policy`) | Não linear: Phillips de Rotemberg e Euler com `c(+1)` e `pai(+1)`. As derivadas das restrições em relação a `t+1` dependem de `t`, e a condição precisa de cópias defasadas `lag_c` e `lag_r`. Roda **sem alteração**. |
+
+São comparados o estado estacionário e as IRFs de todas as variáveis privadas **e dos
+multiplicadores**. O `MULT_j` do `dsgelab` é o multiplicador da j-ésima equação que não é processo
+exógeno; o Dynare numera um por equação, inclusive as exógenas, e dá à mesma equação o mesmo valor,
+com o mesmo sinal.
+
+**Duas armadilhas do lado do Dynare.** O `nk_ramsey_model.mod` chama `stoch_simul` sem `order=`, e a
+omissão do Dynare é 2: as IRFs que ele produz são impulsos generalizados de segunda ordem, e diferem
+dos de primeira em `4e-05`. `run_ramsey.sh` fixa `order=1`. Além disso, `oo_.steady_state` guarda o
+`initval` do `.mod` (`c = n = 0,9671684882`), que erra a raiz exata `c = 0,875^{1/4}` na sétima casa;
+o ponto em que o Dynare de fato lineariza é `oo_.dr.ys`, e é contra ele que a comparação é feita.
