@@ -4,7 +4,8 @@
 # Os arquivos NÃO são versionados aqui: são GPL, e este pacote é MIT. Vendorizá-los misturaria
 # licenças sem necessidade, já que são públicos e estáveis.
 set -euo pipefail
-mkdir -p "$(dirname "$0")/mods/ramsey" "$(dirname "$0")/mods/examples" "$(dirname "$0")/mods/foresight"
+mkdir -p "$(dirname "$0")/mods/ramsey" "$(dirname "$0")/mods/examples" "$(dirname "$0")/mods/foresight" \
+         "$(dirname "$0")/mods/forecast"
 cd "$(dirname "$0")/mods"
 
 get() { curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o "$2" "$1" && echo "ok  $2" || echo "FALHOU  $2  ($1)"; }
@@ -33,3 +34,6 @@ get "$DY/7.1/tests/discretionary_policy/dennis_1.mod"  ramsey/dennis_1.mod
 for f in pfwee.mod pfwee.csv pfwee_constant_sim_length.mod rbc_det1.mod rbc_det2.mod rbc_det3.mod; do
   get "$DY/7.1/tests/deterministic_simulations/$f" "foresight/$f"
 done
+# Estimação: os dados do fs2000 (script MATLAB que monta as séries) e o teste de previsão condicional
+get "$DY/6.4/examples/fs2000_data.m" examples/fs2000_data.m
+get "$DY/7.1/tests/conditional_forecasts/1/fs2000_cal.mod" forecast/fs2000_cal.mod

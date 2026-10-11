@@ -61,8 +61,8 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | **Política ótima: Ramsey com compromisso** | ✅ ‡ atemporal, contra o Dynare a 5e-13 | — | — | — | — | — | ✅ |
 | Regras simples ótimas, discrição | ✅ ‡ contra o Dynare | — | — | — | — | — | ✅ |
 | Bem-estar de 2ª ordem, condicional e incondicional | ✅ ‡ contra o Dynare a 1e-12 | — | — | — | — | — | ✅ |
-| **Estimação bayesiana** | ✅ † Kalman e Metropolis | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
-| Filtro de Kalman / *smoothing* | ✅ † filtro, sem suavizador | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
+| **Estimação bayesiana** | ✅ ‡ moda, Laplace, Metropolis, SMC, R-hat, ESS; contra o Dynare no fs2000 | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
+| Filtro de Kalman / *smoothing* | ✅ ‡ filtro com início difuso exato e suavizador | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibração por alvos** | ✅ conjunta, com limites | ✅ parâmetros calibrados por razões-alvo | ? | ? | ? | ? | 📄 |
 | **Diagnóstico de identificação da calibração** | ✅ posto e direções nulas | ? | ? | ? | ? | ? | 📄 (identificação do modelo) |
 | Blanchard-Kahn | ✅ **imposto**, com margem | ✅ `check_bk_condition` | ? | ? | — | ? | ✅ relatado |
@@ -165,10 +165,10 @@ a versão de cada item é a do [`ROADMAP.md`](../ROADMAP.md).
 | Impulso generalizado de segunda ordem | ✅ MacroModelling (`get_girf`) | **feito** | 0.2 |
 | Inovações em sequência na previsão perfeita | ✅ Dynare (`perfect_foresight_solver`) | **feito**, contra o Dynare a 1e-13 | 0.2 |
 | Erros de expectativa na previsão perfeita | ✅ Dynare (`perfect_foresight_with_expectation_errors_solver`) | **feito**, contra o Dynare a 3e-12 | 0.2 |
-| Kalman, moda, Metropolis | ✅ Dynare (`+estimate`), MacroModelling, gEconpy | **feito** no modelo linear | 0.3 |
-| Suavizador, máxima verossimilhança, SMC, diagnósticos | ✅ Dynare | falta | 0.3 |
-| Verossimilhança marginal e comparação de modelos | ✅ Dynare | falta | 0.3 |
-| Decomposição histórica; previsão condicional | ✅ Dynare (`shock_decomposition`, `+conditional_forecasts`), MacroModelling | **feito** na solução linear; falta a versão em tempo real e a validação | 0.3 |
+| Kalman, moda, Metropolis | ✅ Dynare (`+estimate`), MacroModelling, gEconpy | **feito**, contra o Dynare no `fs2000.mod` | 0.3 |
+| Suavizador, filtro difuso, máxima verossimilhança, SMC, diagnósticos | ✅ Dynare | **feito**; suavizador e filtro difuso contra o Dynare | 0.3 |
+| Verossimilhança marginal e comparação de modelos | ✅ Dynare | **feito**: Laplace, média harmônica modificada, SMC | 0.3 |
+| Decomposição histórica; previsão condicional | ✅ Dynare (`shock_decomposition`, `+conditional_forecasts`), MacroModelling | **feito**, inclusive em tempo real; contra o Dynare | 0.3 |
 | **Ler `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **feito**: `from_mod`, oito `.mod` do Dynare | 0.4 |
 | Defasagens e avanços arbitrários | 📄 Dynare, 📄 MacroModelling | **feito** pelo caminho do `.mod`; falta em `from_equations` | 0.4 |
 | Restrições ocasionalmente ativas | ✅ Dynare (`+occbin`) | falta; `check_slack` só diagnostica | 0.4 |

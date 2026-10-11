@@ -41,12 +41,20 @@ from .welfare import Welfare, WelfareError, consumption_equivalent, welfare, wel
 from .secondorder import SecondOrderSolution, solve_second_order
 from .thirdorder import ThirdOrderSolution, solve_third_order
 from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
+from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
+                         effective_sample_size, maximum_likelihood, metropolis_hastings,
+                         model_probabilities, posterior_forecast, posterior_mode,
+                         prior_predictive, rhat, smc)
+from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
+                     kalman_filter, kalman_smoother, realtime_shock_decomposition,
+                     shock_decomposition, state_space)
+from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, steady_state
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -57,6 +65,12 @@ __all__ = [
     "solve_second_order", "SecondOrderSolution",
     "solve_third_order", "ThirdOrderSolution", "third_derivatives",
     "estimate", "EstimationResult", "log_likelihood", "log_posterior",
+    "EstimationProblem", "posterior_mode", "maximum_likelihood", "metropolis_hastings", "smc",
+    "prior_predictive", "model_probabilities", "posterior_forecast", "rhat",
+    "effective_sample_size", "ModeResult", "MCMCResult", "SMCResult",
+    "state_space", "StateSpace", "kalman_filter", "kalman_smoother", "FilterResult",
+    "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
+    "Forecast", "prior", "Prior",
     "solve_projection", "Projection",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",

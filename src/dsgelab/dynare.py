@@ -401,6 +401,10 @@ class ModFile:
     histval: dict = field(default_factory=dict)
     det_shocks: dict = field(default_factory=dict)
     histval_unread: list = field(default_factory=list)
+    estimated: list = field(default_factory=list)
+    varobs: list = field(default_factory=list)
+    estimation_options: dict = field(default_factory=dict)
+    program: dict = field(default_factory=dict, repr=False)
 
     def full_guess(self, values: Mapping[str, float] | None = None) -> dict:
         """A value for every model variable, given values for the Dynare ones."""
@@ -521,6 +525,72 @@ class ModFile:
                             states=states))
         return out, start
 
+    @property
+    def shock_states(self) -> dict:
+        """``{"SHK_e": "e"}``: the states that carry each Dynare shock's own value.
+
+        For :func:`dsgelab.shock_decomposition`, so that the shock of Dynare's
+        first period is counted as a shock and not as an initial condition.
+        """
+        return {f"SHK_{e}": e for e in self.exogenous}
+
+    def estimation_problem(self, data, **kwargs):
+        """An :class:`~dsgelab.EstimationProblem` from this file's estimation blocks.
+
+        ``estimated_params`` gives the priors (and ``"stderr e"`` names for shock
+        and measurement standard deviations), ``varobs`` the observables, and the
+        options of ``estimation(...)`` the rest: ``loglinear`` with ``logdata``
+        makes every observable a log, ``first_obs`` and ``presample`` carry over,
+        ``diffuse_filter`` makes the start diffuse. ``data`` maps each observable
+        to its series, as Dynare's datafile would; ``kwargs`` override anything.
+        """
+        from .estimation import EstimationProblem
+
+        if not self.estimated:
+            raise DynareImportError("this .mod has no estimated_params block")
+        if not self.varobs:
+            raise DynareImportError("this .mod has no varobs")
+        opts = self.estimation_options
+        loglin = "loglinear" in opts
+        if loglin and "logdata" not in opts:
+            raise DynareImportError("loglinear without logdata: the data would need logging "
+                                    "first; log them and pass transforms='log'")
+        priors = {e["name"]: e["prior"] for e in self.estimated if e["prior"] is not None}
+        free = [e["name"] for e in self.estimated]
+        sd = {e: float(np.sqrt(self.cov[i, i])) for i, e in enumerate(self.exogenous)}
+        params = dict(self.params)
+        meas = {}
+        for e in self.estimated:
+            # Dynare: with no initial value in estimated_params the starting point is the
+            # PRIOR MEAN, not the calibration
+            start = e["init"] if np.isfinite(e["init"]) else (
+                e["prior"].mean if e["prior"] is not None else np.nan)
+            if not np.isfinite(start):
+                continue
+            if e["kind"] == "param":
+                params[e["target"]] = start
+            elif e["kind"] == "stderr" and e["role"] == "shock":
+                sd[e["target"]] = start
+            elif e["kind"] == "stderr":
+                meas[e["target"]] = start
+
+        def steady_fn(p):
+            return self.steady_state(params=p)
+
+        kw = dict(model=self.model, data=data, params=params, observables=list(self.varobs),
+                  priors=priors, free=free, cov=sd, measurement=meas or None,
+                  transforms="log" if loglin else "level",
+                  steady_fn=steady_fn,
+                  init="diffuse" if "diffuse_filter" in opts else "auto",
+                  first_obs=int(float(opts.get("first_obs", 1))),
+                  presample=int(float(opts.get("presample", 0))))
+        bounds = {e["name"]: (e["lower"], e["upper"]) for e in self.estimated
+                  if e["prior"] is None and np.isfinite(e["lower"])}
+        if bounds:
+            kw["bounds"] = bounds
+        kw.update(kwargs)
+        return EstimationProblem(**kw)
+
     def steady_state(self, guess: Mapping[str, float] | None = None, params=None,
                      **kwargs) -> SteadyState:
         """Solve the steady state, iterating on ``steady_state(x)`` terms if any.
@@ -535,7 +605,23 @@ class ModFile:
             raise DynareImportError(
                 "this .mod leaves instruments without an equation: pass it to "
                 "dsgelab.ramsey_model or dsgelab.discretionary_policy first")
-        x0 = self.full_guess(guess)
+        if guess is None and self.program and params is not self.params:
+            # the file's steady_state_model / initval, evaluated at THESE parameters:
+            # an exact start where the file gives closed forms, and the parameters it
+            # sets inside steady_state_model, recomputed (Dynare does the same)
+            from .symbolic import _require_sympy
+            sympy = _require_sympy()
+            g, _, upd = _run_program(sympy, self.program, dict(params), _sympy_functions(sympy))
+            if isinstance(params, dict):
+                params.update(upd)
+            base = self.full_guess()
+            base.update({k: v for k, v in g.items()})
+            x0 = self.full_guess(base)
+            for name, (kind, of) in self.auxiliary.items():
+                if kind == "shock":
+                    x0[name] = float(params.get(f"EXO_SS_{of}", 0.0))
+        else:
+            x0 = self.full_guess(guess)
         if not self.steady_operators:
             return steady_state(self.model, x0, params, **kwargs)
         for _ in range(50):
@@ -594,6 +680,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     ssm, initval, shocks, histval_body = [], [], [], []
     planner_text, policy_cmd, policy_opts = None, None, {}
     osr_params_list, weights_body, bounds_body = [], [], []
+    estim_body, varobs, estim_opts = [], [], {}
     i = 0
     while i < len(stmts):
         st = stmts[i]
@@ -623,6 +710,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 weights_body = body
             elif head == "osr_params_bounds":
                 bounds_body = body
+            elif head == "estimated_params":
+                estim_body = body
             i = j + 1
             continue
         if word == "var" and not st.startswith("var_"):
@@ -642,6 +731,10 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             policy_opts = _options(st[len(word):])
         elif word == "osr_params":
             osr_params_list += _declared(st, "osr_params")
+        elif word == "varobs":
+            varobs += _declared(st, "varobs")
+        elif word == "estimation":
+            estim_opts = _options(st[len(word):])
         elif word == "osr":
             osr_opts = _options(st[len(word):])
             if "planner_discount" in osr_opts:
@@ -822,30 +915,11 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             planner["instruments"] = _declared(policy_opts["instruments"].strip("()"), "")
 
     # --- steady state guess: steady_state_model first, then initval
+    program = dict(initval=list(initval), ssm=list(ssm), matlab=dict(matlab), endo=list(endo),
+                   exo=list(exo), params=list(params))
+    guess, exo_level, ssm_params = _run_program(sympy, program, pvals, funcs)
+    pvals.update(ssm_params)
     env = {**matlab, **pvals, **{e_: 0.0 for e_ in exo}}
-    guess: dict[str, float] = {}
-    exo_level: dict[str, float] = {}
-    for body in (initval, ssm):
-        local_env = dict(env)
-        local_env.update(guess)
-        for st in body:
-            m = re.match(r"([A-Za-z_]\w*)\s*=(?!=)(.*)$", st, flags=re.S)
-            if not m:
-                continue
-            nm, rhs = m.group(1), m.group(2)
-            if re.match(r"\s*\[", nm):
-                continue
-            try:
-                val = _numeric(sympy, rhs, local_env, funcs)
-            except Exception:
-                continue            # a MATLAB helper: left to the caller
-            local_env[nm] = val
-            if nm in endo:
-                guess[nm] = val
-            elif nm in exo:
-                exo_level[nm] = val
-            elif nm in pvals and body is ssm:
-                pvals[nm] = val     # Dynare lets steady_state_model set parameters
     missing = [v for v in endo if v not in guess]
     for e_ in exo:
         pvals[f"EXO_SS_{e_}"] = exo_level.get(e_, 0.0)
@@ -913,6 +987,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                     det_shocks.setdefault(cur, {})[t] = v
             continue
 
+    estimated = [_estimated_entry(sympy, st, env_all, funcs, endo, exo) for st in estim_body]
+
     weights = {}
     for st in weights_body:
         m = re.match(r"([A-Za-z_]\w*)\s*(?:,\s*([A-Za-z_]\w*))?\s+(.+)$", st, flags=re.S)
@@ -930,6 +1006,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
 
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
+                   estimated=estimated, varobs=varobs, estimation_options=estim_opts,
+                   program=program,
                    optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
                    auxiliary=auxiliary, linear=linear,
@@ -964,3 +1042,112 @@ def read_expectation_errors_csv(path) -> dict:
                 period = int(re.search(r"(\d+)", label).group(1))
                 entry["paths"].setdefault(e, {})[period] = float(cell)
     return table
+
+
+def _run_program(sympy, program: dict, pvals: Mapping, funcs) -> tuple:
+    """Evaluate initval, then steady_state_model, at the parameter values ``pvals``.
+
+    Returns ``(guess, exogenous levels, parameters set inside steady_state_model)``.
+    A statement that calls something this reader cannot evaluate (a MATLAB
+    helper) is skipped, and the variables it would set are left to the caller.
+    """
+    endo, exo = program["endo"], program["exo"]
+    env = {**program["matlab"], **dict(pvals), **{e_: 0.0 for e_ in exo}}
+    guess: dict = {}
+    exo_level: dict = {}
+    updates: dict = {}
+    for which in ("initval", "ssm"):
+        local_env = dict(env)
+        local_env.update(updates)
+        local_env.update(guess)
+        local_env.update(exo_level)
+        for st in program[which]:
+            m = re.match(r"([A-Za-z_]\w*)\s*=(?!=)(.*)$", st, flags=re.S)
+            if not m:
+                continue
+            nm, rhs = m.group(1), m.group(2)
+            try:
+                val = _numeric(sympy, rhs, local_env, funcs)
+            except Exception:
+                continue
+            local_env[nm] = val
+            if nm in endo:
+                guess[nm] = val
+            elif nm in exo:
+                exo_level[nm] = val
+            elif nm in program["params"] and which == "ssm":
+                updates[nm] = val
+    return guess, exo_level, updates
+
+
+_PRIOR_SHAPES = {"beta_pdf", "gamma_pdf", "normal_pdf", "inv_gamma_pdf", "inv_gamma1_pdf",
+                 "inv_gamma2_pdf", "uniform_pdf", "weibull_pdf"}
+
+
+def _split_top(text: str) -> list:
+    out, cur, depth = [], "", 0
+    for ch in text:
+        if ch == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+            continue
+        depth += ch == "("
+        depth -= ch == ")"
+        cur += ch
+    out.append(cur.strip())
+    return out
+
+
+def _estimated_entry(sympy, st: str, env, funcs, endo, exo) -> dict:
+    """One line of ``estimated_params``."""
+    from .priors import prior
+
+    st = st.strip()
+    kind, target = "param", None
+    if st.startswith("stderr "):
+        kind = "stderr"
+        st = st[len("stderr "):]
+    elif st.startswith("corr "):
+        kind = "corr"
+        st = st[len("corr "):]
+    parts = _split_top(st)
+    if kind == "corr":
+        target = (parts[0], parts[1])
+        parts = parts[2:]
+        name = f"corr {target[0]}, {target[1]}"
+    else:
+        target = parts[0]
+        parts = parts[1:]
+        name = target if kind == "param" else f"stderr {target}"
+
+    def num(x):
+        x = x.strip()
+        if x.lower() == "nan" or x == "":
+            return float("nan")
+        return _numeric(sympy, x, env, funcs)
+
+    shape_at = next((i for i, x in enumerate(parts) if x.strip() in _PRIOR_SHAPES), None)
+    pre = parts if shape_at is None else parts[:shape_at]
+    init = lower = upper = float("nan")
+    if len(pre) >= 1:
+        init = num(pre[0])
+    if len(pre) >= 3:
+        lower, upper = num(pre[1]), num(pre[2])
+    pr = None
+    if shape_at is not None:
+        shape = parts[shape_at].strip()
+        rest = [num(x) for x in parts[shape_at + 1:]]
+        mean, sd = rest[0], rest[1]
+        p3 = rest[2] if len(rest) > 2 else None
+        p4 = rest[3] if len(rest) > 3 else None
+        p3 = None if p3 is not None and np.isnan(p3) else p3
+        p4 = None if p4 is not None and np.isnan(p4) else p4
+        pr = prior(shape, mean, sd, p3, p4)
+    if kind == "stderr":
+        role = "shock" if target in exo else ("measurement" if target in endo else None)
+        if role is None:
+            raise DynareImportError(f"estimated_params: stderr of unknown {target!r}")
+    else:
+        role = kind
+    return dict(name=name, kind=kind, role=role, target=target, init=init, lower=lower,
+                upper=upper, prior=pr)

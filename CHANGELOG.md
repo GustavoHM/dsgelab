@@ -3,7 +3,11 @@
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes.
 
-## Unreleased
+## 0.3.0 — 2026-10-11
+
+The first version that carries the roadmap's milestones 0.2 (optimal policy, welfare,
+perfect foresight with news) and 0.3 (estimation, smoothing, decomposition,
+forecasting), each item validated against Dynare 7.1 on Dynare's own files.
 
 ### Changed
 
@@ -12,6 +16,24 @@ before 1.0, a minor version may add to the API and a patch version only fixes.
 
 ### Added
 
+- `state_space`, `kalman_filter`, `kalman_smoother`: the state space of a first-order
+  solution, with observables in levels or logs (Dynare's `loglinear` with `logdata`),
+  measurement errors and missing data; the filter starts stationary roots at their
+  unconditional law and unit roots exactly diffuse (Koopman and Durbin, 2000, unit
+  roots first in the Schur form, as Dynare). Likelihood against Dynare's on `fs2000.mod`
+  to 6e-12 and against its `diffuse_filter` to 2e-12; smoother to 1e-15.
+- `EstimationProblem`, `posterior_mode`, `maximum_likelihood`, `metropolis_hastings`,
+  `smc`, `prior_predictive`, `model_probabilities`, `posterior_forecast`, `rhat`,
+  `effective_sample_size`: estimation, with Dynare's priors by mean and standard
+  deviation (`prior`), the Laplace and modified-harmonic-mean marginal likelihoods,
+  and `ModFile.estimation_problem` reading `estimated_params`, `varobs` and the options
+  of `estimation(...)`. Validated on Dynare's `fs2000.mod`: prior density to 4e-13, a
+  mode at least as high as Dynare's, Laplace by the same formula to 2e-13, posterior
+  means within Monte Carlo error.
+- `shock_decomposition`, `realtime_shock_decomposition`, `forecast`: against Dynare's
+  commands of the same names to 5e-15 (forecast bands to 6e-9).
+- `FirstOrderSolution.conditional_forecast(..., controlled=, levels=)`: Dynare's
+  `conditional_forecast` with `controlled_varexo`, to 1e-13 on its own test file.
 - `perfect_foresight_with_expectation_errors` and `News`: agents re-plan at each date of
   news from the states they have reached; constant or shrinking horizon. Validated
   against Dynare's `pfwee.mod` and `pfwee_constant_sim_length.mod` to 3e-12.

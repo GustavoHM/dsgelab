@@ -94,6 +94,8 @@ and does change its conditioning.
 | `covariance(cov=None)` | unconditional covariance of `[k; u]` |
 | `variance_decomposition(cov=None, horizon=None)` | unconditional, or FEVD at a horizon |
 | `state_path(k0, periods, shocks=None)` | propagate the states |
+| `conditional_forecast(conditions, *, periods=None, initial=None, controlled=None, levels=False)` | mean forecast with variables on prescribed paths (`nan` leaves a date free), the `controlled` shocks chosen to hit them and the others at zero — Dynare's `conditional_forecast` with `controlled_varexo` |
+| `historical_decomposition(states)` | innovations behind a state path and the path each produces |
 | `variables(k)` / `to_levels(paths)` | deviations of every variable / convert to levels |
 | `accuracy(sizes=(0.02, 0.01, 0.005), seed=0)` | implied order of accuracy against the nonlinear system |
 | `summary()` | one-screen report |
@@ -382,6 +384,113 @@ The augmented model, for using the welfare variable in IRFs or simulations.
 The permanent proportional change `lambda` in `variable`, applied inside the
 objective, that brings unconditional welfare from `reference` to `target`. No log
 utility and no variable called consumption is assumed.
+
+---
+
+## State space and Kalman filter
+
+### `state_space(sol, observables, *, transforms=None, measurement=None, cov=None) -> StateSpace`
+
+`k_{t+1} = T k_t + R eps_{t+1}`, `y_t = d + Z k_t + e_t` from a first-order solution.
+Each observable is a `"level"` (default) or a `"log"` (Dynare's `loglinear` with
+`logdata`: `d` is the log of the steady state; exact at first order in this
+package's proportional coordinates). `measurement` gives the standard deviations of
+the measurement errors (`{name: sd}`, a scalar, or a covariance). Observation
+equations are model equations: an observed growth rate or a measured inflation rate
+is a variable of the model, as in a `.mod`. Missing data are `nan`.
+
+### `kalman_filter(space, data, *, init="auto", univariate=None) -> FilterResult`
+
+Log likelihood (`loglik`, and `loglik_t` per date), predicted and filtered states and
+variances. `init="auto"` starts stationary roots at their unconditional distribution
+and unit roots DIFFUSE, by the exact initialisation of Koopman and Durbin (2000) with
+the unit-root block first in an ordered Schur form, as Dynare's `diffuse_filter`;
+`"stationary"` and `"diffuse"` force one or the other. The diffuse start uses the
+univariate (observation by observation) filter; so does missing data.
+
+### `kalman_smoother(space, data=None, *, filtered=None, init="auto") -> SmootherResult`
+
+Fixed-interval smoother (Durbin and Koopman, 2012), exact through the diffuse
+periods: `states`, `shocks` (row `t` is the innovation INTO date `t`), `measurement`,
+`state_variance` (nan in the diffuse periods); `variables()` in levels.
+
+### `shock_decomposition(smoothed, *, variables=None, initial_shock_states=None) -> dict`
+
+Each variable's smoothed path as the contribution of each shock plus the initial
+condition, Dynare's definition. `initial_shock_states` (for a `.mod`:
+`ModFile.shock_states`) counts the first value of a shock-carrying state as the shock's.
+
+### `realtime_shock_decomposition(space, data, *, init="auto", variables=None, initial_shock_states=None, first=2) -> dict`
+
+The decomposition each date would have shown with the data up to it -- Dynare's
+`realtime_shock_decomposition` pool, including its conventions (first sample of two
+observations; the first period's shock left in the initial condition).
+
+### `forecast(space, data, horizon, *, init="auto", coverage=0.9, variables=None, include_measurement=False, logs=()) -> Forecast`
+
+Point forecast from the last filtered state and Gaussian bands from the forecast-error
+variance (state uncertainty and future shocks): `mean`, `std`, `lower`, `upper`.
+
+---
+
+## Estimation
+
+### `prior(shape, mean, sd, p3=None, p4=None) -> Prior`
+
+Dynare's priors by mean and standard deviation: `beta` (on `[p3, p4]`), `gamma`
+(shifted by `p3`), `normal`, `inv_gamma` (type 1, for a standard deviation;
+`sd = inf` gives `nu = 2`), `inv_gamma2`, `uniform`. `logpdf` uses Dynare's
+normalising constants; `sample(rng, size)`.
+
+### `EstimationProblem(model, data, params, observables, priors={}, cov=None, measurement=None, transforms=None, steady_fn=None, guess=None, init="auto", qz_criterium=None, first_obs=1, presample=0, free=None, bounds=None)`
+
+What is estimated and against which data. Names follow Dynare's `estimated_params`:
+a parameter, `"stderr e"` for a shock, `"stderr y"` for the measurement error on an
+observable. `priors` map names to `Prior` or `(shape, mean, sd[, p3, p4])`. Methods:
+`log_likelihood(theta)`, `log_prior(theta)`, `log_posterior(theta)` (`-inf` where the
+model has no determinate solution), `solve(theta)`, `filter(theta)`,
+`smoother(theta)`, `start()` (calibration, or the prior mean). `ModFile.estimation_problem(data)`
+builds one from a `.mod`'s `estimated_params`, `varobs` and `estimation(...)` options;
+with no initial value Dynare starts from the prior mean, and so does this.
+
+### `posterior_mode(problem, x0=None, *, method=None, options=None) -> ModeResult`
+
+BFGS and a simplex polish in an unbounded reparametrisation of each prior's support.
+`ModeResult`: `values`, `log_posterior`, `log_likelihood`, `hessian` (of minus the log
+posterior, central differences), `covariance`, `std`, `laplace` (log marginal density).
+
+### `maximum_likelihood(problem, x0=None, ...) -> ModeResult`
+
+The same on the likelihood; standard errors from the inverse Hessian.
+
+### `metropolis_hastings(problem, mode, *, draws=10000, chains=2, scale=0.8, init_scale=None, burn=0.5, seed=0) -> MCMCResult`
+
+Random-walk Metropolis-Hastings with proposal `N(0, scale^2 * mode.covariance)`
+(Dynare's `mh_jscale`), chains started over-dispersed (`mh_init_scale`), `burn`
+dropped (`mh_drop`). `MCMCResult`: `draws`, `mean()`, `quantiles()`, `hpd(mass)`,
+`rhat()` (split R-hat), `ess()`, `log_marginal_mhm()` (Geweke's modified harmonic
+mean, as Dynare's).
+
+### `smc(problem, *, particles=1000, stages=50, bend=2.0, mutation_steps=2, seed=0) -> SMCResult`
+
+Likelihood-tempered SMC (Herbst and Schorfheide, 2014), from the prior; its
+`log_marginal` needs no mode and no harmonic mean.
+
+### `prior_predictive(problem, draws=1000, *, seed=0, statistics=None) -> dict`
+
+Shares of prior draws that are determinate, fail Blanchard-Kahn, or have no steady
+state; `statistics(sol)` collected over the solvable draws.
+
+### `model_probabilities(log_marginals, prior=None) -> dict`
+
+Posterior model probabilities from log marginal likelihoods.
+
+### `posterior_forecast(problem, draws, horizon, *, variables=None, n_draws=200, shocks=True, coverage=0.9, logs=(), seed=0) -> dict`
+
+Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
+uncertainty: `mean`, `lower`, `upper`, `paths`.
+
+`estimate`, `log_likelihood` and `log_posterior` (the 0.2 interface) remain.
 
 ---
 

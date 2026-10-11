@@ -131,52 +131,66 @@ class FirstOrderSolution:
                 "states": k}
 
     def conditional_forecast(self, conditions: Mapping[str, np.ndarray], *,
-                             periods: int | None = None, initial=None) -> dict:
-        """Shocks that keep the named variables on a prescribed hat-deviation path.
+                             periods: int | None = None, initial=None,
+                             controlled: Sequence[str] | None = None,
+                             levels: bool = False) -> dict:
+        """Forecast in which named variables follow prescribed paths.
 
-        ``conditions`` maps a variable name to a path of length ``periods``.
-        The shocks from date 1 onward are the least-squares solution of that
-        path under ``k_t = P k_{t-1} + Q eps_t``, starting from ``initial``
-        (a hat-deviation of the states; zero when absent). The returned series
-        are hat-deviations of every variable, plus the shocks under ``"eps"``.
+        ``conditions`` maps a variable name to its path over dates ``1..H`` (a
+        ``nan`` leaves that date free). The innovations of the ``controlled``
+        shocks -- every shock by default -- are chosen to put the variables on
+        their paths, by least squares (exactly when the conditions and the
+        controlled shocks are as many); the other shocks are zero, which is the
+        MEAN conditional forecast. Date 0 is the starting point: ``initial``
+        (hat-deviations of the states), or the steady state. This is Dynare's
+        ``conditional_forecast`` with ``controlled_varexo``.
+
+        With ``levels`` the paths are in levels in and out; otherwise in the
+        rescaled deviations. Returns every variable over dates ``0..H`` and the
+        innovations under ``"eps"`` (row ``t`` enters date ``t``).
         """
         names = list(conditions)
         series = [np.asarray(conditions[n], dtype=float).ravel() for n in names]
-        if periods is None:
-            periods = series[0].size
-        if any(s.size != periods for s in series):
+        horizon = series[0].size if periods is None else int(periods)
+        if any(sv.size != horizon for sv in series):
             raise ValueError("every conditioned path must have the same length")
+        if levels:
+            series = [(sv - self.coords.center[self.model.position(n)])
+                      / self.coords.scale[self.model.position(n)] for n, sv in zip(names, series)]
         nk = self.klein.n_k
         ne = self.model.n_shocks
+        ctrl = list(range(ne)) if controlled is None else [self.model.shocks.index(c)
+                                                            for c in controlled]
         k0 = np.zeros(nk) if initial is None else np.asarray(initial, dtype=float)
         Q = self.Q if self.Q is not None else np.zeros((nk, ne))
-        # k_t = P^t k0 + sum_{j=1}^{t} P^{t-j} Q eps_j. Period 0 is the initial state.
-        horizon = periods - 1
-        n_obs = len(names)
-        M = np.zeros((horizon * n_obs, horizon * ne))
-        baseline = np.zeros(horizon * n_obs)
-        target = np.zeros(horizon * n_obs)
-        for i, name in enumerate(names):
-            target[i::n_obs] = series[i][1:]
-        # For each lead L=1..horizon, shock at date (t-L+? )
-        for t in range(1, periods):
-            # baseline
-            k_base = np.linalg.matrix_power(self.P, t) @ k0
-            base_vars = self.variables(k_base[None, :])
-            for i, name in enumerate(names):
-                baseline[(t - 1) * n_obs + i] = base_vars[name][0]
-            for j in range(1, t + 1):
-                response = np.linalg.matrix_power(self.P, t - j) @ Q  # (nk, ne)
-                full = self.variables(response.T)  # each column of response is a state impulse; variables expects (n_cases, nk)
-                for i, name in enumerate(names):
-                    for m in range(ne):
-                        M[(t - 1) * n_obs + i, (j - 1) * ne + m] = full[name][m]
-        found, *_ = np.linalg.lstsq(M, target - baseline, rcond=None)
-        eps = np.zeros((periods, ne))
-        eps[1:] = found.reshape(horizon, ne)
-        shocks = eps
-        k = self.state_path(k0, periods, shocks=shocks)
+        J = self._J()
+        rows_of = {n: self.model.position(n) for n in names}
+        # x_t = J (P^t k0 + sum_{j=1}^{t} P^{t-j} Q eps_j), dates t = 1..horizon
+        Ppow = [np.eye(nk)]
+        for _ in range(horizon):
+            Ppow.append(self.P @ Ppow[-1])
+        rows, target, A = [], [], []
+        for t in range(1, horizon + 1):
+            base = J @ (Ppow[t] @ k0)
+            for i, n in enumerate(names):
+                y = series[i][t - 1]
+                if np.isnan(y):
+                    continue
+                r = rows_of[n]
+                line = np.zeros(horizon * len(ctrl))
+                for jdate in range(1, t + 1):
+                    resp = J[r] @ Ppow[t - jdate] @ Q[:, ctrl]
+                    line[(jdate - 1) * len(ctrl):jdate * len(ctrl)] = resp
+                A.append(line)
+                target.append(y - base[r])
+        eps = np.zeros((horizon + 1, ne))
+        if A:
+            found, *_ = np.linalg.lstsq(np.array(A), np.array(target), rcond=None)
+            eps[1:, ctrl] = found.reshape(horizon, len(ctrl))
+        k = self.state_path(k0, horizon + 1, shocks=eps)
         paths = self.variables(k)
+        if levels:
+            paths = self.to_levels(paths)
         paths["eps"] = eps
         return paths
 

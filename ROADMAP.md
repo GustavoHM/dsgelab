@@ -17,7 +17,7 @@ A comparação item a item com as outras ferramentas está em
 
 ## Onde estamos
 
-Versão 0.2.0, em `https://github.com/GustavoHM/dsgelab`. Estado estacionário com positividade e
+Versão 0.3.0, em `https://github.com/GustavoHM/dsgelab`; reúne os marcos 0.2 e 0.3. Estado estacionário com positividade e
 âncora externa; Klein/QZ com Blanchard–Kahn imposto e, opcionalmente, o critério de raiz unitária
 do Dynare; impulso, momentos e decomposição de variância; segunda ordem com correção de risco,
 média ergódica em forma fechada, simulação podada e impulso generalizado; terceira ordem com o
@@ -79,20 +79,31 @@ conferência rebaixaria o pacote inteiro.
 
 ### 0.3 — estimação, previsão e decomposição
 
-- [x] Filtro de Kalman sobre a solução linear, moda da posteriori e Metropolis–Hastings de passeio
-  aleatório (`estimate`, `log_likelihood`).
-- [x] **Decomposição histórica** e **previsão condicional** a trajetórias fixadas
-  (`historical_decomposition`, `conditional_forecast`). *Falta a validação contra o
-  `shock_decomposition` e o `conditional_forecast` do Dynare.*
-- [ ] **Equações de observação** declaradas com o modelo, e erro de medida.
-- [ ] **Suavizador de Kalman** e inicialização difusa para estados não estacionários.
-- [ ] **Máxima verossimilhança** como objeto próprio, com erros-padrão pela hessiana.
-- [ ] **Estimação bayesiana completa**: SMC além do Metropolis; diagnósticos de convergência (R-hat,
-  tamanho efetivo de amostra); verificação preditiva a priori, incluindo a fração dos sorteios em que
-  o modelo tem solução determinada. Validação simulando dados com parâmetros conhecidos e contra o
-  `estimation` do Dynare no `fs2000.mod`, que `from_mod` já lê.
-- [ ] **Verossimilhança marginal** (Laplace e média harmônica modificada) e comparação de modelos.
-- [ ] **Decomposição histórica em tempo real** e **previsão com bandas**.
+Validado contra o Dynare no `fs2000.mod` da pasta `examples/` dele, com os seus priors e dados
+(`validation/compare_estimation.py`).
+
+- [x] Filtro de Kalman sobre a solução linear, moda da posteriori e Metropolis–Hastings
+  (`kalman_filter`, `posterior_mode`, `metropolis_hastings`). Verossimilhança a 6e-12 e densidade a
+  priori a 4e-13 contra o Dynare; moda com núcleo maior ou igual ao do Dynare; médias do Metropolis
+  a menos de 2,5 erros de Monte Carlo.
+- [x] **Decomposição histórica** (`shock_decomposition`) e **previsão condicional**
+  (`conditional_forecast`, com `controlled`), contra o `shock_decomposition` (5e-15) e o
+  `conditional_forecast` do Dynare (`tests/conditional_forecasts`, 1e-13).
+- [x] **Equações de observação** e **erro de medida** (`state_space`, `EstimationProblem`):
+  observáveis em nível ou em log (`loglinear` com `logdata`), desvios-padrão de medida fixos ou
+  estimados (`"stderr y"`), dados faltantes.
+- [x] **Suavizador de Kalman** (`kalman_smoother`) e **inicialização difusa exata** para raízes
+  unitárias, contra o `diffuse_filter` do Dynare: verossimilhança a 2e-12, suavizador a 1e-15.
+- [x] **Máxima verossimilhança** (`maximum_likelihood`), com erros-padrão pela hessiana.
+- [x] **Estimação bayesiana completa**: priors do Dynare por média e desvio (`prior`), SMC
+  (`smc`), R-hat e tamanho efetivo de amostra, verificação preditiva a priori com a fração de
+  sorteios determinados (`prior_predictive`). Validada contra formas fechadas (o caso conjugado
+  normal) e contra o `estimation` do Dynare no `fs2000.mod`.
+- [x] **Verossimilhança marginal**: Laplace (a fórmula reproduz o número do Dynare a 2e-13 com a
+  covariância dele) e média harmônica modificada; `model_probabilities` para a comparação.
+- [x] **Decomposição histórica em tempo real** (`realtime_shock_decomposition`, 5e-15 contra o
+  Dynare) e **previsão com bandas** (`forecast`, com incerteza do estado e dos choques, contra o
+  `forecast` do Dynare; `posterior_forecast`, com a incerteza dos parâmetros).
 
 ### 0.4 — não linearidades e declaração do modelo
 

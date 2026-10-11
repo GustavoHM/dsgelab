@@ -79,6 +79,9 @@ expensive class of error in this kind of code; naming removes the class.
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
 | Optimal policy under discretion; optimal simple rules, on moments or on welfare | `discretionary_policy`, `osr` |
+| Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
+| Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
+| Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, `conditional_forecast` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
 | Calibration on targets, with an identification diagnostic | `calibrate`, `target_jacobian` |

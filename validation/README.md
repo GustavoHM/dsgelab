@@ -273,3 +273,20 @@ permanentes no seu nível terminal — vira a lista de `News` por `ModFile.news`
 `initval` do `pfwee`). `from_mod` a carrega no estado `SHK_x`, com `SHK_x(+1) = EXO_SS_x + x`, e
 uma mudança permanente no nível é uma mudança no parâmetro `EXO_SS_x`. O `x(+1)` da Euler é o
 próximo valor desse estado.
+
+## Estimação, suavização, decomposição e previsão
+
+```bash
+bash fetch.sh
+bash run_estimation.sh          # fs2000 (calib, mode, mh), unitroot, condfc
+python compare_estimation.py    # --sem-mh pula o Metropolis, que leva alguns minutos
+```
+
+O `fs2000.mod` do Dynare é lido por `from_mod` com os seus priors e dados. Duas convenções do
+Dynare que a comparação teve de reproduzir: sem valor inicial em `estimated_params`, o ponto de
+partida é a **média a priori**; e a verossimilhança só bate na última casa com
+`options_.riccati_tol = 1e-16`, porque por omissão o Dynare passa ao ganho estacionário do filtro
+quando a variância converge a 1e-6. No filtro difuso, o Dynare põe as raízes unitárias **primeiro**
+na forma de Schur, com `P_inf` identidade nesse bloco; o `dsgelab` faz o mesmo, e a verossimilhança
+difusa bate a 2e-12. A decomposição em tempo real do Dynare deixa o choque do primeiro período na
+condição inicial (a decomposição completa, não); as duas convenções são reproduzidas.

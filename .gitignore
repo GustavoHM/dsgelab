@@ -28,3 +28,5 @@ validation/*/checksum
 validation/*/model/
 validation/+*/
 validation/out_foresight/
+validation/out_estimation/
+validation/work_estimation_*/

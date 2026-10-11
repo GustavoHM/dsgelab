@@ -3,14 +3,14 @@ message: "Se este software for usado numa publicação, cite-o como abaixo."
 type: software
 title: "dsgelab: a general toolkit for solving DSGE models in Python"
 abstract: >-
-  Steady state, Klein/QZ first-order solution, second- and third-order perturbation, nonlinear perfect-foresight transitions, calibration on targets, and export to Dynare and MacroModelling.jl. Validated against Dynare and MacroModelling.jl.
+  Steady state, Klein/QZ first-order solution, second- and third-order perturbation, perfect foresight with expectation errors, optimal policy (Ramsey, discretion, optimal simple rules) and welfare, Kalman filtering and smoothing, Bayesian estimation, shock decompositions and forecasts, reading Dynare .mod files, and export to Dynare and MacroModelling.jl. Validated against Dynare and MacroModelling.jl.
 authors:
   - family-names: "Moreira"
     given-names: "Gustavo Hoffmann"
     email: "gustavo@gakusai.net"
     # orcid: "https://orcid.org/0000-0000-0000-0000"   # preencha
-version: "0.2.0"
-date-released: "2026-09-09"
+version: "0.3.0"
+date-released: "2026-10-11"
 license: MIT
 # Preencha ao publicar. Um DOI do Zenodo, obtido ligando o repositório e criando um release,
 # é o que torna a citação estável — uma URL de repositório não é uma referência arquivável.
