@@ -82,7 +82,7 @@ __all__ = [
     "welfare", "welfare_model", "Welfare", "WelfareError", "consumption_equivalent",
     "from_mod", "ModFile", "DynareImportError", "read_expectation_errors_csv",
     "__version__",
-    "from_equations", "optimality_conditions", "to_dynare", "to_macromodelling",
+    "from_equations", "optimality_conditions", "assemble", "to_dynare", "to_macromodelling",
 ]
 
 
@@ -99,6 +99,15 @@ def optimality_conditions(*args, **kwargs):
     """
     from .blocks import optimality_conditions as _oc
     return _oc(*args, **kwargs)
+
+
+def assemble(*args, **kwargs):
+    """Join several optimisation problems and closure equations into one Model.
+
+    Requires sympy; see :func:`dsgelab.blocks.assemble`.
+    """
+    from .blocks import assemble as _as
+    return _as(*args, **kwargs)
 
 
 def to_dynare(*args, **kwargs):

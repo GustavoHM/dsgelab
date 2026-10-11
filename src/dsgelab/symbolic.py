@@ -266,7 +266,8 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
                    jumps: Sequence[str], shocks: Sequence[str],
                    parameters: Sequence[str], name: str = "model",
                    derivatives: str = "both",
-                   steady_state_model: Sequence[str] | None = None) -> Model:
+                   steady_state_model: Sequence[str] | None = None,
+                   calibration_equations: dict | None = None) -> Model:
     """Build a :class:`~dsgelab.model.Model` from text equations.
 
     Parameters
@@ -295,6 +296,10 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         attached as ``model.steady_state_model`` and used by
         ``dsgelab.steady_state(model, None, params)``, which CHECKS it against
         the equations and refuses it if it does not solve them.
+    calibration_equations : mapping, optional
+        ``{parameter: "steady-state condition"}``, attached as
+        ``model.calibration_equations`` and solved with the steady state by
+        :func:`dsgelab.steady_state` (see its ``calibrate`` argument).
     """
     states, jumps = list(states), list(jumps)
     n = len(states) + len(jumps)
@@ -311,7 +316,45 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
     model.auxiliary = aux
     if steady_state_model is not None:
         model.steady_state_model = _closed_form(list(steady_state_model), parameters)
+    if calibration_equations:
+        unknown = [p for p in calibration_equations if p not in parameters]
+        if unknown:
+            raise SymbolicError(f"calibration_equations for undeclared parameters {unknown}")
+        model.calibration_equations = dict(calibration_equations)
     return model
+
+
+def calibration_residual(model: Model, targets: dict, params):
+    """``g(x, params)``: the residuals of steady-state conditions, one per target."""
+    sympy = _require_sympy()
+    from sympy.parsing.sympy_parser import parse_expr, standard_transformations
+    pnames = list((getattr(model, "symbolic", None) or {}).get("parameters", [])) or (
+        list(params) if isinstance(params, dict) else [])
+    local = {v: sympy.Symbol(v) for v in model.names}
+    local.update({q: sympy.Symbol(q) for q in pnames})
+    local.update({"log": sympy.log, "exp": sympy.exp, "sqrt": sympy.sqrt})
+    glob = {"Symbol": sympy.Symbol, "Integer": sympy.Integer, "Float": sympy.Float,
+            "Rational": sympy.Rational}
+    exprs = []
+    for par, text in targets.items():
+        t = text.replace("^", "**")
+        if t.count("=") != 1:
+            raise SymbolicError(f"calibration condition for {par}: expected one '='")
+        lhs, rhs = t.split("=")
+        e = parse_expr(f"({lhs}) - ({rhs})", local_dict=local, global_dict=glob,
+                       transformations=standard_transformations)
+        stray = sorted(str(x) for x in e.free_symbols if str(x) not in local)
+        if stray:
+            raise SymbolicError(f"calibration condition for {par}: undeclared {stray}")
+        exprs.append(e)
+    syms = [sympy.Symbol(v) for v in model.names] + [sympy.Symbol(q) for q in pnames]
+    f = sympy.lambdify(syms, exprs, modules="numpy")
+
+    def g(x, p):
+        return np.asarray(f(*list(np.asarray(x, float)),
+                            *[float(get_param(p, q)) for q in pnames]), float).ravel()
+
+    return g
 
 
 def _closed_form(assignments, parameters):

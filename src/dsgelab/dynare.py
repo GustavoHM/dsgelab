@@ -147,7 +147,7 @@ def _statements(text: str) -> list[str]:
     return [s.strip() for s in text.split(";") if s.strip()]
 
 
-_BLOCKS = {"osr_params_bounds", "model", "initval", "endval", "histval", "steady_state_model", "shocks", "mshocks",
+_BLOCKS = {"occbin_constraints", "homotopy_setup", "osr_params_bounds", "model", "initval", "endval", "histval", "steady_state_model", "shocks", "mshocks",
            "estimated_params", "estimated_params_init", "estimated_params_bounds",
            "estimated_params_remove", "observation_trends", "optim_weights", "homotopy_setup",
            "conditional_forecast_paths", "irf_calibration", "moment_calibration", "verbatim",
@@ -402,6 +402,8 @@ class ModFile:
     det_shocks: dict = field(default_factory=dict)
     histval_unread: list = field(default_factory=list)
     estimated: list = field(default_factory=list)
+    homotopy: dict = field(default_factory=dict)
+    occbin: dict | None = field(default=None, repr=False)
     varobs: list = field(default_factory=list)
     estimation_options: dict = field(default_factory=dict)
     program: dict = field(default_factory=dict, repr=False)
@@ -707,6 +709,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     planner_text, policy_cmd, policy_opts = None, None, {}
     osr_params_list, weights_body, bounds_body = [], [], []
     estim_body, varobs, estim_opts = [], [], {}
+    homotopy_body = []
+    occbin_body = []
     i = 0
     while i < len(stmts):
         st = stmts[i]
@@ -738,6 +742,10 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 bounds_body = body
             elif head == "estimated_params":
                 estim_body = body
+            elif head == "homotopy_setup":
+                homotopy_body = body
+            elif head == "occbin_constraints":
+                occbin_body = body
             i = j + 1
             continue
         if word == "var" and not st.startswith("var_"):
@@ -792,11 +800,13 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             val = float("nan")
         (pvals if pname in pvals else matlab)[pname] = val
 
-    # --- model equations
+    # --- model equations (an OccBin equation has variants, tagged bind=/relax=)
     parser = _Parser(sympy, endo, exo, params)
-    eqs = []
+    eqs, meta = [], []
     for k, st in enumerate(model_stmts):
-        st = re.sub(r"^\s*\[[^\]]*\]\s*", "", st)
+        tagm = re.match(r"^\s*\[([^\]]*)\]\s*", st)
+        tags = _tags(tagm.group(1)) if tagm else {}
+        st = st[tagm.end():] if tagm else st
         if not st:
             continue
         if st.startswith("#"):
@@ -811,9 +821,21 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
         else:
             text_eq = st
         eqs.append((st, parser.parse(text_eq, f"equation {len(eqs) + 1}")))
+        if "bind" in tags or "relax" in tags:
+            if "name" not in tags:
+                raise DynareImportError(f"an OccBin variant needs a name tag: {st!r}")
+            meta.append((tags["name"], frozenset(_csv(tags.get("bind", ""))),
+                         frozenset(_csv(tags.get("relax", "")))))
+        else:
+            meta.append(None)
+    slot_names = []
+    for m_ in meta:
+        if m_ is not None and m_[0] not in slot_names:
+            slot_names.append(m_[0])
+    n_equations = sum(1 for m_ in meta if m_ is None) + len(slot_names)
     planner_present = planner_text is not None or policy_cmd is not None
-    if len(eqs) != len(endo) and not (planner_present and len(eqs) < len(endo)):
-        raise DynareImportError(f"{len(eqs)} equations for {len(endo)} endogenous variables")
+    if n_equations != len(endo) and not (planner_present and n_equations < len(endo)):
+        raise DynareImportError(f"{n_equations} equations for {len(endo)} endogenous variables")
 
     # --- dating: predetermined_variables, then the two-period translation
     S = sympy.Symbol
@@ -839,7 +861,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             max_lead[nm] = max(max_lead.get(nm, 0), off - 1)
         return nm, off
 
-    exprs, labels = [], []
+    translated = []
     for raw, e in eqs:
         sub = {}
         for s_ in e.free_symbols:
@@ -860,8 +882,30 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 sub[s_] = S(f"LEAD{off - 1}_{nm}__next")
             else:
                 sub[s_] = S(f"LAG{-off}_{nm}")
-        exprs.append(e.xreplace(sub))
-        labels.append(raw)
+        translated.append((raw, e.xreplace(sub)))
+
+    # one slot per equation; an OccBin slot holds its variants, and the model below is
+    # the REFERENCE regime -- every constraint slack -- in which the steady state lives
+    slots, seen = [], {}
+    for (raw, e), m_ in zip(translated, meta):
+        if m_ is None:
+            slots.append((raw, e))
+        else:
+            name_, bind_, relax_ = m_
+            if name_ not in seen:
+                seen[name_] = len(slots)
+                slots.append([])
+            slots[seen[name_]].append((bind_, relax_, raw, e))
+    exprs, labels = [], []
+    for sl in slots:
+        if isinstance(sl, tuple):
+            labels.append(sl[0])
+            exprs.append(sl[1])
+        else:
+            raw, e = _pick_variant(sl, frozenset())
+            labels.append(raw)
+            exprs.append(e)
+    n_dynare_eqs = len(exprs)
 
     auxiliary: dict[str, tuple[str, str]] = {}
     states, jumps = [], list(endo)
@@ -1014,6 +1058,24 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             continue
 
     estimated = [_estimated_entry(sympy, st, env_all, funcs, endo, exo) for st in estim_body]
+    occbin = None
+    if occbin_body or any(not isinstance(sl, tuple) for sl in slots):
+        occbin = dict(constraints=_occbin_constraints(occbin_body, parser, refs, exo, S),
+                      slots=slots, n_dynare_eqs=n_dynare_eqs, aux_rows=exprs[n_dynare_eqs:],
+                      aux_labels=labels[n_dynare_eqs:])
+    homotopy = {}
+    for st in homotopy_body:
+        parts = [x.strip() for x in _split_top(st)]
+        if parts[0] not in params:
+            raise DynareImportError(f"homotopy_setup: {parts[0]!r} is not a parameter "
+                                    f"(exogenous steady states are not read here)")
+        if len(parts) == 3:
+            homotopy[parts[0]] = (_numeric(sympy, parts[1], env_all, funcs),
+                                  _numeric(sympy, parts[2], env_all, funcs))
+        elif len(parts) == 2:
+            homotopy[parts[0]] = (pvals[parts[0]], _numeric(sympy, parts[1], env_all, funcs))
+        else:
+            raise DynareImportError(f"homotopy_setup: cannot read {st!r}")
 
     weights = {}
     for st in weights_body:
@@ -1033,6 +1095,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    estimated=estimated, varobs=varobs, estimation_options=estim_opts,
+                   homotopy=homotopy, occbin=occbin,
                    program=program,
                    optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
@@ -1177,3 +1240,58 @@ def _estimated_entry(sympy, st: str, env, funcs, endo, exo) -> dict:
         role = kind
     return dict(name=name, kind=kind, role=role, target=target, init=init, lower=lower,
                 upper=upper, prior=pr)
+
+
+def _tags(text: str) -> dict:
+    """``name = 'x', bind = 'c1,c2'`` -> ``{"name": "x", "bind": "c1,c2"}``."""
+    out = {}
+    for m in re.finditer(r"(\w+)\s*=\s*(['\"])(.*?)\2", text):
+        out[m.group(1)] = m.group(3)
+    return out
+
+
+def _csv(text: str) -> list:
+    return [x.strip() for x in text.split(",") if x.strip()]
+
+
+def _pick_variant(variants, binding: frozenset):
+    """The variant of an OccBin equation that applies when ``binding`` constraints bind."""
+    hits = [(raw, e) for b, r, raw, e in variants if b <= binding and not (r & binding)]
+    if len(hits) != 1:
+        raise DynareImportError(
+            f"{len(hits)} variants of an OccBin equation apply when {sorted(binding) or 'no'} "
+            f"constraint(s) bind: {[v[2] for v in variants]}")
+    return hits[0]
+
+
+def _occbin_constraints(body, parser, refs, exo, S) -> dict:
+    """``occbin_constraints`` -> ``{name: {"bind": (expr, op), "relax": (expr, op) | None}}``."""
+    out, cur = {}, None
+    for st in body:
+        st = st.strip()
+        m = re.match(r"name\s+['\"](\w+)['\"]\s*$", st)
+        if m:
+            cur = m.group(1)
+            out[cur] = {"bind": None, "relax": None}
+            continue
+        m = re.match(r"(bind|relax|error_bind|error_relax)\s+(.*)$", st, flags=re.S)
+        if not m or cur is None:
+            raise DynareImportError(f"occbin_constraints: cannot read {st!r}")
+        kind, text = m.group(1), m.group(2).strip()
+        if kind.startswith("error_"):
+            continue
+        cm = re.match(r"(.*?)(<=|>=|<|>)(.*)$", text, flags=re.S)
+        if not cm:
+            raise DynareImportError(f"occbin_constraints: {kind} {text!r} is not a comparison")
+        lhs, op, rhs = cm.group(1), cm.group(2), cm.group(3)
+        e = parser.parse(f"({lhs}) - ({rhs})", f"occbin {kind} {cur}")
+        sub = {}
+        for s_ in e.free_symbols:
+            if str(s_) in refs:
+                nm, off = refs[str(s_)]
+                if off != 0 or nm in exo:
+                    raise DynareImportError("occbin_constraints may only use current-period "
+                                            "endogenous variables")
+                sub[s_] = S(nm)
+        out[cur][kind] = (e.xreplace(sub), op)
+    return out

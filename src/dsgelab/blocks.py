@@ -37,7 +37,7 @@ from __future__ import annotations
 import re
 from typing import Mapping, Sequence
 
-__all__ = ["FOCError", "optimality_conditions", "Problem"]
+__all__ = ["FOCError", "optimality_conditions", "Problem", "assemble"]
 
 _LEAD = re.compile(r"\b([A-Za-z_]\w*)\s*\(\s*\+?\s*1\s*\)")
 
@@ -228,3 +228,71 @@ def _plain_printer(sympy):
         return re.sub(r"\b([A-Za-z_]\w*)__next\b", r"\1(+1)", s)
 
     return do
+
+
+def assemble(problems: Sequence[Problem], *, equations: Sequence[str] = (),
+             states: Sequence[str] = (), jumps: Sequence[str] = (),
+             shocks: Sequence[str] = (), parameters: Sequence[str] = (),
+             name: str = "model", derivatives: str = "both"):
+    """Junta vários problemas de otimização e as equações de fechamento num só ``Model``.
+
+    Cada problema dá as suas CPOs, as suas restrições e os seus multiplicadores
+    (:func:`optimality_conditions`). O fechamento -- condições de mercado,
+    processos exógenos, definições -- é texto do modelador, em ``equations``, e
+    as variáveis que só ele introduz (preços, choques agregados) são declaradas
+    em ``states`` e ``jumps``. Não é uma linguagem de blocos: os limites são os de
+    :class:`Problem` (restrições de igualdade, nada em ``t+2``).
+
+    O que se confere antes de montar: uma variável escolhida por dois agentes é
+    recusada (um preço que os dois tomam como dado é ``exogenous`` dos dois);
+    multiplicadores com o nome padrão repetido entre agentes recebem o prefixo
+    do agente (``household_lm_1``); e o número de equações tem de ser o de
+    variáveis, com a contagem por bloco na mensagem quando não é. A origem de
+    cada equação fica em ``model.assembly``.
+    """
+    from .symbolic import from_equations
+
+    chosen: dict = {}
+    for p in problems:
+        for v in p.controls + p.states:
+            if v in chosen:
+                raise FOCError(f"{v!r} is chosen by two agents, {chosen[v]!r} and {p.name!r}: "
+                               f"one of them must take it as given (exogenous)")
+            chosen[v] = p.name
+    names = [p.name for p in problems]
+    if len(set(names)) != len(names):
+        raise FOCError(f"two problems share a name: {names}")
+    all_mult = [m for p in problems for m in p.multipliers]
+    clash = {m for m in all_mult if all_mult.count(m) > 1}
+    renamed = {}
+    eqs, st, jp, origin = [], [], [], []
+    for p in problems:
+        if clash & set(p.multipliers):
+            new = [f"{p.name}_{m}" if m in clash else m for m in p.multipliers]
+            renamed.update({f"{p.name}_{m}": (p.name, m) for m in p.multipliers if m in clash})
+            p = Problem(p.objective, controls=p.controls, states=p.states,
+                        constraints=p.constraints, discount=p.discount,
+                        parameters=p.parameters, exogenous=p.exogenous, multipliers=new,
+                        name=p.name)
+        foc = optimality_conditions(p)
+        for e in foc["equations"]:
+            eqs.append(e)
+            origin.append((p.name, foc["detail"].get(e, "")))
+        st += [s for s in foc["states"] if s not in st]
+        jp += [j for j in foc["jumps"] if j not in jp]
+    for e in equations:
+        eqs.append(e)
+        origin.append(("closure", e))
+    st += [s for s in states if s not in st]
+    jp += [j for j in jumps if j not in jp and j not in st]
+    n = len(st) + len(jp)
+    if len(eqs) != n:
+        counts = {nm: sum(1 for o in origin if o[0] == nm) for nm in names + ["closure"]}
+        raise FOCError(f"{len(eqs)} equations for {n} variables ({len(st)} states, "
+                       f"{len(jp)} jumps); equations by block: {counts}")
+    params = sorted(set(parameters) | {q for p in problems for q in p.parameters}
+                    | {p.discount for p in problems})
+    model = from_equations(eqs, states=st, jumps=jp, shocks=list(shocks), parameters=params,
+                           name=name, derivatives=derivatives)
+    model.assembly = dict(origin=origin, renamed_multipliers=renamed, agents=names)
+    return model

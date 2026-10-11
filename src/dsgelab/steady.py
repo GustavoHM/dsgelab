@@ -69,7 +69,10 @@ def steady_state(model: Model, guess, params, *, ctx=None,
                  positive: Sequence[str] = (),
                  method: str = "hybr", tol: float = 1e-11,
                  outer_maxiter: int = 60, outer_tol: float = 1e-12,
-                 raise_on_fail: bool = True) -> SteadyState:
+                 raise_on_fail: bool = True,
+                 calibrate: Mapping[str, str] | None = None,
+                 homotopy: Mapping[str, tuple] | None = None,
+                 homotopy_steps: int = 10) -> SteadyState:
     """Solve ``f(y, y, 0) = 0``.
 
     Parameters
@@ -91,7 +94,34 @@ def steady_state(model: Model, guess, params, *, ctx=None,
         solver's success flag: ``hybr`` reports failure whenever its
         finite-difference Jacobian stops improving, and that includes the case
         where the starting point already is the solution.
+    calibrate : mapping, optional
+        Parameters pinned down by steady-state conditions, solved TOGETHER with
+        the steady state -- MacroModelling.jl's calibration equations:
+        ``{"beta": "k/(4*y) = 2.5"}`` makes ``beta`` whatever puts the capital-
+        output ratio at 2.5. The conditions are written in the model's variable
+        and parameter names, at the steady state. The parameters' values in
+        ``params`` are the starting point. The result carries ``.calibrated``
+        (the solved parameters) and ``.params`` (a copy of ``params`` with them).
+        A model built with ``calibration_equations=`` uses its own by default.
+    homotopy : mapping, optional
+        ``{param: (start, end)}`` -- Dynare's ``homotopy_setup``. The steady state
+        is first solved with the parameters at ``start``, where ``guess`` is
+        good, and then followed as they move together to ``end`` in
+        ``homotopy_steps`` steps, each warm-started from the last; a step that
+        fails is halved, one that succeeds lets the next grow. ``end`` replaces
+        the value in ``params``. The result carries ``.homotopy_path``, the
+        parameter shares visited.
     """
+    if homotopy:
+        return _continuation(model, guess, params, dict(homotopy), homotopy_steps,
+                             dict(ctx=ctx, ctx_update=ctx_update, positive=positive,
+                                  method=method, tol=tol, outer_maxiter=outer_maxiter,
+                                  outer_tol=outer_tol, calibrate=calibrate))
+    if calibrate is None:
+        calibrate = getattr(model, "calibration_equations", None)
+    if calibrate:
+        return _calibrated(model, guess, params, dict(calibrate), ctx=ctx, positive=positive,
+                           tol=tol, raise_on_fail=raise_on_fail)
     if guess is None:
         program = getattr(model, "steady_state_model", None)
         if program is None:
@@ -242,3 +272,78 @@ def analytic_steady_state(model: Model, params, values, *, ctx=None,
         raise SteadyStateError(f"the closed-form steady state does not solve the model: {where}")
     return SteadyState(x=x, values=model.dict(x), residual=worst, ctx=ctx, success=True,
                        message="closed form, checked", model=model)
+
+
+def _calibrated(model: Model, guess, params, targets: dict, *, ctx, positive, tol,
+                raise_on_fail) -> SteadyState:
+    """The steady state and the parameters in ``targets``, as one system."""
+    from scipy.optimize import root
+    from .model import get_param, set_params
+    from .symbolic import calibration_residual
+
+    if guess is None:
+        program = getattr(model, "steady_state_model", None)
+        if program is None:
+            raise ValueError("calibration needs a guess for the steady state")
+        guess = program(params)
+    x0 = model.vector(guess) if isinstance(guess, Mapping) else np.asarray(guess, float)
+    names = list(targets)
+    theta0 = np.array([float(get_param(params, p)) for p in names])
+    g = calibration_residual(model, targets, params)
+    log_idx = np.array([model.position(n) for n in positive], dtype=int)
+    zero = np.zeros(model.n_shocks)
+    n = model.n_vars
+
+    def unpack(z):
+        x = z[:n].copy()
+        if log_idx.size:
+            x[log_idx] = np.exp(z[log_idx])
+        return x, set_params(params, dict(zip(names, map(float, z[n:]))))
+
+    def resid(z):
+        x, p = unpack(z)
+        return np.r_[model.residuals(x, x, zero, p, ctx), g(x, p)]
+
+    z0 = np.r_[x0, theta0]
+    if log_idx.size:
+        z0[log_idx] = np.log(x0[log_idx])
+    sol = root(resid, z0, method="hybr", tol=1e-15)
+    x, p = unpack(sol.x)
+    r = resid(sol.x)
+    worst = float(np.max(np.abs(r)))
+    if worst > tol and raise_on_fail:
+        raise RuntimeError(f"steady_state with calibration: residual {worst:.3e} above "
+                           f"{tol:.1e} ({sol.message})")
+    ss = SteadyState(x=x, values=model.dict(x), residual=worst, ctx=ctx, success=worst <= tol,
+                     message=str(sol.message), model=model)
+    ss.calibrated = {k: float(get_param(p, k)) for k in names}
+    ss.params = p
+    return ss
+
+
+def _continuation(model, guess, params, homotopy, steps, kw) -> SteadyState:
+    """Follow the steady state as parameters move from ``start`` to ``end``."""
+    from .model import set_params
+
+    def at(share):
+        return set_params(params, {k: a + share * (b - a) for k, (a, b) in homotopy.items()})
+
+    ss = steady_state(model, guess, at(0.0), **kw)
+    share, step = 0.0, 1.0 / max(1, steps)
+    path = [0.0]
+    while share < 1.0:
+        nxt = min(1.0, share + step)
+        try:
+            trial = steady_state(model, ss.values, at(nxt), **kw)
+        except Exception:
+            step /= 2
+            if step < 1e-8:
+                raise RuntimeError(f"homotopy: stuck at share {share:.6f} of the way; the "
+                                   f"steady state may not exist beyond it")
+            continue
+        ss, share = trial, nxt
+        path.append(share)
+        step = min(2 * step, 1.0)
+    ss.homotopy_path = path
+    ss.params = at(1.0)
+    return ss
