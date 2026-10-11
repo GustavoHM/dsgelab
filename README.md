@@ -1,6 +1,6 @@
-# dsgekit
+# dsgelab
 
-[![tests](https://github.com/GustavoHM/dsgekit/actions/workflows/tests.yml/badge.svg)](https://github.com/GustavoHM/dsgekit/actions/workflows/tests.yml)
+[![tests](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml/badge.svg)](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 A general toolkit for solving DSGE models in Python. You declare the model once —
@@ -16,14 +16,14 @@ by a hand-written fixed point on another, similar but not identical, set. Here
 both call the same residual function, so they cannot drift apart.
 
 ```
-pip install "dsgekit @ git+https://github.com/GustavoHM/dsgekit"
-pip install "dsgekit[symbolic] @ git+https://github.com/GustavoHM/dsgekit"
+pip install "dsgelab @ git+https://github.com/GustavoHM/dsgelab"
+pip install "dsgelab[symbolic] @ git+https://github.com/GustavoHM/dsgelab"
 ```
 
 For development:
 
 ```
-git clone https://github.com/GustavoHM/dsgekit && cd dsgekit
+git clone https://github.com/GustavoHM/dsgelab && cd dsgelab
 pip install -e ".[symbolic,test]" && pytest
 ```
 
@@ -32,8 +32,8 @@ Requires Python 3.10+, numpy and scipy. Pandas is not needed.
 ## Quick start
 
 ```python
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 model, params, guess = rbc.build()
 sol = dk.solve(model, params, guess=guess)
@@ -47,7 +47,7 @@ Declaring a model of your own is three lists and a function:
 
 ```python
 import numpy as np
-from dsgekit import Model, solve
+from dsgelab import Model, solve
 
 def equations(nxt, cur, eps, p):
     y  = cur.a * cur.k ** p.alpha
@@ -77,8 +77,8 @@ expensive class of error in this kind of code; naming removes the class.
 | Second-order perturbation and risk corrections | `solve_second_order` |
 | Nonlinear perfect-foresight transitions, announced policy paths | `perfect_foresight` |
 | Calibration on targets, with an identification diagnostic | `calibrate`, `target_jacobian` |
-| Independent checks: identities, slackness, BK margin, cross-solution | `dsgekit.diagnostics` |
-| Text equations with exact analytic derivatives | `dsgekit.symbolic` |
+| Independent checks: identities, slackness, BK margin, cross-solution | `dsgelab.diagnostics` |
+| Text equations with exact analytic derivatives | `dsgelab.symbolic` |
 
 ## Timing convention
 
@@ -128,7 +128,7 @@ lagged information. The port is checked against original algebra in Octave
 and independently solved Dynare impulse responses and moments.
 
 ```python
-from dsgekit.examples import heutel
+from dsgelab.examples import heutel
 sol = heutel.solve("tax")
 irf = sol.irf("eps_a", size=0.01, periods=100)
 ```

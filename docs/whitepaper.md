@@ -1,6 +1,6 @@
-# A matemática do dsgekit
+# A matemática do dsgelab
 
-Nota técnica do que o pacote resolve e de como o resolve. As fórmulas abaixo são as do código em `src/dsgekit`. Onde uma convenção usual da literatura produz outro número, o texto diz qual das duas está implementada e em que modelo as duas deixam de coincidir.
+Nota técnica do que o pacote resolve e de como o resolve. As fórmulas abaixo são as do código em `src/dsgelab`. Onde uma convenção usual da literatura produz outro número, o texto diz qual das duas está implementada e em que modelo as duas deixam de coincidir.
 
 ## 1. O objeto
 

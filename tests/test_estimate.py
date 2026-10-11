@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit import Model
+import dsgelab as dk
+from dsgelab import Model
 
 
 def _ar1(rho=0.8):

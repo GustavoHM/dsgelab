@@ -1,12 +1,12 @@
 """Derivar as condições de primeira ordem a partir do problema do agente.
 
-Opcional: requer ``sympy`` (``pip install dsgekit[symbolic]``).
+Opcional: requer ``sympy`` (``pip install dsgelab[symbolic]``).
 
 O que faz, e o que não faz
 --------------------------
 Recebe um problema de otimização recursivo declarado — função-objetivo do período, variáveis de
 escolha, estados e restrições — e devolve as CPOs como EQUAÇÕES EM TEXTO, prontas para
-:func:`dsgekit.symbolic.from_equations`. O que se ganha não é digitação: é que a álgebra deixa de
+:func:`dsgelab.symbolic.from_equations`. O que se ganha não é digitação: é que a álgebra deixa de
 ser feita à mão. Derivar um lagrangiano com quatro restrições e três estados à mão é onde entram os
 erros de sinal e os termos esquecidos, e eles não aparecem no estado estacionário.
 
@@ -51,7 +51,7 @@ def _require_sympy():
         import sympy  # noqa: F401
     except ImportError as exc:      # pragma: no cover
         raise FOCError("a derivação de CPOs precisa de sympy: "
-                       "pip install 'dsgekit[symbolic]'") from exc
+                       "pip install 'dsgelab[symbolic]'") from exc
     import sympy
     return sympy
 

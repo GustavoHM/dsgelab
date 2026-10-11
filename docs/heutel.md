@@ -1,8 +1,8 @@
-# Heutel: porte dos scripts MATLAB para o dsgekit
+# Heutel: porte dos scripts MATLAB para o dsgelab
 
-O módulo `dsgekit.examples.heutel` porta os sistemas de primeira ordem dos seis
+O módulo `dsgelab.examples.heutel` porta os sistemas de primeira ordem dos seis
 arquivos MATLAB de replicação do artigo.
-O solver Anderson–Moore, ausente no anexo, é substituído pelo Klein/QZ do dsgekit.
+O solver Anderson–Moore, ausente no anexo, é substituído pelo Klein/QZ do dsgelab.
 O pacote instalado só precisa de NumPy e SciPy; MATLAB, Octave e Dynare são
 necessários apenas para refazer a validação independente.
 
@@ -15,7 +15,7 @@ Fluctuations”.
 ## Uso
 
 ```python
-from dsgekit.examples import heutel
+from dsgelab.examples import heutel
 
 # Imposto ótimo, informação completa; parâmetros do script de imposto.
 sol = heutel.solve("tax")
@@ -39,7 +39,7 @@ moments = sol.moments(cov={"eps_a": 0.007})
 A interface padrão também funciona:
 
 ```python
-import dsgekit as dk
+import dsgelab as dk
 model, params, guess = heutel.build("tax_asym")
 sol = dk.solve(model, params, guess=guess)
 ```
@@ -75,7 +75,7 @@ script. As comparações numéricas abaixo usam essa escolha explícita.
 - O `k` original é o capital de fim de período. `x` é o estoque contemporâneo.
   Os estados auxiliares `lag_k`, `lag_x` e, quando necessários, `lag_lambda` ou
   `lag_y` guardam os valores defasados. `a` é a produtividade corrente.
-- O choque obedece à convenção do dsgekit, εₜ₊₁ na transição de `a`. A IRF
+- O choque obedece à convenção do dsgelab, εₜ₊₁ na transição de `a`. A IRF
   mantém o mesmo período de impacto dos scripts: â₀=0,01.
 - No imposto ótimo, λ estacionário é aproximadamente zero. Log-linearizar
   esse multiplicador torna a matriz quase singular. O porte usa **desvios
@@ -161,5 +161,5 @@ sistema não linear completo e reconciliar as diferenças com o artigo.
 
 Os arquivos originais foram preservados localmente em `validation/heutel/original`
 para conferência e permanecem atribuídos a Garth Heutel; não são incluídos como
-código MIT do dsgekit. Para refazer a validação em outro computador, copie os seis
+código MIT do dsgelab. Para refazer a validação em outro computador, copie os seis
 `.m` e `ReadMe.txt` fornecidos para essa pasta.

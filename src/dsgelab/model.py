@@ -145,7 +145,7 @@ class Model:
     name: str = "model"
     #: Optional exact derivatives, in MODEL LEVELS, with respect to the stacked
     #: argument ``w = [x_next; x_now; eps]``. Supplied -- which is what
-    #: :mod:`dsgekit.symbolic` does -- they replace finite differences
+    #: :mod:`dsgelab.symbolic` does -- they replace finite differences
     #: throughout, which matters most at second order, where a difference
     #: quotient divides by the square of the step and loses roughly six digits.
     jacobian_fn: Callable | None = None

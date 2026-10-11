@@ -1,6 +1,6 @@
 # Roadmap
 
-O que o `dsgekit` ainda não faz. Cada item diz por que importa. A maior parte apareceu quando o
+O que o `dsgelab` ainda não faz. Cada item diz por que importa. A maior parte apareceu quando o
 pacote encontrou um modelo aplicado: o DSGE de grupos da geração distribuída, com cerca de 71
 variáveis, e o porte do Heutel. Nada aqui é promessa nem data. Um item sobe quando um modelo
 aplicado precisa dele.
@@ -116,7 +116,7 @@ nomeado em [`docs/comparison.md`](docs/comparison.md).
 O equilíbrio de um período, calibrado numa matriz de contabilidade social, continua no
 `cgekit`. O que passaria para cá é o resíduo intertemporal, nos pontos em que um agente olha
 para a frente. A matriz não entra neste pacote. A dependência seria opcional: só o módulo-ponte
-do `cgekit` importaria o `dsgekit`, e um modelo estático seguiria com numpy, scipy e pandas.
+do `cgekit` importaria o `dsgelab`, e um modelo estático seguiria com numpy, scipy e pandas.
 
 Quatro usos, todos do lado de lá e resolvidos com o que este pacote já tem:
 
@@ -131,12 +131,12 @@ Quatro usos, todos do lado de lá e resolvidos com o que este pacote já tem:
   ano-base da matriz, e os dois têm de continuar distintos.
 
 A lista completa, e o que segue sendo conta do `cgekit` (ninhos, tarifas, regiões, fechamento do
-governo), está no roadmap dele, na seção *Extensions that call dsgekit*.
+governo), está no roadmap dele, na seção *Extensions that call dsgelab*.
 
 ## Em volta do pacote
 
-O `cgekit` e o `dsgekit` são repositórios separados. Este está em
-`https://github.com/GustavoHM/dsgekit`, versão 0.2.0. Os testes rodam na integração contínua
+O `cgekit` e o `dsgelab` são repositórios separados. Este está em
+`https://github.com/GustavoHM/dsgelab`, versão 0.2.0. Os testes rodam na integração contínua
 deste repositório.
 
 A página de replicação está em [`site/replications.html`](site/replications.html). Ela executa

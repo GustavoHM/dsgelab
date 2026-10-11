@@ -5,8 +5,8 @@ import dataclasses
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import nk, rbc
+import dsgelab as dk
+from dsgelab.examples import nk, rbc
 
 
 def test_rbc_matches_closed_form():

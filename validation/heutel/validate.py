@@ -17,7 +17,7 @@ from scipy.io import loadmat
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT/'src'))
-from dsgekit.examples import heutel
+from dsgelab.examples import heutel
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE/'out'

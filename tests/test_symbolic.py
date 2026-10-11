@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 sympy = pytest.importorskip("sympy")
-from dsgekit.symbolic import SymbolicError, from_equations  # noqa: E402
+from dsgelab.symbolic import SymbolicError, from_equations  # noqa: E402
 
 
 def test_symbolic_and_callable_models_agree():

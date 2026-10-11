@@ -1,4 +1,4 @@
-"""dsgekit -- a general toolkit for solving DSGE models.
+"""dsgelab -- a general toolkit for solving DSGE models.
 
 A model is declared once, as a list of state names, a list of jump names, a list
 of shock names and one function returning the equilibrium residuals. Everything
@@ -10,8 +10,8 @@ models that merely look alike.
 
 Quick start::
 
-    import dsgekit as dk
-    from dsgekit.examples import rbc
+    import dsgelab as dk
+    from dsgelab.examples import rbc
 
     model, params, guess = rbc.build()
     sol = dk.solve(model, params, guess=guess)
@@ -63,7 +63,7 @@ __all__ = [
 
 
 def from_equations(*args, **kwargs):
-    """Declare a model as text equations. Requires sympy; see :mod:`dsgekit.symbolic`."""
+    """Declare a model as text equations. Requires sympy; see :mod:`dsgelab.symbolic`."""
     from .symbolic import from_equations as _fe
     return _fe(*args, **kwargs)
 
@@ -71,19 +71,19 @@ def from_equations(*args, **kwargs):
 def optimality_conditions(*args, **kwargs):
     """Derive first-order conditions from a stated optimisation problem.
 
-    Requires sympy; see :mod:`dsgekit.blocks`.
+    Requires sympy; see :mod:`dsgelab.blocks`.
     """
     from .blocks import optimality_conditions as _oc
     return _oc(*args, **kwargs)
 
 
 def to_dynare(*args, **kwargs):
-    """Write a symbolically-declared model as a Dynare ``.mod``. See :mod:`dsgekit.export`."""
+    """Write a symbolically-declared model as a Dynare ``.mod``. See :mod:`dsgelab.export`."""
     from .export import to_dynare as _td
     return _td(*args, **kwargs)
 
 
 def to_macromodelling(*args, **kwargs):
-    """Write a symbolically-declared model for MacroModelling.jl. See :mod:`dsgekit.export`."""
+    """Write a symbolically-declared model for MacroModelling.jl. See :mod:`dsgelab.export`."""
     from .export import to_macromodelling as _tm
     return _tm(*args, **kwargs)

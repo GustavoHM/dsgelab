@@ -3,7 +3,7 @@
 Applied DSGE code tends to grow in a recognisable shape: a fixed-point loop for
 the steady state, a second loop for a policy variable, a block of aggregates
 frozen at a reference point, and — bolted on later — a separate linearised system
-for the stochastic exercises. This note is about moving that to `dsgekit`, and
+for the stochastic exercises. This note is about moving that to `dsgelab`, and
 about what the move buys.
 
 ## What the move buys

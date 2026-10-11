@@ -1,17 +1,17 @@
-"""Exportar um modelo declarado em dsgekit para Dynare e para MacroModelling.jl.
+"""Exportar um modelo declarado em dsgelab para Dynare e para MacroModelling.jl.
 
-Só funciona para modelos construídos com :func:`dsgekit.symbolic.from_equations`: as equações
+Só funciona para modelos construídos com :func:`dsgelab.symbolic.from_equations`: as equações
 precisam existir como EXPRESSÕES para serem reimpressas noutra sintaxe, e uma função Python de
 resíduos não pode ser descompilada. Um modelo declarado por callable levanta
 :class:`ExportError` dizendo isso.
 
 A tradução da datação
 ---------------------
-É a única parte que não é mecânica, e é onde um porte feito à mão erra. O dsgekit tem DOIS tipos de
+É a única parte que não é mecânica, e é onde um porte feito à mão erra. O dsgelab tem DOIS tipos de
 estado, e eles se exportam de maneiras diferentes:
 
 * **Estoques predeterminados** — capital e afins, cuja linha do carregamento de choque ``Q`` é nula,
-  isto é, que não recebem inovação diretamente. No dsgekit ``cur["k"]`` é o estoque DISPONÍVEL em
+  isto é, que não recebem inovação diretamente. No dsgelab ``cur["k"]`` é o estoque DISPONÍVEL em
   ``t``. No Dynare isso se declara com ``predetermined_variables`` e escreve-se ``k`` sem defasagem;
   ``nxt["k"]`` vira ``k(+1)``. No MacroModelling, ``k[-1]`` e ``k[0]``.
 * **Processos exógenos** — os que recebem inovação. Seguem o dating PADRÃO do Dynare, em que a
@@ -54,7 +54,7 @@ def _symbolic(model: Model) -> dict:
     if sym is None:
         raise ExportError(
             f"{model.name!r} was declared with a Python function, and a function cannot be "
-            f"decompiled into equations. Declare it with dsgekit.symbolic.from_equations to "
+            f"decompiled into equations. Declare it with dsgelab.symbolic.from_equations to "
             f"export it.")
     return sym
 
@@ -96,7 +96,7 @@ def _shifted_ok(model: Model, sym: dict, expr) -> bool:
 
 
 def _renamer(model: Model, sym: dict, style: str, *, predeterminados, shift: bool):
-    """Substituição dos símbolos do dsgekit pelos nomes da linguagem de destino."""
+    """Substituição dos símbolos do dsgelab pelos nomes da linguagem de destino."""
     import sympy
     cur, nxt = sym["symbols"]["cur"], sym["symbols"]["nxt"]
     pre = set(predeterminados)
@@ -184,7 +184,7 @@ def to_dynare(model: Model, params, *, steady: SteadyState | None = None, cov=No
     eqs, predeterminados, exogenos = _equations(model, sym, "dynare")
     pars = list(sym["parameters"])
 
-    lines = [f"// {model.name} — GERADO por dsgekit.to_dynare. Não editar à mão.",
+    lines = [f"// {model.name} — GERADO por dsgelab.to_dynare. Não editar à mão.",
              "//",
              "// Datação. Estoques predeterminados entram em `predetermined_variables`: a variável",
              "// escrita sem defasagem é o estoque DISPONÍVEL em t, e X(+1) é o decidido em t.",
@@ -248,7 +248,7 @@ def to_macromodelling(model: Model, params, *, cov=None, path: str | Path | None
     sd, _ = _shock_sd(model, cov)
     tag = name or model.name.replace("-", "_").replace(" ", "_")
 
-    lines = [f"# {tag} — GERADO por dsgekit.to_macromodelling. Não editar à mão.",
+    lines = [f"# {tag} — GERADO por dsgelab.to_macromodelling. Não editar à mão.",
              "# Datação: um estoque predeterminado disponível em t é `x[-1]`; um salto em t é",
              "# `x[0]`. As inovações são normais PADRÃO aqui, logo o desvio-padrão entra NA EQUAÇÃO.",
              f"#   predeterminados : {', '.join(predeterminados) or '(nenhum)'}",

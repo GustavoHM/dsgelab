@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 pytest.importorskip("sympy")
 
@@ -79,7 +79,7 @@ def test_modelo_linear_tem_terceira_ordem_desprezivel():
     segunda ordem, que vêm da hessiana diretamente, saem em zero exato. Declarado pelo front end
     simbólico, com hessiana analítica, o cúbico também sairia em zero.
     """
-    from dsgekit.examples import nk
+    from dsgelab.examples import nk
     model, params, guess = nk.build()
     first = dk.solve(model, params, guess=guess)
     second = dk.solve_second_order(first, cov={"eps_a": 0.01, "eps_v": 0.0025})

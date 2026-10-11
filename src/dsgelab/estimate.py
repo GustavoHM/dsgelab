@@ -1,6 +1,6 @@
 """Bayesian estimation of a first-order solution.
 
-The state space is the linear solution already computed by :func:`dsgekit.solve`::
+The state space is the linear solution already computed by :func:`dsgelab.solve`::
 
     k_t = P k_{t-1} + Q eps_t,     y_t = Z k_t + e_t,
 

@@ -1,6 +1,6 @@
 """Declare a model as equations in text, and get exact derivatives with it.
 
-Optional: requires ``sympy`` (``pip install dsgekit[symbolic]``).
+Optional: requires ``sympy`` (``pip install dsgelab[symbolic]``).
 
 Syntax
 ------
@@ -42,7 +42,7 @@ def _require_sympy():
         import sympy  # noqa: F401
     except ImportError as exc:      # pragma: no cover - environment-dependent
         raise SymbolicError(
-            "the symbolic front end needs sympy: pip install 'dsgekit[symbolic]'") from exc
+            "the symbolic front end needs sympy: pip install 'dsgelab[symbolic]'") from exc
     import sympy
     return sympy
 
@@ -51,7 +51,7 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
                    jumps: Sequence[str], shocks: Sequence[str],
                    parameters: Sequence[str], name: str = "model",
                    derivatives: str = "both") -> Model:
-    """Build a :class:`~dsgekit.model.Model` from text equations.
+    """Build a :class:`~dsgelab.model.Model` from text equations.
 
     Parameters
     ----------

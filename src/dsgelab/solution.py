@@ -1,7 +1,7 @@
 """First-order solution object: impulse responses, simulation, moments, diagnostics.
 
 Holds ``u_t = F k_t`` and ``k_{t+1} = P k_t + Q eps_{t+1}`` in the rescaled
-deviations of :mod:`dsgekit.linearize`, together with everything needed to read
+deviations of :mod:`dsgelab.linearize`, together with everything needed to read
 them back as levels.
 """
 

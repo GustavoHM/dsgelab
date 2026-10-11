@@ -3,12 +3,12 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
+import dsgelab as dk
 
 pytest.importorskip("sympy")
-from dsgekit.blocks import FOCError, Problem, optimality_conditions  # noqa: E402
-from dsgekit.examples import rbc  # noqa: E402
-from dsgekit.symbolic import from_equations  # noqa: E402
+from dsgelab.blocks import FOCError, Problem, optimality_conditions  # noqa: E402
+from dsgelab.examples import rbc  # noqa: E402
+from dsgelab.symbolic import from_equations  # noqa: E402
 
 
 def _problema_rbc():

@@ -33,7 +33,7 @@ def main() -> int:
     pages = sorted(SITE.glob("*.html"))
     failures = 0
     for page in pages:
-        name = f"__dsgekit_site_{page.stem}__"
+        name = f"__dsgelab_site_{page.stem}__"
         module = types.ModuleType(name)
         sys.modules[name] = module
         ns = module.__dict__

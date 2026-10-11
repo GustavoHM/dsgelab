@@ -1,24 +1,24 @@
-"""Os modelos de referência do Dynare, declarados em dsgekit.
+"""Os modelos de referência do Dynare, declarados em dsgelab.
 
 Cada porte é uma transcrição das equações do `.mod`, com uma única tradução mecânica: a DATAÇÃO.
 
-    Dynare                          dsgekit
+    Dynare                          dsgelab
     ------------------------------  --------------------------------------------
     x        (variável de salto)    cur["x"]
     x(+1)                           nxt["x"]
     k        (estoque decidido em t)  nxt["k"]      <- k é PREDETERMINADO
     k(-1)    (estoque usado em t)      cur["k"]
     a        (processo com a(-1))      cur["a"], e a equação anda um período à frente
-    e        (inovação)                dsgekit datada em t+1
+    e        (inovação)                dsgelab datada em t+1
 
 O ponto delicado é o estoque. No Dynare `k` é o estoque de FIM de período e `k(-1)` o que produziu
-`y` no período; no dsgekit o estado em t é o que está disponível em t, isto é, o `k(-1)` do Dynare.
+`y` no período; no dsgelab o estado em t é o que está disponível em t, isto é, o `k(-1)` do Dynare.
 Trocar os dois dá um modelo que resolve, satisfaz Blanchard-Kahn e responde a choques — e não é o
 mesmo modelo. É por isso que a validação compara IRFs e momentos, e não apenas o estado
 estacionário.
 
 Os processos exógenos não sofrem deslocamento: `a = rho*a(-1) + e` no Dynare determina `a_t` a
-partir de `t-1` mais a inovação de `t`, que é exatamente a convenção do dsgekit
+partir de `t-1` mais a inovação de `t`, que é exatamente a convenção do dsgelab
 (`nxt.a = rho*cur.a + eps`).
 
 Cada função devolve `(model, params, guess, cov, dynare_mod)`.
@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dsgekit.symbolic import from_equations
+from dsgelab.symbolic import from_equations
 
 __all__ = ["example1", "example2", "rbc_baseline", "ALL"]
 
@@ -76,7 +76,7 @@ def example2():
 
     Por que vale a pena portar os dois: a alocação REAL tem de ser a mesma, e as duas leituras
     diferem apenas por uma transformação das variáveis. É um teste da própria escolha de
-    coordenadas do dsgekit, que carrega desvios PROPORCIONAIS para variáveis com e.e. não nulo —
+    coordenadas do dsgelab, que carrega desvios PROPORCIONAIS para variáveis com e.e. não nulo —
     aqui as variáveis já são logs, e os desvios são absolutos.
     """
     p = dict(alpha=0.36, rho=0.95, tau=0.025, beta=0.99, delta=0.025, psi=0.0, theta=2.95)

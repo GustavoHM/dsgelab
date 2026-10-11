@@ -1,8 +1,8 @@
-# dsgekit API reference
+# dsgelab API reference
 
 Everything listed here is importable from the top-level package
-(`import dsgekit as dk`), except `from_equations`, which also lives in
-`dsgekit.symbolic`.
+(`import dsgelab as dk`), except `from_equations`, which also lives in
+`dsgelab.symbolic`.
 
 ---
 
@@ -217,7 +217,7 @@ Returns `derivative`, `elasticity`, `singular_values`, `rank`, `n_free`,
 ## Bundled examples
 
 ```python
-from dsgekit.examples import rbc, nk
+from dsgelab.examples import rbc, nk
 
 model, params, guess = rbc.build()             # closed-form case, delta = 1
 model, params, guess = rbc.build_symbolic()    # same model as text equations
@@ -234,7 +234,7 @@ branch, and its determinacy region is the Taylor principle.
 ## Command line
 
 ```
-dsgekit --example rbc --periods 12
+dsgelab --example rbc --periods 12
 ```
 
 Solves a bundled example, prints the summary, the accuracy check and the impulse

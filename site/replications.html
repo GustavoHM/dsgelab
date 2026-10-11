@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dsgekit — replicações</title>
-<meta name="description" content="Artigos refeitos no dsgekit: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
+<title>dsgelab — replicações</title>
+<meta name="description" content="Artigos refeitos no dsgelab: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,7 +14,7 @@
     <h1>Replicações</h1>
     <p class="tag">Um artigo, a calibração que ele publica, e um número que o código desta página
     confere. O que o sistema resolvido não reproduz fica dito ao lado do número.</p>
-    <p class="tag"><a href="./">dsgekit</a></p>
+    <p class="tag"><a href="./">dsgelab</a></p>
   </div>
 </header>
 
@@ -42,7 +42,7 @@
   <p>Garth Heutel, <em>How should environmental policy respond to business cycles? Optimal policy
   under persistent productivity shocks</em>, Review of Economic Dynamics 15, 244–264,
   <a href="https://doi.org/10.1016/j.red.2011.05.002">10.1016/j.red.2011.05.002</a>. O porte está
-  em <code>dsgekit.examples.heutel</code> e em <a href="../docs/heutel.md">docs/heutel.md</a>.
+  em <code>dsgelab.examples.heutel</code> e em <a href="../docs/heutel.md">docs/heutel.md</a>.
   O sistema resolvido é o linear do código MATLAB do autor. Anderson–Moore entra como o Klein/QZ
   do pacote. O modelo não linear, que daria segunda ordem e previsão perfeita, não está neste
   exemplo.</p>
@@ -56,7 +56,7 @@
   no horizonte 25 e o do consumo no 15. O 40 não é o que este sistema produz, e o exemplo não
   desloca a série para coincidir com ele.</p>
 <pre><code>import numpy as np
-from dsgekit.examples import heutel
+from dsgelab.examples import heutel
 
 p = heutel.Params()
 assert p.alpha == 0.36 and p.beta == 0.98267 and p.delta == 0.025
@@ -115,8 +115,8 @@ print(tax.policy_slope, quota.policy_slope)</code></pre>
   Dynamics and Control) tem de devolver. O capital obedece à regra exata estado a estado, e a
   correção dele é zero. As tabelas numéricas daquele artigo são outro modelo.</p>
 <pre><code>import numpy as np
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 model, params, guess = rbc.build()
 sol = dk.solve(model, params, guess=guess)
@@ -142,8 +142,8 @@ print(sol.P, so.h_ss[i_a])</code></pre>
   0,8 está do lado indeterminado. O que se confere é esse limiar, não uma tabela de coeficientes
   estimados.</p>
 <pre><code>from dataclasses import replace
-import dsgekit as dk
-from dsgekit.examples import nk
+import dsgelab as dk
+from dsgelab.examples import nk
 
 model, params, guess = nk.build()
 assert params.phi_pi == 1.5 and params.phi_x == 0.125 and params.beta == 0.99
@@ -180,7 +180,7 @@ print(sol_nk.klein.n_stable, raised)</code></pre>
 </main>
 
 <footer><div class="wrap">
-  <p>dsgekit — MIT. <a href="./">Voltar ao pacote</a>.<br>
+  <p>dsgelab — MIT. <a href="./">Voltar ao pacote</a>.<br>
   Os blocos desta página são executados por <code>tools/check_site_examples.py</code>.</p>
 </div></footer>
 

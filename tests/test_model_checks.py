@@ -5,8 +5,8 @@ import dataclasses
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import nk, rbc
+import dsgelab as dk
+from dsgelab.examples import nk, rbc
 
 
 def test_identity_check_separates_a_true_identity_from_a_false_one():

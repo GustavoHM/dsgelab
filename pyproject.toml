@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dsgekit"
+name = "dsgelab"
 version = "0.2.0"
 description = "General-purpose toolkit for solving DSGE models: steady state, Klein/QZ first order, second-order perturbation, perfect-foresight transitions and calibration by targets."
 readme = "README.md"
@@ -23,17 +23,17 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/GustavoHM/dsgekit"
-Documentation = "https://github.com/GustavoHM/dsgekit/tree/main/docs"
-Repository = "https://github.com/GustavoHM/dsgekit"
-Issues = "https://github.com/GustavoHM/dsgekit/issues"
+Homepage = "https://github.com/GustavoHM/dsgelab"
+Documentation = "https://github.com/GustavoHM/dsgelab/tree/main/docs"
+Repository = "https://github.com/GustavoHM/dsgelab"
+Issues = "https://github.com/GustavoHM/dsgelab/issues"
 
 [project.optional-dependencies]
 symbolic = ["sympy>=1.12"]
 test = ["pytest>=7"]
 
 [project.scripts]
-dsgekit = "dsgekit.cli:main"
+dsgelab = "dsgelab.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

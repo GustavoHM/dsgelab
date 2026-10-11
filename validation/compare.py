@@ -1,6 +1,6 @@
-"""compare.py — o dsgekit contra o Dynare, nos modelos de referência do próprio Dynare.
+"""compare.py — o dsgelab contra o Dynare, nos modelos de referência do próprio Dynare.
 
-Por que estes modelos. O `dsgekit` foi verificado contra respostas conhecidas no papel (RBC de
+Por que estes modelos. O `dsgelab` foi verificado contra respostas conhecidas no papel (RBC de
 forma fechada, princípio de Taylor, correção de risco lognormal) e contra o modelo do artigo que o
 motivou. Nenhum dos dois é independente do autor. Aqui os modelos são de terceiros — os exemplos do
 tutorial do Dynare e a coleção de Johannes Pfeifer, ambos citados em dynare.org/resources —, o
@@ -15,7 +15,7 @@ O terceiro é o que o segundo não cobre. Uma IRF por impulso no ESTADO não pas
 passam, e é neles que um carregamento errado aparece.
 
 Uma tradução de datação é necessária e está documentada em models.py: o `k` do Dynare é o estoque
-DECIDIDO em t, o do dsgekit é o DISPONÍVEL em t. As séries diferem por um período — para as
+DECIDIDO em t, o do dsgelab é o DISPONÍVEL em t. As séries diferem por um período — para as
 variáveis predeterminadas que NÃO recebem choque diretamente, isto é, cuja linha de Q é nula.
 
 Pré-requisitos:
@@ -31,7 +31,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import dsgekit as dk
+import dsgelab as dk
 import models
 
 HERE = Path(__file__).resolve().parent
@@ -83,11 +83,11 @@ def compare(name: str) -> dict:
         else "<-- DIVERGE")
     print(f"  1. estado estacionário ({len(comuns)} variáveis)        "
           f"desvio relativo máx {d_ss:.3e}  {veredito}")
-    print(f"       resíduo do sistema:  no e.e. do dsgekit {r_dk:.2e}   "
+    print(f"       resíduo do sistema:  no e.e. do dsgelab {r_dk:.2e}   "
           f"no e.e. do Dynare {r_dy:.2e}")
     if d_ss >= 1e-9:
         pior = max(comuns, key=lambda v: abs(ss[v] - dy_ss[v]) / max(abs(dy_ss[v]), 1e-8))
-        print(f"       maior desvio: {pior}  dsgekit {ss[pior]:.10f}  Dynare {dy_ss[pior]:.10f}")
+        print(f"       maior desvio: {pior}  dsgelab {ss[pior]:.10f}  Dynare {dy_ss[pior]:.10f}")
     ss_ok = d_ss < 1e-9 or r_dy > 1e3 * max(r_dk, 1e-16)
 
     # ---------------------------------------------------------------- 2
@@ -112,7 +112,7 @@ def compare(name: str) -> dict:
 
     # A régua de cada variável é a sua MAIOR resposta entre todos os choques, e não a resposta ao
     # choque em questão. Uma variável que não responde a um choque — `ghat` a `eps_z`, por
-    # construção — tem resposta exatamente nula no dsgekit e ruído de ordem 1e-19 no Dynare;
+    # construção — tem resposta exatamente nula no dsgelab e ruído de ordem 1e-19 no Dynare;
     # dividir por esse ruído produz um erro relativo enorme sobre uma quantidade que é zero.
     escala = {}
     for (v, _), (_, dy) in curvas.items():
@@ -142,7 +142,7 @@ def compare(name: str) -> dict:
               f"desvio relativo máx {d_mom:.3e}  {'OK' if d_mom < 1e-6 else '<-- DIVERGE'}")
         print(f"       (passam por Q, que as IRFs por impulso no estado não exercitam)")
         pior = max(alvo, key=lambda v: abs(dk_sd[v] - dy_sd[v]) / dy_sd[v])
-        print(f"       maior: {pior:<12} dsgekit {dk_sd[pior]:.10f}   Dynare {dy_sd[pior]:.10f}")
+        print(f"       maior: {pior:<12} dsgelab {dk_sd[pior]:.10f}   Dynare {dy_sd[pior]:.10f}")
 
     acc = sol.accuracy()
     ordem = ("exata (modelo linear)" if acc.get("exact")
@@ -164,7 +164,7 @@ def compare(name: str) -> dict:
 
 def main() -> int:
     print("=" * 88)
-    print("VALIDAÇÃO DO dsgekit CONTRA O DYNARE — modelos de dynare.org/resources")
+    print("VALIDAÇÃO DO dsgelab CONTRA O DYNARE — modelos de dynare.org/resources")
     print("=" * 88)
     out = {n: compare(n) for n in models.ALL}
     print(f"\n{'=' * 88}\nRESUMO")

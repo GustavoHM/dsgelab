@@ -1,12 +1,12 @@
-"""roundtrip.py — exportar do dsgekit para o Dynare, rodar lá, e comparar de volta.
+"""roundtrip.py — exportar do dsgelab para o Dynare, rodar lá, e comparar de volta.
 
 O teste de ida e volta é mais forte do que o `compare.py`. Ali eu escrevi o porte de um `.mod` para
-o dsgekit à mão, e um erro meu de datação apareceu — o que o teste pegou. Aqui é o EXPORTADOR que
+o dsgelab à mão, e um erro meu de datação apareceu — o que o teste pegou. Aqui é o EXPORTADOR que
 escreve o `.mod`, e o que se verifica é se a tradução automática preserva o modelo: mesmo estado
 estacionário, mesmas respostas a impulso, mesmos momentos.
 
 Usa os mesmos três modelos de `models.py`, que já vieram do Dynare. O caminho completo é portanto
-Dynare -> dsgekit (à mão, verificado por `compare.py`) -> Dynare (automático, verificado aqui).
+Dynare -> dsgelab (à mão, verificado por `compare.py`) -> Dynare (automático, verificado aqui).
 
     bash fetch.sh && bash run_dynare.sh      # para o compare.py
     python roundtrip.py                      # este
@@ -22,9 +22,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import dsgekit as dk
+import dsgelab as dk
 import models
-from dsgekit.export import to_dynare
+from dsgelab.export import to_dynare
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "out_roundtrip"
@@ -84,7 +84,7 @@ def confronta(nome: str) -> dict:
     exo = [str(x).strip() for x in np.atleast_1d(ex.exo_names)]
     dy_ss = dict(zip(nomes, np.atleast_1d(ex.steady_state).astype(float)))
 
-    print(f"\n{'=' * 84}\n{nome} — exportado pelo dsgekit e resolvido pelo Dynare\n{'=' * 84}")
+    print(f"\n{'=' * 84}\n{nome} — exportado pelo dsgelab e resolvido pelo Dynare\n{'=' * 84}")
 
     comuns = [v for v in model.names if v in dy_ss]
     d_ss = max(abs(ss[v] - dy_ss[v]) / max(abs(dy_ss[v]), 1e-8) for v in comuns)
@@ -143,7 +143,7 @@ def confronta(nome: str) -> dict:
 def main() -> int:
     OUT.mkdir(exist_ok=True)
     print("=" * 84)
-    print("IDA E VOLTA — o dsgekit escreve o .mod, o Dynare resolve, comparamos de volta")
+    print("IDA E VOLTA — o dsgelab escreve o .mod, o Dynare resolve, comparamos de volta")
     print("=" * 84)
     res = {n: confronta(n) for n in models.ALL}
     print(f"\n{'=' * 84}\nRESUMO")

@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from dsgekit import BlanchardKahnError, klein
+from dsgelab import BlanchardKahnError, klein
 
 
 def test_rbc_closed_form():

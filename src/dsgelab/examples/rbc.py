@@ -45,7 +45,7 @@ def _equations(nxt, cur, eps, p):
 
 
 def build(params: Params | None = None):
-    """Return ``(model, params, guess)`` ready for :func:`dsgekit.solve`."""
+    """Return ``(model, params, guess)`` ready for :func:`dsgelab.solve`."""
     p = params or Params()
     model = Model(states=["k", "a"], jumps=["c"], shocks=["eps_a"],
                   equations=_equations, name="rbc")

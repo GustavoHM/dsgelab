@@ -1,4 +1,4 @@
-# Site do `dsgekit`
+# Site do `dsgelab`
 
 Página estática de uma só peça. Sem Jekyll, sem build, sem dependência de CDN: `index.html`,
 `style.css` e um realçador de sintaxe de trinta linhas. Abre num navegador a partir do disco e
@@ -31,7 +31,7 @@ cp -r site docs
 git subtree push --prefix site origin gh-pages
 ```
 
-**3. Dois pacotes, um site só.** Publique um `docs/` com `docs/dsgekit/` e a pasta do outro lado a
+**3. Dois pacotes, um site só.** Publique um `docs/` com `docs/dsgelab/` e a pasta do outro lado a
 lado, e uma `index.html` na raiz apontando para as duas.
 
 ## Antes de publicar: os links da documentação
@@ -42,7 +42,7 @@ página publicada — o GitHub Pages não serve o que está fora da pasta public
 - **Apontar para o GitHub.** Troque `../docs/` pela URL dos arquivos no repositório:
 
 ```bash
-sed -i '' 's|href="../docs/|href="https://github.com/GustavoHM/dsgekit/blob/main/docs/|g' \
+sed -i '' 's|href="../docs/|href="https://github.com/GustavoHM/dsgelab/blob/main/docs/|g' \
   site/index.html
 ```
 

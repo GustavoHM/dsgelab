@@ -19,9 +19,9 @@ def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
     """Solve ``model`` at ``params`` to first order.
 
     Either pass an already-solved ``steady`` state or a ``guess`` from which one
-    is computed. Everything else is forwarded to :func:`dsgekit.steady_state`.
+    is computed. Everything else is forwarded to :func:`dsgelab.steady_state`.
 
-    Returns a :class:`~dsgekit.solution.FirstOrderSolution` carrying the Klein
+    Returns a :class:`~dsgelab.solution.FirstOrderSolution` carrying the Klein
     matrices, the steady state, the coordinate map and the parameters, so
     impulse responses and moments need no further arguments.
     """
@@ -31,7 +31,7 @@ def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
         steady = steady_state(model, guess, params, ctx=ctx, ctx_update=ctx_update,
                               positive=positive, tol=tol)
     elif not isinstance(steady, SteadyState):
-        raise TypeError("`steady` must be a SteadyState; use dsgekit.steady_state to build one")
+        raise TypeError("`steady` must be a SteadyState; use dsgelab.steady_state to build one")
 
     system = first_order_system(model, steady, params, ctx=steady.ctx, h=h,
                                 equilibrate=equilibrate)

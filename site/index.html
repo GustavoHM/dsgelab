@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dsgekit — resolver modelos DSGE em Python</title>
+<title>dsgelab — resolver modelos DSGE em Python</title>
 <meta name="description" content="Biblioteca geral para modelos DSGE: estado estacionário, Klein/QZ, segunda ordem, previsão perfeita e calibração por alvos. Validada contra o Dynare e o MacroModelling.jl.">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -11,7 +11,7 @@
 
 <header class="hero">
   <div class="wrap">
-    <h1>dsgekit</h1>
+    <h1>dsgelab</h1>
     <p class="tag">Declare o modelo uma vez — nomes de estados, nomes de saltos, nomes de choques e
     uma função de resíduos. Estado estacionário, solução de primeira ordem, respostas a impulso,
     momentos, correções de risco de segunda ordem, transições de previsão perfeita e calibração por
@@ -58,11 +58,11 @@
 
 <section id="instalar"><div class="wrap">
   <h2>Instalar</h2>
-<pre><code class="plain">pip install "dsgekit @ git+https://github.com/GustavoHM/dsgekit"
-pip install "dsgekit[symbolic] @ git+https://github.com/GustavoHM/dsgekit"</code></pre>
+<pre><code class="plain">pip install "dsgelab @ git+https://github.com/GustavoHM/dsgelab"
+pip install "dsgelab[symbolic] @ git+https://github.com/GustavoHM/dsgelab"</code></pre>
   <p>Depende só de numpy e scipy. O <code>sympy</code> é opcional e serve ao front end textual, que
   entrega derivadas analíticas exatas.</p>
-<pre><code class="plain">dsgekit --example rbc        # resolve um modelo do pacote e imprime os diagnósticos</code></pre>
+<pre><code class="plain">dsgelab --example rbc        # resolve um modelo do pacote e imprime os diagnósticos</code></pre>
 </div></section>
 
 <section id="exemplos"><div class="wrap">
@@ -74,8 +74,8 @@ pip install "dsgekit[symbolic] @ git+https://github.com/GustavoHM/dsgekit"</code
   <a href="replications.html">Replicações</a>.</p>
 
   <h3>1. Resolver um modelo que já vem no pacote</h3>
-<pre><code>import dsgekit as dk
-from dsgekit.examples import rbc
+<pre><code>import dsgelab as dk
+from dsgelab.examples import rbc
 
 model, params, guess = rbc.build()
 sol = dk.solve(model, params, guess=guess)
@@ -90,7 +90,7 @@ dec = sol.variance_decomposition(cov={"eps_a": 0.007})</code></pre>
   <code>cur</code> para o período <em>t</em> e <code>nxt</code> para <em>t+1</em>.</p>
 <pre><code>import numpy as np
 from dataclasses import dataclass
-from dsgekit import Model, solve
+from dsgelab import Model, solve
 
 @dataclass
 class P:
@@ -119,7 +119,7 @@ sol_meu.accuracy()            # a ordem implícita tem de dar ~2</code></pre>
   mais cara neste tipo de código. Nomear elimina a classe.</p>
 
   <h3>3. As mesmas equações, em texto, com derivadas exatas</h3>
-<pre><code>from dsgekit.symbolic import from_equations
+<pre><code>from dsgelab.symbolic import from_equations
 
 simbolico = from_equations(
     [
@@ -197,7 +197,7 @@ ident["null_directions"]   # a direção que nenhum alvo enxerga</code></pre>
   <p>Declara-se o problema; o lagrangiano é diferenciado por você. O que se ganha não é digitação —
   é que a álgebra deixa de ser feita à mão, e é nela que entram os sinais trocados e os termos
   esquecidos, que não aparecem no estado estacionário.</p>
-<pre><code>from dsgekit.blocks import Problem, optimality_conditions
+<pre><code>from dsgelab.blocks import Problem, optimality_conditions
 
 prob = Problem(
     "log(c)",                                   # retorno do PERÍODO
@@ -239,7 +239,7 @@ texto = dk.to_dynare(simbolico, P(), steady=ss_sim, cov={"eps_a": 0.007},
 jl = dk.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl")
 
 "predetermined_variables k;" in texto     # a datação é traduzida sozinha</code></pre>
-  <p>A tradução da datação é a parte que um porte manual erra: no dsgekit o estado em <em>t</em> é o
+  <p>A tradução da datação é a parte que um porte manual erra: no dsgelab o estado em <em>t</em> é o
   DISPONÍVEL em <em>t</em>; no Dynare a variável predeterminada é a DECIDIDA em <em>t</em>. E os
   processos exógenos vão escritos um período atrás, para que a inovação apareça sem defasagem. A ida
   e volta — o pacote escreve o <code>.mod</code>, o Dynare resolve, comparamos — bate a
@@ -317,23 +317,23 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   </table>
   <p style="font-size:.9rem;color:var(--muted)">* No <code>example2</code> o <code>steady</code> do
   Dynare para antes: o seu estado estacionário deixa resíduo de <code>1,1e-06</code> nas equações do
-  modelo, contra <code>1,0e-44</code> do dsgekit, e toda a discrepância decorre disso. A confirmação
+  modelo, contra <code>1,0e-44</code> do dsgelab, e toda a discrepância decorre disso. A confirmação
   independente está à mão — <code>example1</code> e <code>example2</code> são a mesma economia em
   coordenadas diferentes, e <code>exp(e.e. do example2)</code> bate com o <code>example1</code> em
   nível a <code>1e-15</code>.</p>
 
   <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de
-  segunda ordem do dsgekit batem com o Dynare a <code>9,4e-06</code> pontos percentuais e com o
+  segunda ordem do dsgelab batem com o Dynare a <code>9,4e-06</code> pontos percentuais e com o
   MacroModelling.jl a <code>8,8e-06</code>. O Dynare usa segunda ordem não podada; o MacroModelling,
-  podada; o dsgekit resolve a equação de Sylvester e devolve a média em forma fechada, sem simular.</p>
+  podada; o dsgelab resolve a equação de Sylvester e devolve a média em forma fechada, sem simular.</p>
 </div></section>
 
 <section id="comparacao"><div class="wrap">
   <h2>Como se compara ao que já existe</h2>
   <p class="lede">O campo é povoado, e vale dizer com franqueza onde este pacote fica.</p>
   <table>
-    <thead><tr><th>Capacidade</th><th>dsgekit</th><th>gEconpy</th><th>dolo</th><th>PyMacLab</th><th>econpizza</th></tr></thead>
+    <thead><tr><th>Capacidade</th><th>dsgelab</th><th>gEconpy</th><th>dolo</th><th>PyMacLab</th><th>econpizza</th></tr></thead>
     <tbody>
       <tr><td>Deriva as CPOs do problema do agente</td><td class="ok">sim</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>Perturbação de 1ª ordem</td><td>sim</td><td>sim</td><td>sim</td><td>sim</td><td>—</td></tr>
@@ -359,11 +359,11 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   ordem, o <a href="https://github.com/EconForge/dolo.py">dolo</a>; para agentes heterogêneos, o
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> ou o
   <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
-  <p>O nicho defensável do <code>dsgekit</code> é estreito: a mesma função de resíduos serve à
+  <p>O nicho defensável do <code>dsgelab</code> é estreito: a mesma função de resíduos serve à
   perturbação e à transição determinística; segunda ordem em processo, sem sair para o Octave; as
   verificações são da biblioteca e não da disciplina do usuário; e duas dependências, numpy e scipy.
   A tabela completa, com o que verifiquei instalando e o que apenas li na documentação, está em
-  <a href="https://github.com/GustavoHM/dsgekit/blob/main/docs/comparison.md">docs/comparison.md</a>.</p>
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/docs/comparison.md">docs/comparison.md</a>.</p>
 </div></section>
 
 <section id="citar"><div class="wrap">
@@ -373,25 +373,25 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   versão específica não é reproduzível sem ela.</p>
 
   <h3>BibTeX</h3>
-<pre><code class="plain">@software{dsgekit_2026,
+<pre><code class="plain">@software{dsgelab_2026,
   author  = {Moreira, Gustavo Hoffmann},
-  title   = {{dsgekit}: a general toolkit for solving DSGE models in Python},
+  title   = {{dsgelab}: a general toolkit for solving DSGE models in Python},
   year    = {2026},
   version = {0.2.0},
   license = {MIT},
-  url     = {https://github.com/GustavoHM/dsgekit},
+  url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Pacote em Python}
 }</code></pre>
 
   <h3>ABNT</h3>
-<pre><code class="plain">MOREIRA, Gustavo Hoffmann. dsgekit: a general toolkit for solving DSGE models in Python.
+<pre><code class="plain">MOREIRA, Gustavo Hoffmann. dsgelab: a general toolkit for solving DSGE models in Python.
 Versão 0.2.0. 2026. Software em Python. Disponível em:
-https://github.com/GustavoHM/dsgekit. Acesso em: [data].</code></pre>
+https://github.com/GustavoHM/dsgelab. Acesso em: [data].</code></pre>
 
   <h3>No corpo do texto</h3>
   <p>Cite a versão junto do resultado, não só o nome:</p>
   <blockquote style="border-left:3px solid var(--rule); margin:1rem 0; padding:.2rem 0 .2rem 1.1rem;
-     color:var(--muted)">O modelo foi resolvido com o <code>dsgekit</code> 0.2.0
+     color:var(--muted)">O modelo foi resolvido com o <code>dsgelab</code> 0.2.0
      (Moreira, 2026), em perturbação de segunda ordem.</blockquote>
 
   <div class="note"><p><strong>Antes de citar, arquive.</strong> Uma URL de repositório não é uma
@@ -428,7 +428,7 @@ https://github.com/GustavoHM/dsgekit. Acesso em: [data].</code></pre>
 </main>
 
 <footer><div class="wrap">
-  <p>dsgekit — MIT. Feito para o programa de pesquisa sobre geração distribuída, e não amarrado a
+  <p>dsgelab — MIT. Feito para o programa de pesquisa sobre geração distribuída, e não amarrado a
   ele. <br>Os links da documentação apontam para os arquivos do repositório; ao publicar, veja
   <code>site/README.md</code>.</p>
 </div></footer>

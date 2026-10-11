@@ -1,6 +1,6 @@
 # Validação contra o Dynare
 
-O `dsgekit` é verificado em três camadas, e esta é a terceira.
+O `dsgelab` é verificado em três camadas, e esta é a terceira.
 
 | Camada | Contra o quê | Onde |
 |---|---|---|
@@ -17,7 +17,7 @@ coleção de Johannes Pfeifer — e o solucionador de referência é o Dynare.
 ```bash
 bash fetch.sh          # baixa os .mod (não versionados: são GPL, o pacote é MIT)
 bash run_dynare.sh     # roda cada um no Octave + Dynare, exporta out/<nome>.mat
-python compare.py      # confronta o dsgekit com o Dynare
+python compare.py      # confronta o dsgelab com o Dynare
 ```
 
 Precisa de GNU Octave e Dynare. `run_dynare.sh` procura o diretório `matlab/` do Dynare nos lugares
@@ -54,7 +54,7 @@ opções de relatório.
 
 ## Duas convenções que a comparação tem de reconciliar
 
-**Datação do estoque.** O `k` do Dynare é o estoque de FIM de período; o do `dsgekit` é o
+**Datação do estoque.** O `k` do Dynare é o estoque de FIM de período; o do `dsgelab` é o
 DISPONÍVEL no período, que é o `k(-1)` do Dynare. As séries diferem por um período. A comparação
 desloca exatamente as variáveis predeterminadas cuja linha de `Q` é nula — que são as que não
 recebem inovação diretamente. Trocar as duas datações dá um modelo que resolve, satisfaz
@@ -63,12 +63,12 @@ Blanchard-Kahn e responde a choques, e não é o mesmo modelo; só a comparaçã
 **Ortogonalização.** O Dynare reporta IRFs a impulsos ORTOGONALIZADOS: a resposta ao choque *i* é a
 resposta à coluna *i* do fator de Cholesky da covariância, não a um impulso isolado em *i*. Com
 covariância diagonal as duas coincidem; com o `var e, u = phi*0.009^2` do `example1`, não. O
-`dsgekit` tem `irf_impulse` para exatamente isto.
+`dsgelab` tem `irf_impulse` para exatamente isto.
 
 ## O que a validação encontrou
 
 **No `example2`, o `steady` do Dynare para antes.** O estado estacionário do Dynare deixa um resíduo
-de `1,1e-06` nas equações do modelo; o do `dsgekit` deixa `1,0e-44`. Tudo o que decorre do e.e. —
+de `1,1e-06` nas equações do modelo; o do `dsgelab` deixa `1,0e-44`. Tudo o que decorre do e.e. —
 linearização, IRFs, momentos — herda esse erro, e é essa a origem inteira da discrepância de `3e-06`
 que a tabela mostra. Quando dois programas discordam, a pergunta útil não é qual número é o certo,
 mas qual dos dois PONTOS anula as equações; `compare.py` mede o resíduo em ambos e é assim que o

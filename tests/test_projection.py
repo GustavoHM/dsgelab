@@ -2,8 +2,8 @@
 
 import numpy as np
 
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 
 def test_chebyshev_projection_recovers_the_closed_form_policy():

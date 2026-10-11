@@ -1,4 +1,4 @@
-# dsgekit user guide
+# dsgelab user guide
 
 1. [Declaring a model](#1-declaring-a-model)
 2. [The steady state](#2-the-steady-state)
@@ -18,7 +18,7 @@
 A model is three name lists and one function.
 
 ```python
-from dsgekit import Model
+from dsgelab import Model
 
 model = Model(
     states=["k", "a"],       # predetermined; exogenous processes belong here
@@ -430,7 +430,7 @@ models routinely share a steady state and differ entirely in their dynamics.
 ## 9. Text equations and exact derivatives
 
 ```python
-from dsgekit.symbolic import from_equations
+from dsgelab.symbolic import from_equations
 
 model = from_equations(
     [

@@ -143,7 +143,7 @@ def structural_system(variant="tax", params=None):
 
 
 def build(variant="tax", params=None):
-    """Return a dsgekit ``(model, params, guess)`` in proportional deviations.
+    """Return a dsgelab ``(model, params, guess)`` in proportional deviations.
 
     ``k`` and ``x`` retain the source's end-of-period/contemporaneous timing.
     Auxiliary ``lag_*`` states carry values needed from the previous period;
@@ -176,7 +176,7 @@ def build(variant="tax", params=None):
         future = np.array([nxt[name] for name in names])
         residual = h[:, :n] @ lag + h[:, n:2*n] @ now + h[:, 2*n:] @ future
         # The original first row is a_t = rho*a_(t-1) + eps_t. Shift just
-        # this transition to dsgekit's innovation-at-t+1 convention.
+        # this transition to dsgelab's innovation-at-t+1 convention.
         residual[0] = nxt.a - p.rho*cur.a - eps.eps_a
         return np.r_[residual, [nxt["lag_"+name] - cur[name] for name in lagged]]
     model = Model(states=states, jumps=jumps, shocks=["eps_a"],
@@ -185,7 +185,7 @@ def build(variant="tax", params=None):
 
 
 def solve(variant="tax", params=None):
-    """Solve the source first-order system with dsgekit's Klein/QZ solver.
+    """Solve the source first-order system with dsgelab's Klein/QZ solver.
 
     ``sol.irf('eps_a', size=.01)`` gives percent responses. Since variables
     already denote deviations, use :func:`to_levels` for economic levels.

@@ -188,13 +188,13 @@ def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
     Parameters
     ----------
     second : SecondOrderSolution
-        Saída de :func:`dsgekit.solve_second_order`.
+        Saída de :func:`dsgelab.solve_second_order`.
     cov : mapping, array ou None
         Covariância dos choques. Entra em ``g_ssk`` e ``h_ssk`` pela contração da curvatura
         em ``eps`` com ``Σ``. A simulação usa a mesma matriz.
     h, h_hess : float
         Passos externo e interno da terceira derivada; ver
-        :func:`dsgekit.linearize.third_derivatives`.
+        :func:`dsgelab.linearize.third_derivatives`.
     third : array, optional
         Tensor de terceiras derivadas já calculado, para reaproveitar numa varredura.
     """

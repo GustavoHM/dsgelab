@@ -143,7 +143,7 @@ truncation falls as `h²`, so the balance sits near `eps_machine^{1/4}`; the
 The mixed partials use a six-point symmetric form that reuses cached single
 displacements, costing `2m² + 2m` evaluations rather than `4m²`.
 
-Exact derivatives from `dsgekit.symbolic` bypass all of this and are strongly
+Exact derivatives from `dsgelab.symbolic` bypass all of this and are strongly
 preferred at second order.
 
 ---

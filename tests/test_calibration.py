@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 
 def test_calibrates_beta_to_a_capital_target():

@@ -15,7 +15,7 @@ perturbation parameter on the innovations::
     u_t     = F k_t + 1/2 g_kk[k_t, k_t] + 1/2 g_ss
     k_{t+1} = P k_t + 1/2 h_kk[k_t, k_t] + 1/2 h_ss + Q eps_{t+1}
 
-all in the rescaled deviations of :mod:`dsgekit.linearize`. The ``g_ss`` and
+all in the rescaled deviations of :mod:`dsgelab.linearize`. The ``g_ss`` and
 ``h_ss`` terms are the risk corrections: they are what first order sets to zero.
 
 The quadratic coefficients solve a generalised Sylvester equation
@@ -262,7 +262,7 @@ def solve_second_order(first: FirstOrderSolution, cov=None, *, h: float = 1e-4,
     Parameters
     ----------
     first : FirstOrderSolution
-        Output of :func:`dsgekit.solve`.
+        Output of :func:`dsgelab.solve`.
     cov : mapping, array or None
         Shock covariance. It enters ONLY the risk corrections ``g_ss`` and
         ``h_ss``; the quadratic terms are independent of it, which is why a

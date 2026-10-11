@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dsgekit.examples import heutel
+from dsgelab.examples import heutel
 
 REFERENCE = json.loads((Path(__file__).resolve().parents[1]
                         / 'validation/heutel/reference.json').read_text())
@@ -75,7 +75,7 @@ def test_zero_ramsey_multiplier_has_an_absolute_coordinate():
 def test_changed_calibration_requires_rebuilding():
     model, p, guess = heutel.build('tax_asym')
     from dataclasses import replace
-    from dsgekit import solve
+    from dsgelab import solve
     with pytest.raises(ValueError, match='rebuild'):
         solve(model, replace(p, rho=.9), guess=guess)
 

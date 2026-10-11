@@ -1,7 +1,7 @@
 # Como estes pacotes se comparam aos que já existem
 
 Levantamento feito em 9 de setembro de 2026 e **revisto no mesmo dia**, depois de o
-`dsgekit` ganhar derivação de CPOs, terceira ordem determinística e exportadores para
+`dsgelab` ganhar derivação de CPOs, terceira ordem determinística e exportadores para
 Dynare e MacroModelling.jl. As linhas que mudaram estão marcadas com †. A pergunta que o originou — *já existia pacote para
 DSGE e CGE em Python?* — tem resposta diferente dos dois lados, e vale registrar por escrito em vez
 de deixar implícito.
@@ -26,9 +26,9 @@ li a documentação. Uma célula **📄** pode estar errada, e prefiro dizê-lo 
 O campo é povoado. Um resumo antes da tabela: se eu estivesse começando do zero hoje e precisasse
 apenas de primeira ordem com estimação bayesiana, instalaria o **gEconpy**; se precisasse de métodos
 globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-jacobian** ou o
-**econpizza**. O `dsgekit` não cobre nenhum desses três casos melhor do que eles.
+**econpizza**. O `dsgelab` não cobre nenhum desses três casos melhor do que eles.
 
-| Capacidade | dsgekit | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
+| Capacidade | dsgelab | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
 |---|---|---|---|---|---|---|---|
 | **Declaração do modelo** | função de resíduos, equações em texto, ou problema de otimização † | ✅ arquivo `.GCN` por blocos de otimização | 📄 arquivo YAML | 📄 formato do dolo | 📄 YAML | 📄 arquivo de modelo próprio | `.mod` |
 | **Deriva as CPOs do problema do agente** | ✅ † lagrangiano declarado | ✅ | — | — | — | — | — |
@@ -63,11 +63,11 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 
 **O `gEconpy` é o vizinho mais próximo, e é maior em quase tudo.** Declaração por blocos com derivação
 automática das condições de primeira ordem, estado estacionário analítico, estimação bayesiana,
-exportação para Dynare. Em três células o `dsgekit` tem o que ele não tem: **segunda ordem**, que o
+exportação para Dynare. Em três células o `dsgelab` tem o que ele não tem: **segunda ordem**, que o
 gEconpy simplesmente não faz; a **decomposição de variância**; e a **autoverificação da ordem de
 acurácia**. Se o seu trabalho não precisa de segunda ordem, o gEconpy é a escolha melhor.
 
-**O `PyMacLab` é o que mais se parece com o `dsgekit` metodologicamente** — Klein de 1ª ordem e
+**O `PyMacLab` é o que mais se parece com o `dsgelab` metodologicamente** — Klein de 1ª ordem e
 Klein–Gomme de 2ª — e é o único que declara não ter estimação. Também é o único que **não instala**:
 o pacote de 0.95.9 no PyPI não traz `setup.py` nem `pyproject.toml`, e a documentação data de janeiro
 de 2013.
@@ -77,7 +77,7 @@ instalou aqui por fixar uma versão de pandas que já não compila; deve funcion
 anterior, mas não confirmei.
 
 **O `econpizza` e o `sequence-jacobian` resolvem outro problema** — agentes heterogêneos —, e não
-concorrem com o `dsgekit` em modelo de agente representativo.
+concorrem com o `dsgelab` em modelo de agente representativo.
 
 ### O que mudou, e o que continua faltando
 
@@ -107,7 +107,7 @@ e o alcance de cada fechamento é o do teste, não o de uma plataforma.
 
 ### Avaliação honesta
 
-O `dsgekit` não é primeiro de tipo nem o mais completo. O nicho defensável é estreito e específico:
+O `dsgelab` não é primeiro de tipo nem o mais completo. O nicho defensável é estreito e específico:
 
 0. **Um caminho contínuo do problema do agente ao `.mod`.** Declara-se o lagrangiano, derivam-se as
    CPOs, resolve-se, e exporta-se para o Dynare ou para o MacroModelling — com a datação traduzida

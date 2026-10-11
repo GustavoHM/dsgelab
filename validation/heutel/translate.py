@@ -58,6 +58,6 @@ out+='def quota_firm_rows(h, ss, p):\n'
 for p in params: out+=f'    {p} = p.{p}\n'
 for k in ['y','k','mu','r']: out+=f'    {k}_ss = ss["{k}"]\n'
 out+='\n'.join(assignments(s[start:end]))+'\n    return h\n'
-(root/'src/dsgekit/examples/_heutel_algebra.py').write_text(out)
+(root/'src/dsgelab/examples/_heutel_algebra.py').write_text(out)
 manifest={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(src.iterdir())}
 (root/'validation/heutel/source-sha256.json').write_text(json.dumps(manifest,indent=2)+'\n')

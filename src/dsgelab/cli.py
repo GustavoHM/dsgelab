@@ -7,14 +7,14 @@ import sys
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="dsgekit", description=__doc__)
+    parser = argparse.ArgumentParser(prog="dsgelab", description=__doc__)
     parser.add_argument("--example", default="rbc", choices=("rbc", "nk"),
                         help="which bundled example to solve")
     parser.add_argument("--periods", type=int, default=12, help="impulse-response length")
     args = parser.parse_args(argv)
 
-    import dsgekit as dk
-    from dsgekit.examples import nk, rbc
+    import dsgelab as dk
+    from dsgelab.examples import nk, rbc
 
     build = {"rbc": rbc.build, "nk": nk.build}[args.example]
     model, params, guess = build()

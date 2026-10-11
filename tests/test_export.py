@@ -3,11 +3,11 @@
 import numpy as np
 import pytest
 
-import dsgekit as dk
-from dsgekit.examples import rbc
+import dsgelab as dk
+from dsgelab.examples import rbc
 
 pytest.importorskip("sympy")
-from dsgekit.export import ExportError, to_dynare, to_macromodelling  # noqa: E402
+from dsgelab.export import ExportError, to_dynare, to_macromodelling  # noqa: E402
 
 
 def test_modelo_declarado_por_funcao_e_recusado():
