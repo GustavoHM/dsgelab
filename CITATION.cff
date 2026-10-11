@@ -5,8 +5,8 @@ title: "dsgekit: a general toolkit for solving DSGE models in Python"
 abstract: >-
   Steady state, Klein/QZ first-order solution, second- and third-order perturbation, nonlinear perfect-foresight transitions, calibration on targets, and export to Dynare and MacroModelling.jl. Validated against Dynare and MacroModelling.jl.
 authors:
-  - family-names: "Hoffmann Moreira"
-    given-names: "Gustavo"
+  - family-names: "Moreira"
+    given-names: "Gustavo Hoffmann"
     email: "gustavo@gakusai.net"
     # orcid: "https://orcid.org/0000-0000-0000-0000"   # preencha
 version: "0.2.0"

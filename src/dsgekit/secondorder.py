@@ -87,6 +87,64 @@ class SecondOrderSolution:
             out = out + self.Q @ eps
         return out
 
+    def irf(self, name: str, size: float = 0.01, periods: int = 40, *,
+            n_draws: int = 0, seed: int = 0, state=None, percent: bool = False) -> dict:
+        """Generalised impulse response of the pruned second-order rule.
+
+        The path with the innovation ``size`` in period 0, minus the path with
+        that innovation set to zero, from the same state and with no further
+        shocks. ``state`` is a deviation vector of the predetermined variables.
+        Absent, the steady state is used when ``n_draws`` is 0, and otherwise
+        the difference is averaged over ``n_draws`` states drawn from the
+        pruned ergodic distribution. A linear model gives the first-order
+        impulse from every state. A curved rule does not: the response depends
+        on the state it arrives in, and a positive shock is not the mirror of
+        a negative one.
+        """
+        nk = self.P.shape[0]
+        if state is not None:
+            starts = [np.asarray(state, dtype=float)]
+        elif n_draws <= 0:
+            starts = [np.zeros(nk)]
+        else:
+            drawn = self.simulate(periods=n_draws, seed=seed, burn=50, pruning=True)
+            starts = [np.array([drawn[n][i] for n in self.model.states])
+                      for i in range(n_draws)]
+        acc = None
+        for k0 in starts:
+            shocked = self._conditional_path(k0, name, size, periods)
+            base = self._conditional_path(k0, name, 0.0, periods)
+            diff = {n: shocked[n] - base[n] for n in shocked}
+            if acc is None:
+                acc = diff
+            else:
+                for n in acc:
+                    acc[n] = acc[n] + diff[n]
+        out = {n: v / len(starts) for n, v in acc.items()}
+        if percent:
+            out = {n: v * 100.0 for n, v in out.items()}
+        return out
+
+    def _conditional_path(self, k0, shock, size, periods):
+        nk = self.P.shape[0]
+        k = np.zeros((periods, nk))
+        u = np.zeros((periods, self.F.shape[0]))
+        k[0] = np.asarray(k0, dtype=float)
+        eps = np.zeros(self.model.n_shocks)
+        if size != 0.0:
+            eps[self.model.shock_position(shock)] = size
+        u[0] = self.jumps(k[0])
+        if periods > 1:
+            k[1] = self.next_states(k[0], eps)
+        for t in range(1, periods - 1):
+            u[t] = self.jumps(k[t])
+            k[t + 1] = self.next_states(k[t], None)
+        if periods > 1:
+            u[-1] = self.jumps(k[-1])
+        paths = {n: k[:, i] for i, n in enumerate(self.model.states)}
+        paths.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
+        return paths
+
     # -- simulation ------------------------------------------------------
     def simulate(self, periods: int = 1000, cov=None, *, seed: int | None = None,
                  burn: int = 200, pruning: bool = True, levels: bool = False) -> dict:

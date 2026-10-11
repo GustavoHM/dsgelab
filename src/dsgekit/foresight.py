@@ -71,6 +71,24 @@ class TransitionPath:
         return out or {}
 
 
+def _shock_path(shocks, T: int, n_shocks: int) -> np.ndarray:
+    """One innovation vector per transition, shape ``(T, n_shocks)``."""
+    if shocks is None:
+        return np.zeros((T, n_shocks))
+    arr = np.asarray(shocks, dtype=float)
+    if arr.ndim == 1:
+        if n_shocks != 1:
+            raise ValueError(f"shock path is 1-d but the model has {n_shocks} shocks")
+        arr = arr.reshape(-1, 1)
+    if arr.shape[0] == T + 1:
+        arr = arr[:T]
+    if arr.shape != (T, n_shocks):
+        raise ValueError(
+            f"shocks must have shape ({T}, {n_shocks}) or ({T + 1}, {n_shocks}), "
+            f"got {arr.shape}. Entry t is the innovation linking date t to t+1.")
+    return arr
+
+
 def path_of(value, periods: int) -> list:
     """Normalise a constant, a sequence or a callable into a per-period list."""
     if callable(value):
@@ -85,8 +103,8 @@ def path_of(value, periods: int) -> list:
 
 def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *,
                       params, T: int = 120, ctx=None, initial_states=None,
-                      maxiter: int = 50, tol: float = 1e-10, damping: float = 1.0,
-                      jacobian: str = "forward", h: float = 1e-7,
+                      shocks=None, maxiter: int = 50, tol: float = 1e-10,
+                      damping: float = 1.0, jacobian: str = "forward", h: float = 1e-7,
                       guess: np.ndarray | None = None,
                       raise_on_fail: bool = True) -> TransitionPath:
     """Solve the deterministic transition from ``start`` to ``terminal``.
@@ -109,13 +127,17 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         Difference scheme for the Newton Jacobian. Forward halves the cost and
         does not affect the accuracy of the converged path, which is governed by
         ``tol``; central helps when the residuals are noisy.
+    shocks : array, optional
+        Innovations dated with the transition they enter. Shape ``(T, n_shocks)``
+        or ``(T+1, n_shocks)``; entry ``t`` is ``eps`` in the residual that links
+        date ``t`` to date ``t+1``. Absent, every innovation is zero.
     """
     n = model.n_vars
     nk = model.n_states
     nu = model.n_jumps
     params_path = path_of(params, T + 1)
     ctx_path = path_of(ctx, T + 1)
-    zero = np.zeros(model.n_shocks)
+    shock_path = _shock_path(shocks, T, model.n_shocks)
 
     y0_states = (np.asarray(initial_states, dtype=float) if initial_states is not None
                  else start.x[:nk].copy())
@@ -145,7 +167,7 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
     def residual(Yn):
         r = np.empty(T * n + nu)
         for t in range(T):
-            r[t * n:(t + 1) * n] = model.residuals(Yn[t + 1], Yn[t], zero,
+            r[t * n:(t + 1) * n] = model.residuals(Yn[t + 1], Yn[t], shock_path[t],
                                                    params_path[t], ctx_path[t])
         r[T * n:] = Yn[T, nk:] - yT[nk:]
         return r
@@ -164,22 +186,23 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         for t in range(T):
             yt, ytp = Yn[t], Yn[t + 1]
             pt, ct = params_path[t], ctx_path[t]
-            base = model.residuals(ytp, yt, zero, pt, ct)
+            et = shock_path[t]
+            base = model.residuals(ytp, yt, et, pt, ct)
             for j in range(n):
                 if jacobian == "central":
                     a = ytp.copy(); a[j] += h
                     b = ytp.copy(); b[j] -= h
-                    col_next = (model.residuals(a, yt, zero, pt, ct)
-                                - model.residuals(b, yt, zero, pt, ct)) / (2 * h)
+                    col_next = (model.residuals(a, yt, et, pt, ct)
+                                - model.residuals(b, yt, et, pt, ct)) / (2 * h)
                     a = yt.copy(); a[j] += h
                     b = yt.copy(); b[j] -= h
-                    col_now = (model.residuals(ytp, a, zero, pt, ct)
-                               - model.residuals(ytp, b, zero, pt, ct)) / (2 * h)
+                    col_now = (model.residuals(ytp, a, et, pt, ct)
+                               - model.residuals(ytp, b, et, pt, ct)) / (2 * h)
                 else:
                     a = ytp.copy(); a[j] += h
-                    col_next = (model.residuals(a, yt, zero, pt, ct) - base) / h
+                    col_next = (model.residuals(a, yt, et, pt, ct) - base) / h
                     a = yt.copy(); a[j] += h
-                    col_now = (model.residuals(ytp, a, zero, pt, ct) - base) / h
+                    col_now = (model.residuals(ytp, a, et, pt, ct) - base) / h
                 J[t * n:(t + 1) * n, nu + t * n + j] = col_next.reshape(-1, 1)
                 if t == 0:
                     if j >= nk:                    # only the jumps are unknown at t=0
