@@ -112,12 +112,19 @@ def klein(A, B, n_k: int, C=None, tol: float = 1e-9,
     # Stability is governed by the generalised eigenvalues of the pencil (B, A);
     # order the ones inside the unit circle into the leading block.
     if qz_criterium is None:
-        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort="iuc", output="complex")
-        cut = 1.0 - tol
+        sort, cut = "iuc", 1.0 - tol
     else:
         cut = float(qz_criterium)
-        S, T, alpha, beta, Qz, Z = ordqz(
-            B, A, sort=lambda a, b: np.abs(a) < cut * np.abs(b), output="complex")
+        sort = lambda a, b: np.abs(a) < cut * np.abs(b)   # noqa: E731
+    # The REAL ordered QZ is the default: a complex pair stays in a 2x2 block, which is
+    # never read entry by entry -- only T11, S11 and Z11 are inverted. In SciPy 1.18's
+    # LAPACK the complex reordering loses up to 1e-8 on a pencil with a zero root and
+    # refuses outright one with several infinite roots, while the real one is exact on
+    # both. The complex reordering remains as the fallback.
+    try:
+        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort=sort, output="real")
+    except ValueError:
+        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort=sort, output="complex")
     with np.errstate(divide="ignore", invalid="ignore"):
         lam = np.abs(alpha) / np.where(np.abs(beta) < tol, tol, np.abs(beta))
     n_stable = int(np.sum(lam < cut))

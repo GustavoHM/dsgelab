@@ -6,10 +6,10 @@ Syntax
 ------
 ``x`` is the variable at ``t``; ``x(+1)`` is the same variable at ``t+1``; shock
 names stand for the innovation dated ``t+1``. Equations may be written with an
-``=`` or as an expression that must vanish. A lag is expressed the way it is in
-any state-space model -- by declaring the lagged value as a state -- rather than
-by a ``(-1)`` operator, so that what is predetermined is stated once, in the
-variable lists, and cannot silently disagree with the equations.
+``=`` or as an expression that must vanish. :func:`from_equations` also accepts
+lags ``x(-k)`` and leads ``x(+k)``, carried by auxiliary variables it lists in
+``model.auxiliary``; what is predetermined is still stated once, in the variable
+lists.
 
 What this buys beyond convenience: the residual, its Jacobian and its Hessian
 are all differentiated EXACTLY. At second order that is not a nicety. A second
@@ -207,6 +207,61 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
     return model
 
 
+_DATED = re.compile(r"\b([A-Za-z_]\w*)\s*\(\s*([+-]?)\s*(\d+)\s*\)")
+
+
+def _expand_dating(equations, states, jumps, shocks):
+    """Rewrite lags ``x(-k)`` and leads ``x(+k)``, ``k >= 2``, through auxiliaries.
+
+    ``x(-k)`` becomes the state ``LAGk_x`` with ``LAG1_x(+1) = x`` and
+    ``LAGj_x(+1) = LAG{j-1}_x``; ``x(+k)`` becomes ``LEAD{k-1}_x(+1)`` with
+    ``LEAD1_x = x(+1)`` and ``LEADj_x = LEAD{j-1}_x(+1)``. Returns the new
+    equations, states, jumps and ``{auxiliary: (kind, of)}``.
+    """
+    variables = set(states) | set(jumps)
+    max_lag, max_lead = {}, {}
+
+    def sub(m):
+        name, sign, k = m.group(1), m.group(2), int(m.group(3))
+        if name in shocks:
+            if sign == "-" or k > 1:
+                raise SymbolicError(f"{m.group(0)}: an innovation is dated t+1 and takes no "
+                                    f"lead or lag; carry it in a state")
+            return m.group(0)
+        if name not in variables:
+            return m.group(0)
+        if sign == "-":
+            if k == 0:
+                return name
+            max_lag[name] = max(max_lag.get(name, 0), k)
+            return f"LAG{k}_{name}"
+        if k <= 1:
+            return name if k == 0 else f"{name}(+1)"
+        max_lead[name] = max(max_lead.get(name, 0), k - 1)
+        return f"LEAD{k - 1}_{name}(+1)"
+
+    out = [_DATED.sub(sub, str(e)) for e in equations]
+    states, jumps = list(states), list(jumps)
+    aux = {}
+    for v in states + [j for j in jumps]:
+        for k in range(1, max_lag.get(v, 0) + 1):
+            n = f"LAG{k}_{v}"
+            prev = v if k == 1 else f"LAG{k - 1}_{v}"
+            states.append(n)
+            aux[n] = ("lag", v)
+            out.append(f"{n}(+1) = {prev}")
+        for k in range(1, max_lead.get(v, 0) + 1):
+            n = f"LEAD{k}_{v}"
+            prev = v if k == 1 else f"LEAD{k - 1}_{v}"
+            jumps.append(n)
+            aux[n] = ("lead", v)
+            out.append(f"{n} = {prev}(+1)")
+    clash = [a for a in aux if a in variables]
+    if clash:
+        raise SymbolicError(f"auxiliary names collide with declared variables: {clash}")
+    return out, states, jumps, aux
+
+
 def from_equations(equations: Sequence[str], *, states: Sequence[str],
                    jumps: Sequence[str], shocks: Sequence[str],
                    parameters: Sequence[str], name: str = "model",
@@ -216,7 +271,13 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
     Parameters
     ----------
     equations : sequence of str
-        One per variable. ``"lhs = rhs"`` is read as ``lhs - rhs``.
+        One per declared variable. ``"lhs = rhs"`` is read as ``lhs - rhs``.
+        ``x(+1)`` is the next period. A lag ``x(-k)`` or a lead ``x(+k)`` with
+        ``k >= 2`` is accepted and carried by an auxiliary variable --
+        ``LAGk_x``, a state, or ``LEADk_x``, a jump -- each with its own
+        equation, listed in ``model.auxiliary``. What is predetermined is still
+        declared in one place: the lag of a jump is a new state with its own
+        transition, never a reclassification of the jump.
     states, jumps, shocks, parameters : sequence of str
         The declared names. Anything appearing in an equation and not declared
         raises rather than becoming a free symbol -- a typo must not quietly
@@ -233,8 +294,11 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         raise SymbolicError(
             f"{len(equations)} equations for {n} variables "
             f"({len(states)} states + {len(jumps)} jumps)")
-    parsed = parse_system(equations, variables=states + jumps, shocks=shocks,
+    eqs, states_x, jumps_x, aux = _expand_dating(equations, states, jumps, list(shocks))
+    parsed = parse_system(eqs, variables=states_x + jumps_x, shocks=shocks,
                           parameters=parameters)
-    return model_from_expressions(parsed["expressions"], states=states, jumps=jumps,
-                                  shocks=shocks, parameters=parameters, name=name,
-                                  derivatives=derivatives, source_equations=equations)
+    model = model_from_expressions(parsed["expressions"], states=states_x, jumps=jumps_x,
+                                   shocks=shocks, parameters=parameters, name=name,
+                                   derivatives=derivatives, source_equations=eqs)
+    model.auxiliary = aux
+    return model

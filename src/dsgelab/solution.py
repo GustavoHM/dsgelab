@@ -21,6 +21,40 @@ from .steady import SteadyState
 __all__ = ["FirstOrderSolution", "shock_covariance"]
 
 
+def _state_variance(P: np.ndarray, QSQ: np.ndarray, unit: float = 1 - 1e-9):
+    """Unconditional variance of ``k' = P k + noise``; with unit roots, of its stable part.
+
+    Returns ``(V, U1)``: ``U1`` spans the unit-root directions (None when every
+    root is stable). With the unit roots first in a real Schur form the stable
+    coordinates evolve on their own, so their variance is exact; whatever loads
+    on ``U1`` has none.
+    """
+    from scipy.linalg import schur
+    n = P.shape[0]
+    if n == 0:
+        return np.zeros((0, 0)), None
+    if np.max(np.abs(np.linalg.eigvals(P))) < unit:
+        V = solve_discrete_lyapunov(P, QSQ)
+        return 0.5 * (V + V.T), None
+    S, U, nu = schur(P, output="real", sort=lambda re, im: np.hypot(re, im) >= unit)
+    Ub = U.T @ QSQ @ U
+    W = np.zeros((n, n))
+    if nu < n:
+        W[nu:, nu:] = solve_discrete_lyapunov(S[nu:, nu:], Ub[nu:, nu:])
+    V = U @ W @ U.T
+    return 0.5 * (V + V.T), U[:, :nu]
+
+
+def _mask_nonstationary(V: np.ndarray, J: np.ndarray, U1, tol: float = 1e-10) -> np.ndarray:
+    if U1 is None:
+        return V
+    loads = np.max(np.abs(J @ U1), axis=1) > tol
+    V = V.copy()
+    V[loads, :] = np.nan
+    V[:, loads] = np.nan
+    return V
+
+
 def shock_covariance(shocks: Sequence[str], cov) -> np.ndarray:
     """Coerce a covariance given as a mapping of standard deviations, a vector or a matrix."""
     ne = len(shocks)
@@ -304,24 +338,33 @@ class FirstOrderSolution:
 
     # -- second moments --------------------------------------------------
     def covariance(self, cov=None) -> np.ndarray:
-        """Unconditional covariance of ``x_t = [k_t; u_t]`` in deviations."""
+        """Unconditional covariance of ``x_t = [k_t; u_t]`` in deviations.
+
+        With a unit root (a solution found with ``qz_criterium``), the variables
+        that load on it have no unconditional variance and their rows are
+        ``nan``; the others are computed exactly, as Dynare does.
+        """
         Sigma = shock_covariance(self.model.shocks, cov)
         if self.Q is None:
             raise ValueError("no shock loading: moments need a C matrix")
-        Vk = solve_discrete_lyapunov(self.P, self.Q @ Sigma @ self.Q.T)
         J = self._J()
-        return J @ Vk @ J.T
+        Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
+        return _mask_nonstationary(J @ Vk @ J.T, J, U1)
 
     def moments(self, cov=None, lags: int = 1) -> dict:
-        """Standard deviations, correlations and autocorrelations of every variable."""
+        """Standard deviations, correlations and autocorrelations of every variable.
+
+        Variables that load on a unit root get ``nan``.
+        """
         Sigma = shock_covariance(self.model.shocks, cov)
-        Vk = solve_discrete_lyapunov(self.P, self.Q @ Sigma @ self.Q.T)
+        Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
         J = self._J()
-        V = J @ Vk @ J.T
+        V = _mask_nonstationary(J @ Vk @ J.T, J, U1)
         sd = np.sqrt(np.maximum(np.diag(V), 0.0))
         denom = np.outer(sd, sd)
         with np.errstate(divide="ignore", invalid="ignore"):
             corr = np.where(denom > 0, V / np.where(denom == 0, 1.0, denom), 0.0)
+        corr[np.isnan(denom)] = np.nan             # a variable with a unit root
         names = self.model.names
         auto = {}
         Pj = np.eye(self.klein.n_k)
@@ -330,6 +373,7 @@ class FirstOrderSolution:
             Vj = J @ Pj @ Vk @ J.T
             with np.errstate(divide="ignore", invalid="ignore"):
                 auto[j] = np.where(sd > 0, np.diag(Vj) / np.where(sd == 0, 1.0, sd ** 2), 0.0)
+            auto[j][np.isnan(sd)] = np.nan
         return dict(names=names, std=sd, corr=corr, cov=V,
                     autocorr={j: dict(zip(names, v)) for j, v in auto.items()},
                     std_by_name=dict(zip(names, sd)))
@@ -349,7 +393,8 @@ class FirstOrderSolution:
             Sm[m, m] = Sigma[m, m]
             QSQ = self.Q @ Sm @ self.Q.T
             if horizon is None:
-                Vm = solve_discrete_lyapunov(self.P, QSQ)
+                Vm, U1 = _state_variance(self.P, QSQ)
+                Vm = Vm if U1 is None else Vm + np.nan * (np.abs(U1) @ np.abs(U1).T > 0)
             else:
                 Vm = np.zeros_like(QSQ)
                 Ps = np.eye(self.klein.n_k)

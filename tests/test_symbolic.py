@@ -45,11 +45,27 @@ def test_undeclared_name_is_rejected():
                        parameters=["rho"])
 
 
-def test_lag_operator_is_rejected_with_an_explanation():
-    with pytest.raises(SymbolicError, match="lag"):
-        from_equations(["k(+1) = rho*k(-1)", "a(+1) = rho*a + eps_a"],
-                       states=["k", "a"], jumps=[], shocks=["eps_a"],
-                       parameters=["rho"])
+def test_lags_and_leads_are_carried_by_listed_auxiliaries():
+    import numpy as np
+    import dsgelab as dk
+    m = from_equations(["a(+1) = 1.2*a - 0.35*a(-1) + eps_a", "y = a + 0.5*a(-2) + 0.25*y(+2)"],
+                       states=["a"], jumps=["y"], shocks=["eps_a"], parameters=[])
+    assert m.states == ["a", "LAG1_a", "LAG2_a"] and m.jumps == ["y", "LEAD1_y"]
+    assert m.auxiliary == {"LAG1_a": ("lag", "a"), "LAG2_a": ("lag", "a"),
+                           "LEAD1_y": ("lead", "y")}
+    sol = dk.solve(m, {}, guess={v: 0.0 for v in m.names})
+    assert np.allclose(sol.P, [[1.2, -0.35, 0], [1, 0, 0], [0, 1, 0]], atol=1e-14)
+    # y_t = sum_j 0.25^j (a_{t+2j} + 0.5 a_{t+2j-2}), from the AR(2) path of a
+    a = sol.irf("eps_a", periods=80, percent=False)["a"]
+    b = a + 0.5 * np.r_[0.0, 0.0, a[:-2]]
+    y = [sum(0.25 ** j * b[t + 2 * j] for j in range((80 - t) // 2)) for t in range(20)]
+    assert np.allclose(sol.irf("eps_a", periods=20, percent=False)["y"], y, atol=1e-13)
+
+
+def test_a_lagged_innovation_is_refused_with_an_explanation():
+    with pytest.raises(SymbolicError, match="innovation"):
+        from_equations(["k(+1) = rho*k + eps_a(-1)", "a(+1) = rho*a + eps_a"],
+                       states=["k", "a"], jumps=[], shocks=["eps_a"], parameters=["rho"])
 
 
 def test_equation_count_is_checked():
