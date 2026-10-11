@@ -160,3 +160,67 @@ Os parâmetros que o `.mod` define são lidos por `from_mod` e conferidos contra
 Dynare a conta como estável (`qz_criterium = 1 + 1e-6`); o `dsgelab`, por omissão, não, e recusa
 com `BlanchardKahnError`. `solve(..., qz_criterium=1 + 1e-6)` reproduz a convenção do Dynare, e é
 o que `compare_import.py` usa.
+
+## Discrição, regras simples ótimas e bem-estar
+
+```bash
+bash fetch.sh
+bash run_policy.sh         # osr, discretionary_policy e evaluate_planner_objective no Dynare
+python compare_policy.py   # --sem-dynare pula a avaliação da perda do Dynare no ótimo do dsgelab
+```
+
+```
+OSR — osr_example.mod
+  perda do dsgelab no ótimo do Dynare   0.4268335923233261
+  perda reportada pelo Dynare           0.4268335923233251   desvio relativo 2.5e-15
+  ótimo do dsgelab                      0.4266626273124758   menor ou igual que o do Dynare
+     gammax0     dsgelab     0.424427   Dynare     0.445744
+     gammac0     dsgelab     1.563685   Dynare     1.686970
+     gamma_y_    dsgelab    16.666667   Dynare    16.660559
+     gamma_inf_  dsgelab     3.977354   Dynare     3.563333
+  perda do PRÓPRIO Dynare no ótimo do dsgelab 0.4266626273124780   desvio 5.1e-15
+
+Discrição — dennis_1.mod
+  IRFs (5 variáveis x 3 choques x 40)   desvio relativo máx 4.3e-08
+  bem-estar incondicional  dsgelab 100.2259173048   Dynare 100.2259172521   5.3e-10
+  bem-estar condicional    dsgelab 99.8889224747   Dynare 99.8889224138   6.1e-10
+     (com a primeira inovação da simulação do Dynare, que é o que ele usa; sem choque: 99.0953548618)
+  iterações de Dennis: 18
+
+Ramsey lido do .mod — nk_ramsey_model.mod
+  9 séries comparadas, multiplicadores incluídos (mesma numeração do Dynare)
+  estado estacionário  5.9e-12     IRFs de 1ª ordem  2.6e-14
+  bem-estar  incondicional -25.213284815613  Dynare -25.213284815578
+             condicional   -25.213284815613  Dynare -25.213284815580
+             multiplicadores zerados -25.213116382888  Dynare -25.213116382855   desvio relativo máx 1.4e-12
+
+Bem-estar com capital — rbc_labortax.mod, ordem 2
+  incondicional -70.761476342807  Dynare -70.761476342831
+  condicional   -70.778245895835  Dynare -70.778245895855   desvio relativo máx 3.4e-13
+
+OSR: OK  discrição: OK  Ramsey do .mod: OK  bem-estar com capital: OK
+```
+
+Os três arquivos do Dynare são lidos por `from_mod`, sem tradução: `planner_objective`,
+`ramsey_model(...)`, `discretionary_policy(instruments=..., planner_discount=...)`, `osr_params`,
+`optim_weights` e `osr_params_bounds` viram `ModFile.planner`, `osr_params`, `optim_weights` e
+`osr_bounds`.
+
+**O ótimo do `osr`.** A função de perda do `dsgelab`, avaliada no ótimo que o Dynare reporta, dá o
+valor do Dynare a 2,5e-15. O ótimo do `dsgelab` tem perda **menor**, 0,4266626 contra 0,4268336, e a
+mesma de três otimizadores (BFGS, Nelder–Mead, Powell) a partir do ponto inicial do `.mod` e do
+ótimo do Dynare. O próprio Dynare, avaliado no ponto do `dsgelab` (`+osr/objective`), dá a mesma
+perda a 5e-15. É o `csminwel` do Dynare que para antes, numa direção quase plana. No ótimo,
+`gamma_y_ = 16,667 = 1/|σ|`: a regra neutraliza por inteiro o choque de demanda, que entra na IS
+com coeficiente `σ = −0,06` sobre a taxa de juros. A terceira chamada de `osr` no arquivo usa
+`opt_algo=1`, que no Octave exige o pacote `optim`, e `run_policy.sh` a remove da cópia.
+
+**O bem-estar condicional da discrição.** O `evaluate_planner_objective` do Dynare, fora do Ramsey,
+toma como inovação do primeiro período `oo_.exo_simul(1,:)` quando uma simulação foi feita — e o
+`dennis_1.mod` simula 200 períodos. O número condicional do Dynare depende, portanto, de um sorteio.
+`run_policy.sh` exporta esse sorteio, e `DiscretionSolution.welfare(shock=...)` o reproduz; sem
+choque inicial o valor é outro, e é o que `welfare()` devolve por omissão.
+
+**O piso da discrição.** As IRFs batem a 4e-08 porque o Dynare para a iteração de Dennis em
+`sqrt(eps)`. O `dsgelab` itera até 1e-12 por omissão, e contra a forma fechada de Galí (2015, cap.
+5) o erro fica abaixo de 1e-12 (`tests/test_policy.py`).

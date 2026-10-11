@@ -22,3 +22,4 @@ validation/heutel/out/
 *.log
 validation/out_import/
 validation/work/
+validation/out_policy/

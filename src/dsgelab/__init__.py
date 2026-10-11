@@ -4,7 +4,7 @@ A model is declared once, as a list of state names, a list of jump names, a list
 of shock names and one function returning the equilibrium residuals. Everything
 else -- steady state, first-order solution, impulse responses, moments,
 second-order risk corrections, nonlinear perfect-foresight transitions,
-calibration on targets, the Ramsey planner's policy -- is computed from that
+calibration on targets, optimal policy and welfare -- is computed from that
 single declaration, so the stochastic block and the deterministic transition
 cannot drift apart into two models that merely look alike.
 
@@ -34,7 +34,10 @@ from .linearize import (Coordinates, LinearSystem, first_order_system, second_de
                         third_derivatives)
 from .model import Model, VarView, get_param, set_params
 from .dynare import DynareImportError, ModFile, from_mod
-from .optimal import RamseyError, ramsey_model, ramsey_multipliers, ramsey_steady_state
+from .optimal import (DiscretionError, DiscretionSolution, OSRError, OSRResult, PrivateBlock,
+                      RamseyError, discretionary_policy, osr, ramsey_model, ramsey_multipliers,
+                      ramsey_steady_state)
+from .welfare import Welfare, WelfareError, consumption_equivalent, welfare, welfare_model
 from .secondorder import SecondOrderSolution, solve_second_order
 from .thirdorder import ThirdOrderSolution, solve_third_order
 from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
@@ -60,6 +63,9 @@ __all__ = [
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",
+    "discretionary_policy", "DiscretionSolution", "DiscretionError", "PrivateBlock",
+    "osr", "OSRResult", "OSRError",
+    "welfare", "welfare_model", "Welfare", "WelfareError", "consumption_equivalent",
     "from_mod", "ModFile", "DynareImportError",
     "__version__",
     "from_equations", "optimality_conditions", "to_dynare", "to_macromodelling",

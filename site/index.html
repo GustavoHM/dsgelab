@@ -265,6 +265,34 @@ abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() < 1e-12   # regr
   perspectiva é a atemporal, a mesma do <code>ramsey_model</code> do Dynare. No novo-keynesiano a
   resposta sai exatamente na regra de metas de Galí, <code>π_t = −(λ/κ)(x_t − x_{t−1})</code>.</p>
 
+  <h3>12. Discrição, regra simples ótima e bem-estar</h3>
+<pre><code>nk_eq = ["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",
+         "pi = beta*pi(+1) + kappa*x + u",
+         "u(+1) = rho*u + e"]
+nk_kw = dict(states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
+             parameters=["beta", "sigma", "kappa", "lam", "rho"], instruments=["i"],
+             objective="-(pi**2 + lam*x**2)/2", discount="beta")
+
+disc = dk.discretionary_policy(nk_eq, params=pn, cov={"e": 0.01}, **nk_kw)
+w_disc = disc.welfare()["unconditional"]                       # sem compromisso
+w_comp = dk.welfare(nk, pn, steady=ss_nk, cov={"e": 0.01}).unconditional
+w_disc < w_comp < 0                                            # o compromisso vale algo
+
+regra = dk.from_equations(["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",
+                           "pi = beta*pi(+1) + kappa*x + u",
+                           "i = phi_pi*pi + phi_u*u",           # a regra simples
+                           "u(+1) = rho*u + e"],
+                          states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
+                          parameters=["beta", "sigma", "kappa", "rho", "phi_pi", "phi_u"])
+ot = dk.osr(regra, dict(pn, phi_pi=1.5, phi_u=0.0), rule_params=["phi_pi", "phi_u"],
+            weights={"pi": 1.0, "x": 0.25}, cov={"e": 0.01},
+            guess=dict(u=0, x=0, pi=0, i=0))
+ot.loss < ot.initial_loss</code></pre>
+  <p>A discrição segue o algoritmo de Dennis (2007), o mesmo do <code>discretionary_policy</code> do
+  Dynare, e reproduz no novo-keynesiano a solução fechada de Galí. A regra simples minimiza a perda
+  quadrática nos momentos incondicionais, como o <code>osr</code> do Dynare. O bem-estar de
+  segunda ordem, condicional e incondicional, é o do <code>evaluate_planner_objective</code>.</p>
+
   <h3>7. Verificações independentes</h3>
 <pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
 
@@ -314,7 +342,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
 
   <h3>Contra respostas conhecidas no papel</h3>
-  <p>88 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <p>97 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
   <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
   um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
   <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
@@ -374,6 +402,23 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
           <td class="num">2,7e-12</td><td class="num">2,1e-14</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
+
+  <h3>Discrição, regras simples e bem-estar contra o Dynare</h3>
+  <p>Os arquivos de teste do próprio Dynare, lidos por <code>from_mod</code> sem alteração.</p>
+  <table>
+    <thead><tr><th>Teste</th><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>osr_example.mod</td><td>perda no ótimo do Dynare</td><td class="num">2,5e-15</td><td class="ok">OK*</td></tr>
+      <tr><td>dennis_1.mod</td><td>IRFs sob discrição; bem-estar</td><td class="num">4,3e-08; 6,1e-10</td><td class="ok">OK</td></tr>
+      <tr><td>nk_ramsey_model.mod</td><td>Ramsey lido do .mod; bem-estar de 2ª ordem</td><td class="num">2,6e-14; 1,4e-12</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_labortax.mod</td><td>bem-estar de 2ª ordem com capital</td><td class="num">3,4e-13</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* O ótimo do dsgelab tem perda <em>menor</em> que a do
+  Dynare: 0,4266626 contra 0,4268336. O próprio Dynare, avaliado no ponto do dsgelab, dá a mesma perda
+  a 5e-15: é o otimizador do Dynare que para antes, numa superfície plana. No ótimo, a regra
+  neutraliza o choque de demanda, <code>gamma_y_ = 1/|σ| = 16,667</code>. O piso de 4e-08 nas IRFs
+  da discrição é a tolerância do Dynare, <code>sqrt(eps)</code>.</p>
 
   <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de

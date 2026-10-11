@@ -12,6 +12,20 @@ before 1.0, a minor version may add to the API and a patch version only fixes.
 
 ### Added
 
+- `discretionary_policy` and `DiscretionSolution`: optimal policy under discretion
+  (Dennis, 2007, as Dynare implements it), with IRFs, moments and welfare. Validated
+  against Galí's closed form and Dynare's `tests/discretionary_policy/dennis_1.mod`.
+- `osr` and `OSRResult`: optimal simple rules on a quadratic loss in unconditional
+  moments, Dynare's `optim_weights` convention. On Dynare's `osr_example.mod` the loss
+  matches Dynare's at its optimum (2.5e-15) and the optimiser finds a lower one, which
+  Dynare's own objective confirms.
+- `welfare`, `welfare_model`, `consumption_equivalent`: second-order welfare,
+  conditional and unconditional, and for Ramsey models with the lagged multipliers at
+  zero. Matches Dynare's `evaluate_planner_objective` to 1e-12.
+- `from_mod` reads `planner_objective`, `ramsey_model`, `discretionary_policy`,
+  `osr_params`, `optim_weights` and `osr_params_bounds`; `ramsey_model` and
+  `discretionary_policy` accept the resulting `ModFile`. `PrivateBlock` holds a
+  private sector with instruments left open.
 - `ramsey_model`, `ramsey_steady_state`, `ramsey_multipliers`: the Ramsey planner under
   commitment, timeless perspective, derived symbolically from the private-sector
   equations and a period objective. Validated against Galí's targeting rule and closed

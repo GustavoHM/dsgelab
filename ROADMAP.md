@@ -57,23 +57,25 @@ conferência rebaixaria o pacote inteiro.
   Galí (2015, cap. 5) e contra o `ramsey_model` do Dynare em três modelos, inclusive o
   `tests/optimal_policy/nk_ramsey_model.mod` do Dynare, sem alteração: estado estacionário a 5e-11,
   IRFs das variáveis e dos multiplicadores a 5e-13.
-- [ ] **Regras simples ótimas** (OSR): perda quadrática nos momentos incondicionais, minimizada sobre
-  os coeficientes de uma regra, com aviso quando o ótimo cai na fronteira. Validação contra o `osr`
-  do Dynare (`tests/optimal_policy/OSR/osr_example.mod`, já baixado por `fetch.sh`).
-- [ ] **Política discricionária** em aproximação linear-quadrática. Validação contra o
-  `discretionary_policy` do Dynare (`tests/discretionary_policy/dennis_1.mod`, já baixado).
-- [ ] **Bem-estar**: a função-objetivo declarada viaja com o modelo; bem-estar de segunda ordem,
-  condicional e incondicional; variação equivalente de consumo. A transformação pede a variável que
-  desfaz o buraco de bem-estar, sem assumir log nem uma variável chamada consumo. Validação contra
-  o `evaluate_planner_objective` do Dynare, que o `nk_ramsey_model.mod` já chama.
+- [x] **Regras simples ótimas** (`osr`): perda quadrática nos momentos incondicionais, com aviso
+  quando o ótimo cai na fronteira. No `osr_example.mod` do Dynare a perda bate com a do Dynare a
+  2,5e-15 no ótimo dele, e o `dsgelab` acha um ótimo de perda menor, que o próprio Dynare confirma.
+  *Falta o `osr` com `planner_objective` (perda = menos o bem-estar incondicional).*
+- [x] **Política discricionária** (`discretionary_policy`), linear-quadrática, pelo algoritmo de
+  Dennis. Validada contra a forma fechada de Galí e contra o `dennis_1.mod` do Dynare.
+- [x] **Bem-estar** (`welfare`, `consumption_equivalent`): a função-objetivo viaja com o modelo;
+  bem-estar de segunda ordem, condicional e incondicional, e, no Ramsey, com os multiplicadores
+  defasados em zero; equivalente proporcional numa variável nomeada, sem assumir log nem consumo.
+  Bate com o `evaluate_planner_objective` do Dynare a 1e-12.
 - [x] **Impulso generalizado de segunda ordem** (`SecondOrderSolution.irf`): simulações podadas com
   e sem o choque, porque a resposta depende do estado em que o choque chega e do seu sinal.
 - [x] **Sequência de inovações na previsão perfeita** (`perfect_foresight(..., shocks=)`).
   *Falta a validação contra o `perfect_foresight_solver` do Dynare.*
 - [ ] **Previsão perfeita com erros de expectativa**: choques que surpreendem no meio da trajetória.
   Validação contra o `perfect_foresight_with_expectation_errors_solver` do Dynare.
-- [ ] **Ramsey a partir do `.mod`**: `from_mod` ler `planner_objective` e `ramsey_model`, de modo que
-  os testes de política ótima do Dynare rodem sem tradução manual.
+- [x] **Ramsey e discrição a partir do `.mod`**: `from_mod` lê `planner_objective`,
+  `ramsey_model`, `discretionary_policy`, `osr_params` e `optim_weights`; os testes de política
+  ótima do Dynare rodam sem tradução manual.
 
 ### 0.3 — estimação, previsão e decomposição
 

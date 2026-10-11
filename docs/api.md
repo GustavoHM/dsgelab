@@ -208,6 +208,9 @@ equation. `predetermined_variables` are re-dated as Dynare does.
 | `cov` | shock covariance in `model.shocks` order |
 | `auxiliary` | every variable the translation added, `name -> (kind, of)` |
 | `linear`, `steady_operators` | `model(linear)`; variables under `steady_state()` |
+| `block` | the private block, a `PrivateBlock`; `model` is `None` when instruments are left without an equation |
+| `planner` | `planner_objective`, `planner_discount`, `instruments` and the command (`"ramsey"` or `"discretion"`) |
+| `osr_params`, `optim_weights`, `osr_bounds` | the `osr` problem, ready for `dk.osr` |
 
 `steady_state(guess=None, params=None, **kwargs)` solves the steady state,
 iterating on `steady_state()` terms and writing their values into `params`.
@@ -228,7 +231,11 @@ A model with a unit root -- a price level, a random-walk technology -- needs
 
 Requires `sympy`. See the module docstring of `dsgelab.optimal` for the derivation.
 
-### `ramsey_model(equations, *, states, jumps, shocks, parameters, instruments, objective, discount, name="ramsey", derivatives="both", multiplier_prefix="MULT_", auxiliary="auto") -> Model`
+### `ramsey_model(equations, *, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, name="ramsey", derivatives="both", multiplier_prefix="MULT_", auxiliary="auto") -> Model`
+
+`equations` may also be a `ModFile` read from a `.mod` with `planner_objective`
+and `ramsey_model(...)`; its objective, discount and instruments are used, and
+the arguments override them. Instruments are optional, as in Dynare.
 
 The Ramsey planner under commitment, timeless perspective. `equations` are the
 private-sector conditions in the syntax of `from_equations`, one fewer per
@@ -272,6 +279,71 @@ m = dk.ramsey_model(
 ss = dk.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), params)
 irf = dk.solve(m, params, steady=ss).irf("e", size=1.0)
 ```
+
+### `discretionary_policy(equations, *, params, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, steady=None, cov=None, tol=1e-12, maxiter=3000, qz_criterium=1+1e-6) -> DiscretionSolution`
+
+Optimal policy without commitment, in the linear-quadratic class, by Dennis's
+(2007) algorithm as Dynare's `discretionary_policy` implements it. The private
+block is stated as for `ramsey_model` -- text, or a `ModFile` whose
+`discretionary_policy` command names the instruments --, and the objective is
+MAXIMISED; a `.mod` file's `planner_objective` is a loss there and is read with
+the sign flipped. The equations must be linear, the objective quadratic with no
+linear term and no cross term between an instrument and the rest; each is
+checked. An equation with an expected jump holds at `t`; a transition, whose
+only next-period terms are states, at `t+1`; a static one at `t`.
+
+`DiscretionSolution`: `y_t = H y_{t-1} + G eps_t` over every private variable,
+in absolute deviations, Dynare dating. `irf(shock, size=1, periods=40,
+levels=False)`, `irf_impulse(vector)`, `covariance(cov)`, `moments(cov)`,
+`welfare(cov, initial=None, shock=None)` -> `{"unconditional", "conditional"}`.
+Dynare's conditional welfare uses the first innovation of its own simulation when
+one was run; `shock=` reproduces it.
+
+### `osr(model, params, *, rule_params, weights, cov=None, guess=None, steady=None, steady_fn=None, bounds=None, qz_criterium=None, method=None, options=None, penalty=1e8) -> OSRResult`
+
+Optimal simple rule: the coefficients `rule_params` that minimise
+`sum_ij W_ij Cov(y_i, y_j)`, the first-order unconditional covariance in levels --
+Dynare's `osr` with `optim_weights`. `weights` is `{"y": 1, ("y", "pi"): 0.1}`
+(a pair adds `w * Cov` ONCE, as Dynare does) or a matrix over `model.names`. The
+steady state is recomputed at each trial by `steady_fn(params)` or from
+`guess`/`steady`. A trial without a determinate solution costs `penalty`. BFGS
+then a Nelder-Mead polish by default; `bounds={name: (lo, hi)}` switches to
+L-BFGS-B and warns when a coefficient sits on a bound.
+
+`OSRResult`: `params` (the optimal coefficients), `all_params`, `loss`,
+`initial_loss`, `success`, `message`, `evaluations`, `solution`.
+
+### `PrivateBlock`
+
+The private sector before a policy closes it: sympy `expressions` in the naming of
+`parse_system`, `states`, `jumps`, `shocks`, `parameters`, `labels`, and the
+optional `instruments`, `objective`, `discount`. `ModFile.block` is one.
+
+---
+
+## Welfare
+
+Requires `sympy`.
+
+### `welfare(model, params, *, steady, cov, objective=None, discount=None, initial=None, name="WELFARE", qz_criterium=None) -> Welfare`
+
+Appends the jump `WELFARE = U + beta * WELFARE(+1)`, solves to second order, and
+returns `unconditional` (the ergodic mean, closed form), `conditional` (the
+second-order rule at `initial`, the steady state by default), `deterministic`
+(`U(steady)/(1-beta)`) and, for a Ramsey model, `conditional_zero_multipliers`
+(lagged multipliers at zero: the planner who commits at `t = 0`). A Ramsey model
+supplies its own objective and discount. These are the numbers of Dynare's
+`evaluate_planner_objective` at `order=2`.
+
+### `welfare_model(model, objective=None, discount=None, *, name="WELFARE") -> Model`
+
+The augmented model, for using the welfare variable in IRFs or simulations.
+
+### `consumption_equivalent(objective, variable, target, reference, *, model, params, steady, cov, discount, bracket=(-0.5, 0.5)) -> float`
+
+The permanent proportional change `lambda` in `variable`, applied inside the
+objective, that brings unconditional welfare from `reference` to `target`. No log
+utility and no variable called consumption is assumed.
 
 ---
 

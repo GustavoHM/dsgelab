@@ -147,7 +147,7 @@ def _statements(text: str) -> list[str]:
     return [s.strip() for s in text.split(";") if s.strip()]
 
 
-_BLOCKS = {"model", "initval", "endval", "histval", "steady_state_model", "shocks", "mshocks",
+_BLOCKS = {"osr_params_bounds", "model", "initval", "endval", "histval", "steady_state_model", "shocks", "mshocks",
            "estimated_params", "estimated_params_init", "estimated_params_bounds",
            "estimated_params_remove", "observation_trends", "optim_weights", "homotopy_setup",
            "conditional_forecast_paths", "irf_calibration", "moment_calibration", "verbatim",
@@ -186,6 +186,32 @@ def _drop_groups(text: str) -> str:
         if not depth:
             out.append(ch)
     return "".join(out)
+
+
+def _options(text: str) -> dict:
+    """``(a=1, instruments=(i,r), flag)`` -> ``{"a": "1", "instruments": "(i,r)", "flag": ""}``."""
+    text = text.strip()
+    if not text.startswith("("):
+        return {}
+    depth, end = 0, len(text)
+    for k, ch in enumerate(text):
+        depth += ch == "("
+        depth -= ch == ")"
+        if depth == 0:
+            end = k
+            break
+    body, out, cur, depth = text[1:end], {}, "", 0
+    for ch in body + ",":
+        if ch == "," and depth == 0:
+            key, _, val = cur.partition("=")
+            if key.strip():
+                out[key.strip()] = val.strip()
+            cur = ""
+            continue
+        depth += ch == "("
+        depth -= ch == ")"
+        cur += ch
+    return out
 
 
 def _declared(stmt: str, keyword: str) -> list[str]:
@@ -367,6 +393,11 @@ class ModFile:
     unset_params: list = field(default_factory=list)
     missing_guess: list = field(default_factory=list)
     source: str = ""
+    block: object = None
+    planner: dict | None = None
+    osr_params: list = field(default_factory=list)
+    optim_weights: dict = field(default_factory=dict)
+    osr_bounds: dict = field(default_factory=dict)
 
     def full_guess(self, values: Mapping[str, float] | None = None) -> dict:
         """A value for every model variable, given values for the Dynare ones."""
@@ -390,6 +421,10 @@ class ModFile:
         solution must then be given.
         """
         params = self.params if params is None else params
+        if self.model is None:
+            raise DynareImportError(
+                "this .mod leaves instruments without an equation: pass it to "
+                "dsgelab.ramsey_model or dsgelab.discretionary_policy first")
         x0 = self.full_guess(guess)
         if not self.steady_operators:
             return steady_state(self.model, x0, params, **kwargs)
@@ -445,6 +480,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     param_text: list[tuple[str, str]] = []
     model_stmts, model_opts = None, ""
     ssm, initval, shocks = [], [], []
+    planner_text, policy_cmd, policy_opts = None, None, {}
+    osr_params_list, weights_body, bounds_body = [], [], []
     i = 0
     while i < len(stmts):
         st = stmts[i]
@@ -468,6 +505,10 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                 initval = body
             elif head == "shocks":
                 shocks += body
+            elif head == "optim_weights":
+                weights_body = body
+            elif head == "osr_params_bounds":
+                bounds_body = body
             i = j + 1
             continue
         if word == "var" and not st.startswith("var_"):
@@ -480,6 +521,13 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             params += _declared(st, "parameters")
         elif word == "predetermined_variables":
             predet += _declared(st, "predetermined_variables")
+        elif word == "planner_objective":
+            planner_text = st[len(word):].strip()
+        elif word in ("ramsey_model", "ramsey_policy", "discretionary_policy"):
+            policy_cmd = "discretion" if word == "discretionary_policy" else "ramsey"
+            policy_opts = _options(st[len(word):])
+        elif word == "osr_params":
+            osr_params_list += _declared(st, "osr_params")
         else:
             m = re.match(r"([A-Za-z_]\w*)\s*=(?!=)(.*)$", st, flags=re.S)
             if m and m.group(1) not in endo and m.group(1) not in exo:
@@ -526,7 +574,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
         else:
             text_eq = st
         eqs.append((st, parser.parse(text_eq, f"equation {len(eqs) + 1}")))
-    if len(eqs) != len(endo):
+    planner_present = planner_text is not None or policy_cmd is not None
+    if len(eqs) != len(endo) and not (planner_present and len(eqs) < len(endo)):
         raise DynareImportError(f"{len(eqs)} equations for {len(endo)} endogenous variables")
 
     # --- dating: predetermined_variables, then the two-period translation
@@ -613,9 +662,35 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
 
     steady_params = [f"STEADY_STATE_{v}" for v in sorted(parser.steady_refs)]
     all_params = list(params) + steady_params
-    model = model_from_expressions(exprs, states=states, jumps=jumps, shocks=list(exo),
-                                   parameters=all_params, name=name,
-                                   derivatives=derivatives, source_equations=labels)
+    model = None
+    if len(exprs) == len(states) + len(jumps):
+        model = model_from_expressions(exprs, states=states, jumps=jumps, shocks=list(exo),
+                                       parameters=all_params, name=name,
+                                       derivatives=derivatives, source_equations=labels)
+    from .optimal import PrivateBlock
+    block = PrivateBlock(list(exprs), list(states), list(jumps), list(exo), list(all_params),
+                         list(labels), name=name)
+
+    # --- the planner: objective (current-dated endogenous variables), discount, instruments
+    planner = None
+    if planner_present:
+        planner = dict(kind=policy_cmd, objective=None, discount=None, instruments=None,
+                       text=planner_text)
+        if planner_text is not None:
+            ob = parser.parse(planner_text, "planner_objective")
+            sub = {}
+            for s_ in ob.free_symbols:
+                if str(s_) in refs:
+                    nm, off = refs[str(s_)]
+                    if nm in exo or off != 0:
+                        raise DynareImportError("planner_objective may only contain "
+                                                "current-period endogenous variables")
+                    sub[s_] = S(nm)
+            planner["objective"] = ob.xreplace(sub)
+        disc = policy_opts.get("planner_discount", "1")
+        planner["discount"] = _Parser(sympy, [], [], params).parse(disc, "planner_discount")
+        if "instruments" in policy_opts:
+            planner["instruments"] = _declared(policy_opts["instruments"].strip("()"), "")
 
     # --- steady state guess: steady_state_model first, then initval
     env = {**matlab, **pvals}
@@ -671,7 +746,23 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             continue
         # periods/values: deterministic shocks, not read here
 
-    return ModFile(model=model, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
+    weights = {}
+    for st in weights_body:
+        m = re.match(r"([A-Za-z_]\w*)\s*(?:,\s*([A-Za-z_]\w*))?\s+(.+)$", st, flags=re.S)
+        if not m:
+            raise DynareImportError(f"optim_weights: cannot read {st!r}")
+        a, b_, w = m.group(1), m.group(2), _numeric(sympy, m.group(3), env_all, funcs)
+        weights[a if b_ is None else (a, b_)] = w
+    bounds = {}
+    for st in bounds_body:
+        parts = [x.strip() for x in st.split(",")]
+        if len(parts) != 3:
+            raise DynareImportError(f"osr_params_bounds: cannot read {st!r}")
+        bounds[parts[0]] = (_numeric(sympy, parts[1], env_all, funcs),
+                            _numeric(sympy, parts[2], env_all, funcs))
+
+    return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
+                   optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
                    auxiliary=auxiliary, linear=linear,
                    steady_operators=sorted(parser.steady_refs),

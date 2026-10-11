@@ -58,7 +58,8 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Impulso generalizado de 2ª ordem | ✅ ‡ | — | ? | ? | — | ? | ✅ |
 | Decomposição histórica e previsão condicional | ✅ ‡ na solução linear | ? | — | ? | — | — | ✅ |
 | **Política ótima: Ramsey com compromisso** | ✅ ‡ atemporal, contra o Dynare a 5e-13 | — | — | — | — | — | ✅ |
-| Regras simples ótimas, discrição | — | — | — | — | — | — | ✅ |
+| Regras simples ótimas, discrição | ✅ ‡ contra o Dynare | — | — | — | — | — | ✅ |
+| Bem-estar de 2ª ordem, condicional e incondicional | ✅ ‡ contra o Dynare a 1e-12 | — | — | — | — | — | ✅ |
 | **Estimação bayesiana** | ✅ † Kalman e Metropolis | ✅ via PyMC | — | ✅ com ZLB | — | — 📄 declara não ter | ✅ |
 | Filtro de Kalman / *smoothing* | ✅ † filtro, sem suavizador | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibração por alvos** | ✅ conjunta, com limites | ✅ parâmetros calibrados por razões-alvo | ? | ? | ? | ? | 📄 |
@@ -158,8 +159,8 @@ a versão de cada item é a do [`ROADMAP.md`](../ROADMAP.md).
 | Item | Quem tem | Estado no `dsgelab` | Versão |
 |---|---|---|---|
 | Ramsey (compromisso) | ✅ Dynare (`ramsey_model`) | **feito**: `ramsey_model`, contra o Dynare em três modelos | 0.2 |
-| Regras simples ótimas; discrição | ✅ Dynare (`+osr`, `discretionary_policy`) | falta | 0.2 |
-| Bem-estar de segunda ordem e variação equivalente | ✅ Dynare (`evaluate_planner_objective`) | falta | 0.2 |
+| Regras simples ótimas; discrição | ✅ Dynare (`+osr`, `discretionary_policy`) | **feito**: `osr`, `discretionary_policy`, contra os testes do Dynare | 0.2 |
+| Bem-estar de segunda ordem e variação equivalente | ✅ Dynare (`evaluate_planner_objective`) | **feito**: `welfare`, `consumption_equivalent` | 0.2 |
 | Impulso generalizado de segunda ordem | ✅ MacroModelling (`get_girf`) | **feito** | 0.2 |
 | Inovações em sequência na previsão perfeita | ✅ Dynare (`perfect_foresight_solver`) | **feito**; falta a validação contra o Dynare | 0.2 |
 | Erros de expectativa na previsão perfeita | ✅ Dynare (`perfect_foresight_with_expectation_errors_solver`) | falta | 0.2 |
