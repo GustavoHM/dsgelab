@@ -14,6 +14,11 @@ As variáveis auxiliares do dsgelab (LAG1_k é k(-1)) são lidas pelo nome do Dy
 Parte 2, o steady_state_model como estado estacionário (analytic=True), sem Newton. O do fs2000.mod
 do Dynare tem de dar o ponto do Dynare (out_import/fs2000.mat, de run_examples.sh); o de
 diagnostics/bad_steady.mod, errado de propósito, tem de ser recusado pelos dois.
+
+Parte 3, homotopia. diagnostics/homotopy.mod, escrito aqui, tem um initval bom para delta = 0.02
+e o modelo com delta = 0.9; o homotopy_setup leva um ao outro. Newton direto falha; com a
+homotopia, o dsgelab chega à forma fechada e o Dynare (homotopy_mode=3) ao mesmo ponto, dentro
+da tolerância do próprio Dynare.
 """
 from __future__ import annotations
 
@@ -82,7 +87,39 @@ def main() -> int:
         ok &= same
         print(f"  {k:<20} dsgelab {str(ours[k]):<28} Dynare {str(dy[k]):<28} {'OK' if same else 'DIVERGE'}")
     ok &= check_closed_forms()
+    ok &= check_homotopy()
     return 0 if ok else 1
+
+
+def check_homotopy() -> bool:
+    import numpy as np
+    from dsgelab.steady import SteadyStateError  # noqa: F401
+    print("\nhomotopia (homotopy_setup)")
+    mf = from_mod(HERE / "diagnostics" / "homotopy.mod")
+    a, b, d = (mf.params[x] for x in ("alpha", "beta", "delta"))
+    k = (a / (1 / b - 1 + d)) ** (1 / (1 - a))
+    exact = dict(k=k, c=k ** a - d * k)
+    try:
+        mf.steady_state()
+        direct = "converge (inesperado)"
+    except Exception:
+        direct = "falha"
+    ss = mf.steady_state(homotopy=mf.homotopy)
+    err = max(abs(ss.values[v] / exact[v] - 1) for v in exact)
+    print(f"  Newton direto: {direct}; com homotopia, contra a forma fechada  {err:.1e}")
+    text = _run_dynare(HERE / "diagnostics" / "homotopy.mod")
+    dy = {}
+    if text:
+        for v in exact:
+            m = re.search(rf"^\s*{v}\s+([-\d.eE+]+)\s*$", text.split("STEADY-STATE RESULTS")[-1], re.M)
+            if m:
+                dy[v] = float(m.group(1))
+    if len(dy) != len(exact):
+        print("  Dynare: sem estado estacionário no log")
+        return False
+    errd = max(abs(dy[v] / exact[v] - 1) for v in exact)
+    print(f"  Dynare, contra a forma fechada  {errd:.1e}  (o que o log imprime, com 6 algarismos)")
+    return bool(err < 1e-12 and errd < 1e-5 and direct == "falha" and np.isfinite(errd))
 
 
 def check_closed_forms() -> bool:
