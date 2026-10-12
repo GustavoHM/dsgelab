@@ -43,3 +43,9 @@ for f in model_borrcon/borrcon.mod model_borrcon/borrcon_common.inc \
          model_irrcap_twoconstraints/dynrbc.mod model_irrcap_twoconstraints/dynrbc_common.inc; do
   get "$DY/7.1/tests/occbin/$f" "occbin/$(basename "$f")"
 done
+# Trajetória estendida (tests/ep do Dynare 7.1): Burnside (1998), com solução fechada, e um
+# modelo linear
+mkdir -p ep
+for f in burnside.mod linearmodel0.mod; do
+  get "$DY/7.1/tests/ep/$f" "ep/$f"
+done

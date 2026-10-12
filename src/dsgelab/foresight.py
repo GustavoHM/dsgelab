@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Sequence
 
 import numpy as np
-from scipy.sparse import csr_matrix, lil_matrix
+from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
 
 from .model import Model
@@ -105,7 +105,7 @@ def path_of(value, periods: int) -> list:
 def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *,
                       params, T: int = 120, ctx=None, initial_states=None,
                       shocks=None, maxiter: int = 50, tol: float = 1e-10,
-                      damping: float = 1.0, jacobian: str = "forward", h: float = 1e-7,
+                      damping: float = 1.0, jacobian: str = "auto", h: float = 1e-7,
                       guess: np.ndarray | None = None,
                       raise_on_fail: bool = True) -> TransitionPath:
     """Solve the deterministic transition from ``start`` to ``terminal``.
@@ -124,10 +124,12 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         Initial iterate. Defaults to the terminal steady state everywhere with
         the initial states pinned, which is adequate for most transitions; a
         previous solution is a better start for a continuation sweep.
-    jacobian : {"forward", "central"}
-        Difference scheme for the Newton Jacobian. Forward halves the cost and
-        does not affect the accuracy of the converged path, which is governed by
-        ``tol``; central helps when the residuals are noisy.
+    jacobian : {"auto", "exact", "forward", "central"}
+        The Newton Jacobian: the model's exact derivatives (``"auto"`` uses them
+        when the model has them, else forward differences), or a difference
+        scheme. Forward halves the cost of central and does not affect the
+        accuracy of the converged path, which is governed by ``tol``; central
+        helps when the residuals are noisy.
     shocks : array, optional
         Innovations dated with the transition they enter. Shape ``(T, n_shocks)``
         or ``(T+1, n_shocks)``; entry ``t`` is ``eps`` in the residual that links
@@ -183,37 +185,9 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         if nrm < tol:
             return TransitionPath(levels=Yn, model=model, converged=True, iterations=it,
                                   residual=nrm, params_path=params_path, ctx_path=ctx_path)
-        J = lil_matrix((T * n + nu, z.size))
-        for t in range(T):
-            yt, ytp = Yn[t], Yn[t + 1]
-            pt, ct = params_path[t], ctx_path[t]
-            et = shock_path[t]
-            base = model.residuals(ytp, yt, et, pt, ct)
-            for j in range(n):
-                if jacobian == "central":
-                    a = ytp.copy(); a[j] += h
-                    b = ytp.copy(); b[j] -= h
-                    col_next = (model.residuals(a, yt, et, pt, ct)
-                                - model.residuals(b, yt, et, pt, ct)) / (2 * h)
-                    a = yt.copy(); a[j] += h
-                    b = yt.copy(); b[j] -= h
-                    col_now = (model.residuals(ytp, a, et, pt, ct)
-                               - model.residuals(ytp, b, et, pt, ct)) / (2 * h)
-                else:
-                    a = ytp.copy(); a[j] += h
-                    col_next = (model.residuals(a, yt, et, pt, ct) - base) / h
-                    a = yt.copy(); a[j] += h
-                    col_now = (model.residuals(ytp, a, et, pt, ct) - base) / h
-                J[t * n:(t + 1) * n, nu + t * n + j] = col_next.reshape(-1, 1)
-                if t == 0:
-                    if j >= nk:                    # only the jumps are unknown at t=0
-                        J[0:n, j - nk] = col_now.reshape(-1, 1)
-                else:
-                    J[t * n:(t + 1) * n, nu + (t - 1) * n + j] = col_now.reshape(-1, 1)
-        for j in range(nu):
-            J[T * n + j, nu + (T - 1) * n + nk + j] = 1.0
-
-        dz = spsolve(csr_matrix(J), -r)
+        J = _stacked_jacobian(model, Yn, T, nk, nu, z.size, shock_path, params_path,
+                              ctx_path, jacobian, h)
+        dz = spsolve(J, -r)
         if not np.all(np.isfinite(dz)):
             raise RuntimeError("perfect_foresight: the Newton step is not finite; the "
                                "stacked Jacobian is singular at this iterate")
@@ -226,6 +200,59 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
                            f"or a `guess` from a nearby solution.")
     return TransitionPath(levels=Yn, model=model, converged=False, iterations=it + 1,
                           residual=nrm, params_path=params_path, ctx_path=ctx_path)
+
+
+def _period_jacobian(model, ytp, yt, et, pt, ct, jacobian, h):
+    """``(dF/dy_{t+1}, dF/dy_t)`` of one period's residuals."""
+    n = model.n_vars
+    if jacobian in ("auto", "exact"):
+        Jx = model.jacobian(ytp, yt, et, pt, ct)
+        if Jx is not None:
+            return Jx[:, :n], Jx[:, n:2 * n]
+        if jacobian == "exact":
+            raise ValueError("jacobian='exact': the model has no exact derivatives")
+    base = model.residuals(ytp, yt, et, pt, ct)
+    d_next, d_now = np.empty((n, n)), np.empty((n, n))
+    for j in range(n):
+        if jacobian == "central":
+            a = ytp.copy(); a[j] += h
+            b = ytp.copy(); b[j] -= h
+            d_next[:, j] = (model.residuals(a, yt, et, pt, ct)
+                            - model.residuals(b, yt, et, pt, ct)) / (2 * h)
+            a = yt.copy(); a[j] += h
+            b = yt.copy(); b[j] -= h
+            d_now[:, j] = (model.residuals(ytp, a, et, pt, ct)
+                           - model.residuals(ytp, b, et, pt, ct)) / (2 * h)
+        else:
+            a = ytp.copy(); a[j] += h
+            d_next[:, j] = (model.residuals(a, yt, et, pt, ct) - base) / h
+            a = yt.copy(); a[j] += h
+            d_now[:, j] = (model.residuals(ytp, a, et, pt, ct) - base) / h
+    return d_next, d_now
+
+
+def _stacked_jacobian(model, Yn, T, nk, nu, n_unknowns, shock_path, params_path, ctx_path,
+                      jacobian, h):
+    """The sparse Jacobian of the stacked residuals in the unknowns ``[u_0, y_1, ..., y_T]``."""
+    n = model.n_vars
+    rows, cols, vals = [], [], []
+    ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
+    for t in range(T):
+        d_next, d_now = _period_jacobian(model, Yn[t + 1], Yn[t], shock_path[t],
+                                         params_path[t], ctx_path[t], jacobian, h)
+        rows.append((t * n + ii).ravel()); cols.append((nu + t * n + jj).ravel())
+        vals.append(d_next.ravel())
+        if t == 0:                           # only the jumps are unknown at t=0
+            rows.append((ii[:, nk:]).ravel()); cols.append((jj[:, nk:] - nk).ravel())
+            vals.append(d_now[:, nk:].ravel())
+        else:
+            rows.append((t * n + ii).ravel()); cols.append((nu + (t - 1) * n + jj).ravel())
+            vals.append(d_now.ravel())
+    rows.append(T * n + np.arange(nu)); cols.append(nu + (T - 1) * n + nk + np.arange(nu))
+    vals.append(np.ones(nu))
+    return csr_matrix(coo_matrix((np.concatenate(vals), (np.concatenate(rows),
+                                                         np.concatenate(cols))),
+                                 shape=(T * n + nu, n_unknowns)))
 
 
 # ------------------------------------------------------- expectation errors
@@ -296,13 +323,18 @@ def _expost_states(model: Model, y_prev, y_guess, eps, params, ctx, h: float = 1
     for _ in range(maxiter):
         y[:nk] = k
         r = model.residuals(y, y_prev, eps, params, ctx)[rows]
-        if np.max(np.abs(r)) < tol:
+        Jx = model.jacobian(y, y_prev, eps, params, ctx)
+        if Jx is not None:
+            J = Jx[np.ix_(rows, np.arange(nk))]
+        else:
+            J = np.empty((nk, nk))
+            for j in range(nk):
+                a = y.copy(); a[j] += h
+                J[:, j] = (model.residuals(a, y_prev, eps, params, ctx)[rows] - r) / h
+        step = np.linalg.solve(J, r)
+        k = k - step
+        if np.max(np.abs(r)) < tol or np.max(np.abs(step)) <= 1e-15 * (1 + np.max(np.abs(k))):
             break
-        J = np.empty((nk, nk))
-        for j in range(nk):
-            a = y.copy(); a[j] += h
-            J[:, j] = (model.residuals(a, y_prev, eps, params, ctx)[rows] - r) / h
-        k = k - np.linalg.solve(J, r)
     return k
 
 

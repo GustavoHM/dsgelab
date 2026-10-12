@@ -28,6 +28,7 @@ with the Blanchard-Kahn condition enforced rather than reported.
 from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, diagnose, steady_state_invariance)
+from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .foresight import News, TransitionPath, perfect_foresight, perfect_foresight_with_expectation_errors
 from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
@@ -83,6 +84,7 @@ __all__ = [
     "welfare", "welfare_model", "Welfare", "WelfareError", "consumption_equivalent",
     "from_mod", "ModFile", "DynareImportError", "read_expectation_errors_csv",
     "OccbinModel", "OccbinResult", "OccbinError", "occbin_simulate",
+    "extended_path", "ExtendedPath", "quadrature_nodes",
     "__version__",
     "from_equations", "optimality_conditions", "assemble", "to_dynare", "to_macromodelling",
 ]

@@ -33,3 +33,5 @@ validation/work_estimation_*/
 validation/out_occbin/
 # derived from the GPL test files: rebuilt by run_occbin.sh
 validation/work_occbin/
+validation/out_ep/
+validation/work_ep/

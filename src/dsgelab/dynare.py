@@ -663,6 +663,13 @@ class ModFile:
                 break
         return ss
 
+    def extended_path(self, shocks=None, *, steady: SteadyState | None = None, **kwargs):
+        """:func:`dsgelab.extended_path` with this file's covariance of the shocks."""
+        from .extended_path import extended_path
+        steady = self.steady_state() if steady is None else steady
+        kwargs.setdefault("cov", self.cov)
+        return extended_path(self.model, steady, self.params, shocks, **kwargs)
+
     def occbin_model(self):
         """The :class:`~dsgelab.occbin.OccbinModel` of the file's tagged equations."""
         if self.occbin is None:
