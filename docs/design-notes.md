@@ -26,14 +26,18 @@ timing it is zero.
 
 ---
 
-## Complex QZ, not real
+## Real ordered QZ, with the complex one as fallback
 
-`ordqz(..., output="complex")`. The real generalised Schur form produces 2×2
-diagonal blocks whenever generalised eigenvalues come close in modulus, and those
-blocks mix the stable and unstable invariant subspaces. That case is not exotic:
-it is what several exogenous AR(1) processes with similar persistence look like,
-which is to say most applied models. The complex form gives clean 1×1 blocks and
-the partition is unambiguous.
+`ordqz(..., output="real")`, falling back to `output="complex"` if the real
+reordering refuses. A 2×2 diagonal block of the real form holds a complex
+conjugate pair, and the two roots of a pair share their modulus, so the ordering
+by modulus never splits a block between the stable and the unstable subspaces;
+and `klein` never reads a block entry by entry -- it inverts `T11`, `S11` and
+`Z11` whole. The real form was not the first choice: until October 2026 the
+complex one was the default, for its 1×1 blocks. It changed because SciPy 1.18's
+LAPACK loses up to 1e-8 in the complex reordering of a pencil with a zero root and
+refuses one with several infinite roots, while the real reordering is exact on
+both (residual 1e-16 on the cases that failed).
 
 ## Blanchard–Kahn is enforced, and the margin is reported
 

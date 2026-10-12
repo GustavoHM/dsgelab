@@ -453,15 +453,17 @@ difference divides by the square of the step, so a finite-difference Hessian
 carries roughly half the significant digits of the residual it came from, and the
 risk corrections are precisely the small terms that loses.
 
-Two deliberate restrictions:
+Two deliberate rules:
 
 - An undeclared name **raises** rather than becoming a free symbol. A typo must
   not quietly turn into a new variable. (This also means `beta`, `gamma`, `S`
   and other sympy objects are safe as parameter names — the parser is given no
   global namespace to bind them to.)
-- A `(-1)` lag is refused with an explanation. Declare the lagged value as a
-  state and give it its own transition equation, so that what is predetermined is
-  stated in one place and cannot silently disagree with the equations.
+- A lag `x(-k)` or a lead `x(+k)` with `k >= 2` is carried by an auxiliary
+  variable with its own equation — `LAGk_x`, a state, or `LEADk_x`, a jump —
+  listed in `model.auxiliary`. What is predetermined is still declared in one
+  place: the lag of a jump is a new state, never a reclassification of the jump.
+  A lagged innovation is refused with an explanation.
 
 `derivatives="jacobian"` skips the Hessian, which costs
 `n_eq * (2n + n_shocks)²` expressions to build; `"none"` skips both.

@@ -3,6 +3,65 @@
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes.
 
+## 0.4.0 — 2026-10-11
+
+The roadmap's milestone 0.4: nonlinearities and the declaration of the model. Each item is
+validated against Dynare 7.1 on Dynare's own test files, against MacroModelling.jl, or
+against a closed form.
+
+### Added
+
+- `OccbinModel`, `occbin_simulate`, `OccbinResult`: occasionally binding constraints by
+  the piecewise-linear method of Guerrieri and Iacoviello (2015), as Dynare's `+occbin`
+  -- any number of constraints, time-varying rules found backwards, Dynare's regime
+  update with `curb_retrench`, surprise shocks with re-planning, the horizon extended
+  while a constraint binds at its end. `from_mod` reads `bind=`/`relax=` equation tags,
+  `occbin_constraints`, `shocks(surprise)` and the `occbin_setup`/`occbin_solver`
+  options; `ModFile.occbin_simulate` runs them. Against Dynare's `borrcon.mod` (one
+  constraint) and `dynrbc.mod` (two) to 2e-15, with identical regime histories.
+- `extended_path`, `quadrature_nodes`, `ExtendedPath`: the extended path (Fair and
+  Taylor, 1983) and the stochastic extended path (Adjemian and Juillard) of any order,
+  on Dynare's sparse or full tree of Gauss--Hermite nodes, with the hybrid second-order
+  risk correction; `ModFile.extended_path`. Against Dynare's `burnside.mod` in seven
+  variants to 1e-11, and `linearmodel0.mod` to 3e-13.
+- Declared trends in `from_mod`: `trend_var`, `log_trend_var`, `var(deflator=)` and
+  `var(log_deflator=)` are detrended as Dynare does, and an equation that still depends
+  on the level of a trend is refused (Dynare's balanced-growth test, checked at several
+  points). `fs2000_nonstationary.mod` from Dynare's tests joins `compare_import`.
+- `balanced_growth`, `BalancedGrowth`, `ModFile.balanced_growth`: Dynare's `bgp.write`
+  problem, solved by Levenberg--Marquardt with restarts away from degenerate paths;
+  the residual matches Dynare's generated `bgpfun` exactly on its three tests.
+- `diagnose`: Dynare's `model_diagnostics` -- variables absent at the current date,
+  collinear relations of the static Jacobian with their variables and equations,
+  redundant equations of the dynamic Jacobian, unit roots. Same report as Dynare on a
+  model broken on purpose.
+- `analytic_steady_state` and `SteadyStateError`; `from_equations(steady_state_model=)`;
+  `ModFile.steady_state(analytic=True)`: a closed-form steady state is used only after it
+  zeroes the model's residuals, and refused otherwise, as Dynare refuses it.
+- Calibration equations inside the model, MacroModelling's `k[ss]/q[ss] = 2.5 | β`:
+  `from_equations(calibration_equations=)` and `steady_state(calibrate=)`. Against
+  MacroModelling.jl to 4e-15.
+- `steady_state(homotopy=)` and `homotopy_setup` in `from_mod`: continuation from a
+  parameter value where the model is easy, with adaptive steps.
+- `assemble`: several agents' optimisation problems and the closing equations in one
+  `Model`, refusing a variable chosen twice and renaming clashing multipliers.
+- `from_equations` accepts lags and leads of any order, each carried by an auxiliary
+  listed in `model.auxiliary`; a guess without the auxiliaries gets them from their
+  variables.
+
+### Changed
+
+- `perfect_foresight(jacobian="auto")` is the default: the stacked Jacobian is assembled
+  sparse from the model's exact derivatives when it has them (forward differences
+  otherwise); ex-post states use them too.
+- `klein` uses the real ordered QZ by default, the complex one as a fallback: SciPy 1.18's
+  complex reordering loses up to 1e-8 on a pencil with a zero root and refuses one with
+  several infinite roots.
+- Moments and variance decompositions of a model with a unit root mask the
+  nonstationary entries (`nan`) instead of failing; the Lyapunov equation is solved on
+  the stationary block of an ordered Schur form.
+- `from_mod` refuses a name declared twice.
+
 ## 0.3.0 — 2026-10-11
 
 The first version that carries the roadmap's milestones 0.2 (optimal policy, welfare,

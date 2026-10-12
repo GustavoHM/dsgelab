@@ -83,10 +83,15 @@ expensive class of error in this kind of code; naming removes the class.
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, `conditional_forecast` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
+| Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
+| Extended path, deterministic and stochastic (sparse or full tree, hybrid correction) | `extended_path` |
+| Models in levels: declared trends with Dynare's balanced-growth check; the growth path | `from_mod`, `balanced_growth` |
 | Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
-| Calibration on targets, with an identification diagnostic | `calibrate`, `target_jacobian` |
-| Independent checks: identities, slackness, BK margin, cross-solution | `dsgelab.diagnostics` |
-| Text equations with exact analytic derivatives | `dsgelab.symbolic` |
+| Calibration on targets, with an identification diagnostic; calibration equations inside the model | `calibrate`, `target_jacobian`, `from_equations(calibration_equations=)` |
+| Closed-form steady states, checked before use; homotopy for hard steady states | `analytic_steady_state`, `steady_state(homotopy=)` |
+| Model diagnostics (Dynare's `model_diagnostics`) and independent checks | `diagnose`, `dsgelab.diagnostics` |
+| Text equations with exact analytic derivatives, lags and leads of any order | `dsgelab.symbolic` |
+| Several agents' optimisation problems in one equilibrium | `assemble` |
 
 ## Timing convention
 

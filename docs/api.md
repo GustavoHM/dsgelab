@@ -35,12 +35,30 @@ Name-indexed view over one period's vector, handed to the equations.
 | `v.vec("K", n=None)` | gather `K0, K1, …` into an array, in index order |
 | `v.to_dict()`, `v.array` | the whole period |
 
-### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both")`
+### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None)`
 
 Build a `Model` from text equations, with exact analytic derivatives. `x` is the
-variable at `t`, `x(+1)` at `t+1`. `derivatives` is `"both"`, `"jacobian"` or
-`"none"`. Requires sympy. Raises `SymbolicError` on an undeclared name, a `(-1)`
-lag, a wrong equation count or a parse failure.
+variable at `t`, `x(+1)` at `t+1`. A lag `x(-k)` or a lead `x(+k)` with `k >= 2`
+is carried by an auxiliary variable -- `LAGk_x`, a state, or `LEADk_x`, a jump --
+with its own equation, listed in `model.auxiliary`; the lag of a jump is a new
+state, never a reclassification of the jump. `derivatives` is `"both"`,
+`"jacobian"` or `"none"`. `steady_state_model` is a closed form, assignments
+`"name = expr"` in order (Dynare's block), used by `steady_state(model, None,
+params)` only after it is checked; `calibration_equations` is `{parameter:
+"steady-state condition"}`, MacroModelling's `k[ss]/q[ss] = 2.5 | β`, solved with
+the steady state. Requires sympy. Raises `SymbolicError` on an undeclared name, a
+lagged innovation, a wrong equation count or a parse failure.
+
+### `assemble(problems, *, equations=(), states=(), jumps=(), shocks=(), parameters=(), name="model", derivatives="both") -> Model`
+
+Several agents' optimisation problems (`dsgelab.blocks.Problem`, whose first-order
+conditions `optimality_conditions` derives) and the closing equations -- market
+clearing, exogenous processes, definitions -- in one `Model`. A variable chosen by
+two agents is refused (a price both take as given is `exogenous` to both); default
+multipliers that clash are prefixed with the agent's name (`household_lm_1`); the
+equation count is checked with a count per block in the message. The origin of
+every equation is in `model.assembly`. The limits are those of `Problem`:
+equality constraints, nothing dated `t+2`.
 
 ### `get_param(params, name)` / `set_params(params, updates)`
 
@@ -61,13 +79,26 @@ sweep does not silently rewrite its own earlier results.
 | `ctx_update` | `f(values, ctx) -> ctx`, run after each inner solve; the outer loop stops when it settles |
 | `positive` | names solved in logs, keeping them strictly positive |
 | `tol` | accepted maximum absolute residual — the acceptance criterion, not the solver's flag |
+| `calibrate` | `{parameter: "condition"}`: parameters solved jointly with the steady state (default: `model.calibration_equations`) |
+| `homotopy` | `{parameter: (start, end)}`: continuation from a start where the model is easy, in `homotopy_steps` steps, each warm-started from the last; a failed step is halved, a successful one doubles the next |
+
+With `guess=None` the model's `steady_state_model` is used, checked as by
+`analytic_steady_state`.
+
+### `analytic_steady_state(model, params, values, *, ctx=None, tol=1e-10) -> SteadyState`
+
+A steady state given in closed form (`values` a mapping or `f(params)`), USED
+only if it zeroes the dynamic residuals at `(y, y, 0)` to `tol`; otherwise
+`SteadyStateError` names the equations it violates. Nothing is solved.
 
 ### `SteadyState`
 
 Fields `x`, `values`, `residual`, `ctx`, `outer_iterations`, `success`,
 `message`. `ss["k"]` reads one value. `scale(floor=1e-8)` is the linearisation
 column scaling; `is_proportional(floor)` says which variables carry proportional
-rather than absolute deviations.
+rather than absolute deviations. After calibration, `calibrated` holds the solved
+parameters and `params` the full set; after a homotopy, `homotopy_path` holds the
+fractions of the way at which it stopped.
 
 ---
 
@@ -164,7 +195,7 @@ coordinates. Uses `model.hessian_fn` when available.
 
 ## Transitions
 
-### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="forward", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
+### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
 
 | Argument | Meaning |
 |---|---|
@@ -172,7 +203,8 @@ coordinates. Uses `model.hessian_fn` when available.
 | `params`, `ctx` | a constant, a sequence of length `T+1`, or `f(t)` — a sequence is an ANNOUNCED path |
 | `initial_states` | override the inherited states |
 | `guess` | `(T+1, n_vars)` initial iterate, e.g. a neighbouring solution |
-| `jacobian` | `"forward"` (default) or `"central"` |
+| `shocks` | innovations, `(T, n_shocks)`: entry `t` links date `t` to `t+1`, all anticipated |
+| `jacobian` | `"auto"` (the model's exact derivatives when it has them, else forward differences), `"exact"`, `"forward"` or `"central"`; the stacked Jacobian is assembled sparse |
 
 ### `perfect_foresight_with_expectation_errors(model, start, terminal, *, params, T, news, shocks=None, ctx=None, initial_states=None, constant_simulation_length=False, **kwargs) -> TransitionPath`
 
@@ -204,6 +236,74 @@ through the model's transition rows.
 
 Normalises a constant, a sequence or a callable into a per-period list.
 
+### `extended_path(model, steady, params, shocks=None, *, periods=None, cov=None, seed=None, horizon=200, order=0, nodes=3, tree="sparse", hybrid=None, initial_states=None, ctx=None, tol=1e-12, maxiter=50) -> ExtendedPath`
+
+A stochastic simulation by a nonlinear plan every period (Fair and Taylor, 1983):
+the shock arrives, the states it leads to are computed, the agents solve a problem
+that reaches the steady state `horizon` periods later, and the first date is kept.
+`shocks` is `(T, n_shocks)`, date 1 to `T`, or `periods` draws from `cov`. With
+`order = p > 0` (Adjemian and Juillard's stochastic extended path) the shocks of
+the next `p` periods are integrated over with `nodes` Gauss--Hermite nodes per
+shock, on Dynare's `"sparse"` tree (only the branch with every shock at zero keeps
+branching) or the `"full"` one: transition rows (no next-period jump) hold in every
+child, expectational rows on average. `hybrid` (a `SecondOrderSolution`, or `True`)
+adds the second-order risk correction where a branch stops branching -- Dynare's
+`hybrid_order = 2`. `ExtendedPath`: `levels` (row 0 the initial point, row `t` the
+outcome of the `t`-th shock, Dynare's column `t+1`), `shocks`, `path["y"]`,
+`values()`, `iterations`.
+
+### `quadrature_nodes(cov, n=3) -> (nodes, weights)`
+
+Tensor Gauss--Hermite nodes for the shocks with a variance, Dynare's construction
+(scaled by the upper Cholesky factor, first shock fastest, zero node first).
+
+---
+
+## Occasionally binding constraints
+
+Guerrieri and Iacoviello's (2015) piecewise-linear solution, as Dynare's `+occbin`.
+
+### `OccbinModel(build, constraints)`
+
+`build(binding)` returns the `Model` of the regime in which the constraints named in
+the frozenset `binding` bind (the empty set is the reference regime, where the
+steady state lies). `constraints` maps each name to `{"bind": (expr, op), "relax":
+(expr, op) or None}` in current-period LEVELS: it binds where `expr op 0`; without a
+relax condition it is relaxed wherever it does not bind.
+`OccbinModel.from_equations(equations, *, constraints, states, jumps, shocks,
+parameters)` takes Dynare's tags, `"[name='slot', bind='c', relax='d'] eq"`, and
+constraints as text, `{"c": {"bind": "lam < 0", "relax": "b > m*y"}}`.
+
+### `occbin_simulate(om, params, shocks, *, periods=100, maxit=30, curb_retrench=False, check_ahead=200, steady=None, guess=None, initial=None, qz_criterium=None) -> OccbinResult`
+
+Surprise shocks `{shock: {date: value}}` (dates from 1). Each regime is linearised at
+the reference steady state, with its residual there as a constant; given the dates
+at which each constraint binds, the path follows time-varying rules found backwards
+from the last non-reference date, and the guess is revised with Dynare's rule
+(`curb_retrench`: release only the last date that should be relaxed) until it
+reproduces itself. Agents re-plan at each surprise, starting from the regimes they
+expected; a plan looks `max(check_ahead, periods - last shock)` periods ahead and
+further while a constraint binds at its end. `OccbinResult`: `piecewise` and
+`linear` paths in levels, `binding` (per constraint, per date), `regimes` (the plan
+of each surprise date), `expected_regimes(date)`, `iterations`; `OccbinError` when
+no fixed point is found or the guess cycles.
+
+---
+
+## Balanced growth
+
+### `balanced_growth(model, params, *, guess=None, growth=None, fixed=None, ctx=None, tol=1e-12, seed=0, max_nfev=100000, tries=20) -> BalancedGrowth`
+
+Dynare's `bgp.write` problem: `x_t = X g^t` must solve the model at two consecutive
+dates, `2n` equations in the levels and the growth factors, solved by
+Levenberg--Marquardt from random starts around 1. Growth factors are identified;
+the level of a growing variable is not, only its ratio to those sharing its trend.
+A solution with a free level at zero (the trivial path of a model in levels) is set
+aside and the search restarts. `fixed` holds variables that do not grow at a level.
+`BalancedGrowth`: `levels`, `growth`, `residual`, `success`, `degenerate`,
+`growing`, `ratio(a, b)` (refused when the two grow at different factors).
+`bgp_residual(model, params, X, G)` is the residual itself.
+
 ---
 
 ## Reading Dynare files
@@ -220,6 +320,16 @@ Lags become states `LAG<k>_v`, leads beyond one become jumps `LEAD<k>_v`, and a
 shock `e` becomes the state `SHK_e`, which is what lets it appear inside any
 equation. `predetermined_variables` are re-dated as Dynare does.
 
+A model written in levels with declared trends -- `trend_var(growth_factor=g) A;`,
+`log_trend_var(log_growth_factor=g) A;`, `var(deflator=D) x;`,
+`var(log_deflator=D) x;` -- is detrended as Dynare does: `x(k)` becomes `x(k)*D(k)`
+and `A(k)` its level times the growth since `t`; an equation that still depends on
+the level of a trend other than through a common factor (the cross derivative of
+`log(lhs - rhs)` in the trend and any variable is not zero, checked at several
+points) is refused. The variables of the result are the detrended ones. Equations
+tagged `bind=`/`relax=` and the `occbin_constraints` block build an `OccbinModel`;
+`model` is the reference regime.
+
 ### `ModFile`
 
 | Attribute | Meaning |
@@ -234,6 +344,10 @@ equation. `predetermined_variables` are re-dated as Dynare does.
 | `planner` | `planner_objective`, `planner_discount`, `instruments` and the command (`"ramsey"` or `"discretion"`) |
 | `osr_params`, `optim_weights`, `osr_bounds` | the `osr` problem, ready for `dk.osr` |
 | `det_shocks`, `histval` | the deterministic `shocks` block (`{e: {period: level}}`) and `histval` (`{(v, period): level}`) |
+| `surprise` | `shocks(surprise)`, OccBin's unforeseen shocks, `{e: {period: value}}` |
+| `occbin` | constraints, regime builder and `occbin_setup`/`occbin_solver` options |
+| `homotopy` | `homotopy_setup`, `{parameter: (start, end)}` |
+| `trends` | the declared `deflators` and `trend_vars` |
 
 A Dynare exogenous variable is a LEVEL with a steady state of its own: the state
 `SHK_e` follows `SHK_e(+1) = EXO_SS_e + e`, and `EXO_SS_e` (from `initval`, zero by
@@ -249,9 +363,14 @@ date `T` the terminal period. `news(table, T)` returns `(news, start)` for
 only confirms what was expected is skipped, as in Dynare. `initial_states(steady,
 histval=None, exo_first=None)` builds the first date's states.
 
-`steady_state(guess=None, params=None, **kwargs)` solves the steady state,
-iterating on `steady_state()` terms and writing their values into `params`.
-`full_guess(values)` fills the auxiliaries from values of the Dynare variables.
+`steady_state(guess=None, params=None, *, analytic=False, **kwargs)` solves the
+steady state, iterating on `steady_state()` terms and writing their values into
+`params`; with `analytic=True` the file's `steady_state_model` IS the steady state,
+checked and refused as Dynare refuses it. `full_guess(values)` fills the auxiliaries
+from values of the Dynare variables. `occbin_model()` and `occbin_simulate(shocks=None,
+**kwargs)` run OccBin with the file's surprise shocks and solver options;
+`extended_path(shocks, **kwargs)` with its covariance; `balanced_growth(**kwargs)`
+with the exogenous variables held at their level.
 
 ```python
 mf = dk.from_mod("fs2000.mod")
@@ -521,6 +640,7 @@ Returns `derivative`, `elasticity`, `singular_values`, `rank`, `n_free`,
 | `check_slack(solution, constraints, shocks=None, size=1.0, periods=60, tol=0.0)` | do smoothed inequality constraints stay slack along the impulse responses? |
 | `compare_irfs(a, b, shock, periods=40, size=1.0, variables=None)` | do two solutions agree, variable by variable? |
 | `steady_state_invariance(build, values, variables, tol=1e-9)` | does a claimed invariance hold over a parameter grid? `build(v) -> SteadyState` |
+| `diagnose(model, params, point, *, ctx=None, tol=1e-9)` | Dynare's `model_diagnostics`: variables absent at the current date, the rank of the static Jacobian with the collinear variables and equations of each relation, redundant equations of the dynamic Jacobian, a unit root, non-finite derivatives; `ok` and `messages` |
 
 ---
 

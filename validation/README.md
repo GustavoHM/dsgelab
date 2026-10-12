@@ -117,7 +117,8 @@ o ponto em que o Dynare de fato lineariza é `oo_.dr.ys`, e é contra ele que a 
 
 `compare.py` confronta portes feitos à mão. Aqui o `.mod` é lido como está por
 `dsgelab.from_mod`, e o que se compara é o que os dois programas tiram do mesmo arquivo. Além dos
-três modelos acima, cinco da pasta `examples/` do repositório do Dynare (tag 6.4).
+três modelos acima, cinco da pasta `examples/` do repositório do Dynare (tag 6.4) e o
+`fs2000_nonstationary.mod` de `tests/trend_var` (7.1), o mesmo modelo escrito em níveis.
 
 ```bash
 bash fetch.sh
@@ -137,7 +138,8 @@ NK_baseline      28   16   1.8e-16  9.3e-14  5.9e-11   2.2e-11  OK
 agtrend          15    6   0.0e+00  3.9e-08  2.1e-07   2.3e-07  OK  (e.e. do Dynare com resíduo 4e-07)
 example3          6    5   0.0e+00  8.3e-15  1.7e-14   9.2e-15  OK
               ponto de partida do e.e. tomado do Dynare para 4 variável(is)
-fs2000           14    8   3.2e-16  9.2e-15  2.6e-13   2.5e-13  OK
+fs2000           14    8   3.2e-16  9.2e-15  3.4e-13   3.4e-13  OK
+fs2000_nonstationary   11    6   0.0e+00  1.4e-08  1.5e-08   2.2e-08  OK  (e.e. do Dynare com resíduo 7e-08)
 ```
 
 | Modelo | O que o leitor precisa entender |
@@ -148,6 +150,7 @@ fs2000           14    8   3.2e-16  9.2e-15  2.6e-13   2.5e-13  OK
 | `example1`, `example3` | choques correlacionados, com a constante `phi` atribuída fora de `parameters` |
 | `NK_baseline` | 28 equações, indexação e rigidez de preços e salários, `predetermined_variables` |
 | `RBC_baseline` | parâmetros calculados dentro do `steady_state_model` |
+| `fs2000_nonstationary` | `trend_var(growth_factor=)` com fatores de crescimento endógenos e estocásticos, `var(deflator=)` com deflatores compostos (`M(-1)/A`): o Dynare e o `dsgelab` destendenciam cada um por si, e o que se compara é o modelo estacionário que sai |
 
 **O que veio do Dynare, e está dito na saída.** O `NK_baseline` calcula quatro parâmetros e o
 estado estacionário inteiro num arquivo MATLAB (`NK_baseline_steadystate.m`), e o `example3` resolve
@@ -290,3 +293,108 @@ quando a variância converge a 1e-6. No filtro difuso, o Dynare põe as raízes 
 na forma de Schur, com `P_inf` identidade nesse bloco; o `dsgelab` faz o mesmo, e a verossimilhança
 difusa bate a 2e-12. A decomposição em tempo real do Dynare deixa o choque do primeiro período na
 condição inicial (a decomposição completa, não); as duas convenções são reproduzidas.
+
+## Restrições ocasionalmente ativas: OccBin
+
+```bash
+bash fetch.sh                # mods/occbin/, de tests/occbin do Dynare 7.1
+bash run_occbin.sh           # escreve work_occbin/<nome>.mod e exporta out_occbin/<nome>.mat
+python compare_occbin.py
+```
+
+```
+borrcon      80 períodos  por partes 2.2e-16  linear 2.2e-16  regimes 30/30  iterações 6  OK
+dynrbc      200 períodos  por partes 1.6e-15  linear 8.3e-16  regimes 169/169  iterações 99  OK
+```
+
+`borrcon.mod` tem uma restrição de endividamento e choques-surpresa nos períodos 10 e 30, com
+`simul_curb_retrench`; `dynrbc.mod`, duas restrições (investimento irreversível e não negativo),
+quatro regimes, e 52 choques-surpresa no cenário de impulso (`option=1`). Os dois são lidos por
+`from_mod` com as equações marcadas, o bloco `occbin_constraints`, os `shocks(surprise)` e as
+opções de `occbin_setup`/`occbin_solver`. Compara-se, em níveis e em todos os períodos, a trajetória
+por partes e a linear, e, em cada período, o regime que os agentes esperam
+(`oo_.occbin.simul.regime_history`). A cópia de trabalho do `dynrbc` acrescenta um `occbin_setup;`
+antes do solver: sem ele, o simulador do Dynare não recebe a sequência de choques.
+
+## Trajetória estendida
+
+```bash
+bash fetch.sh                # mods/ep/, de tests/ep do Dynare 7.1
+bash run_ep.sh               # leva uns dez minutos: o burnside roda sete variantes
+python compare_ep.py
+```
+
+```
+burnside.mod
+  EP                                  101 períodos  desvio máx 7.1e-12 (relativo 5.7e-13)  OK
+  EP estocástica, ordem 1             101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+    idem, híbrida                     101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+  EP estocástica, ordem 2             101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+    idem, árvore cheia                101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+    idem, híbrida                     101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+    idem, híbrida, árvore cheia       101 períodos  desvio máx 1.0e-11 (relativo 8.1e-13)  OK
+linearmodel0.mod
+  EP                                  201 períodos  desvio máx 2.6e-13 (relativo 5.0e-14)  OK
+  solução de primeira ordem do Dynare  200 períodos  desvio máx 2.6e-13 (relativo 5.0e-14)  OK
+```
+
+Os choques são os que o Dynare sorteou, exportados. As sete variantes do `burnside.mod` diferem
+entre si de `2e-4` a `2e-1` no preço da árvore, e cada uma bate com a sua contraparte no Dynare a
+`1e-11`. Duas coisas que a comparação teve de acertar: a tolerância (o Dynare para em `1e-5` por
+omissão; `run_ep.sh` pede `1e-12`, e é ela que limita a concordância), e a hessiana nas variantes
+híbridas (com a numérica, a correção de risco de segunda ordem difere em `2e-7`; com a exata,
+`from_mod(..., derivatives="both")`, em `3e-10`). As variantes que pedem perturbação de ordem 4
+(`hybrid_order = 4`) não são comparadas.
+
+## Tendências e crescimento balanceado
+
+```bash
+bash fetch.sh                # mods/bgp/, de tests/bgp do Dynare 7.1
+bash run_bgp.sh              # avalia o bgpfun que o bgp.write do Dynare gera, em cinco pontos
+python compare_bgp.py
+```
+
+```
+o problema (bgp.write)
+  solow   resíduos em 5 pontos contra bgpfun: desvio máx 0.0e+00  OK
+  ramsey  resíduos em 5 pontos contra bgpfun: desvio máx 2.2e-16  OK
+  nk      resíduos em 5 pontos contra bgpfun: desvio máx 0.0e+00  OK
+a solução (asserções dos testes do Dynare)
+  solow   300 partidas: K/Y 2.8e-12, g_Y 2.6e-14, g_K 2.3e-14, gE 1.1e-14  OK
+  ramsey  fatores de crescimento contra 1.02: 1.3e-15  OK
+  nk      níveis e fatores contra 1: 2.0e-15  OK
+```
+
+Os testes do Dynare resolvem o problema com o `fsolve` do MATLAB a partir de pontos aleatórios, e o
+do Solow é pulado no Octave. A comparação, por isso, é do PROBLEMA — o resíduo que o `bgp.write`
+escreve, ponto a ponto — e das asserções dos testes sobre a solução. O nível de uma variável que
+cresce não é identificado; um modelo em níveis tem também caminhos triviais (população ou capital
+zero), que `balanced_growth` descarta e de que recomeça. O destendenciamento de um `.mod` com
+`trend_var` e `var(deflator=)` é validado em `compare_import.py`, com o `fs2000_nonstationary`.
+
+## Declaração do modelo: diagnóstico, forma fechada, homotopia, calibração
+
+```bash
+python compare_diagnostics.py     # roda o Dynare por conta própria
+python compare_calibration.py     # lê macromodelling/calibration.json
+```
+
+`compare_diagnostics.py` tem três partes: `diagnose` contra o `model_diagnostics` do Dynare num
+modelo quebrado de propósito (`diagnostics/walras.mod`: lei de Walras no lugar da Euler, e uma
+variável que só aparece adiantada), com o mesmo relatório; o `steady_state_model` como estado
+estacionário (o do `fs2000` dá o ponto do Dynare a `1e-16`; o de `diagnostics/bad_steady.mod`,
+errado de propósito, é recusado pelos dois); e a homotopia (`diagnostics/homotopy.mod`), em que
+Newton direto falha e o `homotopy_setup` leva à forma fechada (o Dynare chega ao mesmo ponto dentro
+da sua tolerância, `4e-6`, com os seis algarismos que imprime).
+
+`compare_calibration.py` confronta as equações de calibração com o MacroModelling.jl: o mesmo RBC,
+com `beta` fixado por `k/q = 2.5` (`k[ss] / q[ss] = 2.5 | β` no MacroModelling). O `beta` e o estado
+estacionário batem a `4e-15`, e a forma fechada arbitra. Para regenerar o `.json`, num projeto
+Julia com MacroModelling e JSON3:
+
+```bash
+julia --project=<projeto> macromodelling/calibration.jl < /dev/null
+```
+
+O `< /dev/null` não é enfeite: na primeira carga o PythonCall que o MacroModelling usa espera algo da
+entrada padrão, e sem ela o processo fica parado indefinidamente.

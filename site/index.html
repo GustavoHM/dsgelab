@@ -340,6 +340,102 @@ abs(cadeia.log_marginal_mhm() - moda.laplace) < 0.5</code></pre>
   <code>estimated_params</code> e <code>varobs</code> vira um <code>EstimationProblem</code> por
   <code>ModFile.estimation_problem</code>.</p>
 
+  <h3>15. Restrições ocasionalmente ativas (OccBin)</h3>
+<pre><code>credito = dk.OccbinModel.from_equations(
+    ["c = y + b - R*LB",
+     "LB(+1) = b",
+     "[name='divida', relax='folga'] b = m*y",      # o limite vale ...
+     "[name='divida', bind='folga'] lam = 0",       # ... ou o multiplicador é zero
+     "lam = 1/c - beta*R/c(+1)",
+     "log(y(+1)) = rho*log(y) + u"],
+    constraints={"folga": {"bind": "lam &lt; 0", "relax": "b &gt; m*y"}},
+    states=["LB", "y"], jumps=["c", "b", "lam"], shocks=["u"],
+    parameters=["R", "beta", "m", "rho"])
+pc = dict(R=1.04, beta=0.95, m=0.8, rho=0.85)
+c0 = 1 + 0.8 - 1.04*0.8
+ob = dk.occbin_simulate(credito, pc, {"u": {2: 0.06}}, periods=40,
+                        guess=dict(LB=0.8, y=1.0, b=0.8, c=c0, lam=(1 - 0.95*1.04)/c0))
+
+ob.binding["folga"].any()                                   # a renda alta afrouxa o limite
+max(abs(ob.piecewise["lam"][ob.binding["folga"]])) &lt; 1e-14  # e o multiplicador vai a zero</code></pre>
+  <p>Cada regime é linearizado no estado estacionário de referência, com o seu resíduo como
+  constante; dadas as datas em que cada restrição vale, a trajetória segue regras que variam no
+  tempo, achadas de trás para a frente, e o palpite é revisto pela regra do <code>+occbin</code> do
+  Dynare, com <code>curb_retrench</code> se pedido. Um <code>.mod</code> com equações marcadas
+  (<code>bind=</code>, <code>relax=</code>), <code>occbin_constraints</code> e
+  <code>shocks(surprise)</code> roda por <code>ModFile.occbin_simulate()</code>.</p>
+
+  <h3>16. Trajetória estendida, determinística e estocástica</h3>
+<pre><code>arvore = dk.from_equations(                       # Burnside (1998): preço de uma árvore de Lucas
+    ["x(+1) = (1 - rho)*xbar + rho*x + e",
+     "1 = beta*exp(theta*x(+1))*(1 + y(+1))/y"],
+    states=["x"], jumps=["y"], shocks=["e"], parameters=["beta", "theta", "rho", "xbar"])
+pa = dict(beta=0.95, theta=-1.5, rho=-0.139, xbar=0.0179)
+g0 = 0.95*np.exp(-1.5*0.0179)
+ss_a = dk.steady_state(arvore, dict(x=0.0179, y=g0/(1 - g0)), pa)
+sorteio = 0.0348*np.random.default_rng(0).standard_normal((20, 1))
+
+ep = dk.extended_path(arvore, ss_a, pa, sorteio, horizon=60)                 # sem risco à frente
+sep = dk.extended_path(arvore, ss_a, pa, sorteio, horizon=60, order=1,       # risco do próximo período
+                       cov=[[0.0348**2]])
+bool((sep["y"][1:] &gt; ep["y"][1:]).all())       # com theta &lt; 0, o risco encarece a árvore</code></pre>
+  <p>A cada período chega o choque, calculam-se os estados a que ele leva e os agentes resolvem um
+  problema não linear que alcança o estado estacionário <code>horizon</code> períodos depois. Com
+  <code>order</code> &gt; 0 os choques dos próximos períodos são integrados por Gauss–Hermite numa
+  árvore de planos, esparsa ou cheia, com a correção de risco de segunda ordem opcional
+  (<code>hybrid</code>) — o <code>extended_path</code> do Dynare e as suas opções.</p>
+
+  <h3>17. Declarar o modelo: defasagens, calibração no modelo, homotopia, diagnóstico</h3>
+<pre><code>rbc_cal = dk.from_equations(
+    ["1/c = beta/c(+1)*(alpha*k(+1)**(alpha-1) + 1 - delta)",
+     "c + k(+1) = k**alpha + (1-delta)*k",
+     "q = k**alpha",
+     "dq = q - q(-1)"],                         # a defasagem de um salto vira um estado auxiliar
+    states=["k"], jumps=["c", "q", "dq"], shocks=[], parameters=["alpha", "beta", "delta"],
+    calibration_equations={"beta": "k/q = 10"})  # beta é o que põe k/q em 10
+ss_cal = dk.steady_state(rbc_cal, dict(k=10, c=1, q=1.5, dq=0),
+                         dict(alpha=0.33, beta=0.99, delta=0.025))
+rbc_cal.auxiliary                               # {'LAG1_q': ('lag', 'q')}
+abs(ss_cal.calibrated["beta"] - 1/(0.33/10 + 1 - 0.025)) &lt; 1e-12
+dk.diagnose(rbc_cal, ss_cal.params, ss_cal.values)["ok"]
+
+rbc_h = dk.from_equations(
+    ["1/c = beta/c(+1)*(alpha*k(+1)**(alpha-1) + 1 - delta)",
+     "c + k(+1) = k**alpha + (1-delta)*k"],
+    states=["k"], jumps=["c"], shocks=[], parameters=["alpha", "beta", "delta"])
+ss_h = dk.steady_state(rbc_h, dict(k=30, c=2), dict(alpha=0.33, beta=0.99, delta=0.9),
+                       homotopy={"delta": (0.02, 0.9)})   # o chute é bom para delta = 0,02</code></pre>
+  <p>Um estado estacionário em forma fechada (<code>steady_state_model</code>, aqui ou num
+  <code>.mod</code>) só é usado depois de conferido contra as equações; se não as zera, é recusado,
+  como no Dynare. <code>dk.assemble</code> junta os problemas de vários agentes e as condições de
+  mercado num só modelo.</p>
+
+  <h3>18. Tendências e crescimento balanceado</h3>
+<pre><code>tendencia = dk.from_mod("""
+trend_var(growth_factor = g) A;
+var(deflator = A) c k y;
+parameters alpha beta delta g;
+alpha = 0.33; beta = 0.99; delta = 0.025; g = 1.005;
+model;
+1/c = beta/c(+1)*(alpha*y(+1)/k + 1 - delta);
+c + k = y + (1-delta)*k(-1);
+y = k(-1)^alpha*A^(1-alpha);
+end;
+initval; c = 0.8; k = 10; y = 1; end;
+""")
+ss_t = tendencia.steady_state()                  # o modelo já sai destendenciado
+
+solow = dk.from_equations(
+    ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
+    states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
+bgp = dk.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
+abs(bgp.growth["y"] - 1.01) &lt; 1e-12
+abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
+  <p>Num <code>.mod</code> escrito em níveis, <code>trend_var</code> e <code>var(deflator=)</code> são
+  destendenciados como o Dynare faz, e uma equação que continue a depender do nível da tendência é
+  recusada. <code>balanced_growth</code> resolve o problema do <code>bgp.write</code> do Dynare:
+  fatores de crescimento e razões entre variáveis que partilham a tendência.</p>
+
   <h3>7. Verificações independentes</h3>
 <pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
 
@@ -355,7 +451,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <div class="cards">
     <div class="card"><h4>Estado estacionário</h4><p>Positividade resolvida em logs e âncoras por
     laço externo, para termos que dependem do próprio estado estacionário.</p></div>
-    <div class="card"><h4>Primeira ordem</h4><p>Klein/QZ em forma complexa, com Blanchard-Kahn
+    <div class="card"><h4>Primeira ordem</h4><p>Klein/QZ ordenado em forma real, com Blanchard-Kahn
     imposto e a margem de determinação relatada.</p></div>
     <div class="card"><h4>Segunda ordem</h4><p>Equação de Sylvester generalizada, correções de risco,
     simulação podada e média ergódica em forma fechada.</p></div>
@@ -367,6 +463,12 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
     trajetórias de parâmetros anunciadas.</p></div>
     <div class="card"><h4>Calibração</h4><p>Alvos resolvidos em conjunto, com diagnóstico de
     identificação por posto e direções nulas.</p></div>
+    <div class="card"><h4>Restrições ocasionais</h4><p>OccBin com qualquer número de restrições,
+    regras que variam no tempo e choques-surpresa, como o <code>+occbin</code> do Dynare.</p></div>
+    <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
+    ou cheia, com a correção de risco híbrida.</p></div>
+    <div class="card"><h4>Modelos em níveis</h4><p>Tendências declaradas, verificação do crescimento
+    balanceado e o caminho de crescimento balanceado.</p></div>
     <div class="card"><h4>Verificações</h4><p>Ordem de acurácia, identidades independentes, folga de
     restrições suavizadas, comparação entre soluções.</p></div>
   </div>
@@ -389,7 +491,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   <p class="lede">Três camadas, e as duas últimas não partilham autor com o pacote.</p>
 
   <h3>Contra respostas conhecidas no papel</h3>
-  <p>114 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
+  <p>144 testes. O RBC com utilidade logarítmica e depreciação total, cuja solução é exatamente
   <code>P = [[α, 1], [0, ρ]]</code>; o princípio de Taylor, que tem de dar determinação acima de um e
   um contínuo abaixo; a correção de risco sobre um AR(1) lognormal, que tem de dar
   <code>sigma²</code>; a transição de previsão perfeita contra o caminho fechado
@@ -429,10 +531,12 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
       <tr><td>Gali_2015 <span style="color:var(--muted)">(cap. 3, raiz unitária)</span></td><td class="num">14</td><td class="num">0</td><td class="num">4,9e-15</td><td class="num">2,2e-15</td><td class="ok">OK</td></tr>
       <tr><td>example3 <span style="color:var(--muted)">(Collard)</span></td><td class="num">6</td><td class="num">8,3e-15</td><td class="num">1,7e-14</td><td class="num">9,2e-15</td><td class="ok">OK</td></tr>
       <tr><td>agtrend <span style="color:var(--muted)">(Aguiar–Gopinath, macros)</span></td><td class="num">15</td><td class="num">3,9e-08</td><td class="num">2,1e-07</td><td class="num">2,3e-07</td><td class="ok">OK*</td></tr>
+      <tr><td>fs2000_nonstationary <span style="color:var(--muted)">(em níveis, <code>trend_var</code> e <code>deflator</code>)</span></td><td class="num">11</td><td class="num">1,4e-08</td><td class="num">1,5e-08</td><td class="num">2,2e-08</td><td class="ok">OK*</td></tr>
     </tbody>
   </table>
   <p style="font-size:.9rem;color:var(--muted)">* Limitado pelo estado estacionário do Dynare, que deixa
-  resíduo de <code>4e-07</code> nas equações. Os três modelos da tabela anterior também passam por este
+  resíduo de <code>4e-07</code> nas equações (<code>7e-08</code> no <code>fs2000_nonstationary</code>,
+  que o Dynare e o dsgelab destendenciam cada um por si). Os três modelos da tabela anterior também passam por este
   caminho, com os mesmos números.</p>
 
   <h3>Política ótima contra o <code>ramsey_model</code> do Dynare</h3>
@@ -508,6 +612,25 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   Hessiana do próprio dsgelab difere do Dynare em 0,03, que é a diferença entre as duas Hessianas
   numéricas; a do dsgelab é estável a 5e-4 numa faixa de dez vezes no passo.</p>
 
+  <h3>Não linearidades e declaração do modelo contra o Dynare</h3>
+  <p>Os arquivos de <code>tests/occbin</code>, <code>tests/ep</code>, <code>tests/bgp</code> e
+  <code>tests/trend_var</code> do Dynare 7.1, lidos por <code>from_mod</code>; toda variável, todo
+  período.</p>
+  <table>
+    <thead><tr><th>Teste</th><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>borrcon.mod</td><td>OccBin, uma restrição, <code>curb_retrench</code>: trajetórias por partes e linear; regimes</td><td class="num">2,2e-16; 30/30</td><td class="ok">OK</td></tr>
+      <tr><td>dynrbc.mod</td><td>OccBin, duas restrições e quatro regimes, 52 choques-surpresa</td><td class="num">1,6e-15; 169/169</td><td class="ok">OK</td></tr>
+      <tr><td>burnside.mod</td><td>trajetória estendida; estocástica de ordem 1 e 2, árvores esparsa e cheia, híbrida</td><td class="num">1,0e-11</td><td class="ok">OK*</td></tr>
+      <tr><td>linearmodel0.mod</td><td>trajetória estendida num modelo linear, e a solução linear do Dynare</td><td class="num">2,6e-13</td><td class="ok">OK</td></tr>
+      <tr><td>solow, ramsey, nk</td><td>o problema do <code>bgp.write</code>: resíduos em cinco pontos; asserções dos testes</td><td class="num">2,2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>walras.mod, bad_steady.mod, homotopy.mod</td><td><code>model_diagnostics</code>; <code>steady_state_model</code> recusado; homotopia</td><td class="num">mesmo relatório</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* A validação roda o Dynare com tolerância 1e-12 no
+  solver, contra o 1e-5 de omissão; é ela que limita a concordância. As equações de calibração
+  batem com o MacroModelling.jl a <code>4e-15</code>.</p>
+
   <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de
   segunda ordem do dsgelab batem com o Dynare a <code>1,1e-05</code> pontos percentuais e com o
@@ -563,7 +686,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   author  = {Moreira, Gustavo Hoffmann},
   title   = {{dsgelab}: a general toolkit for solving DSGE models in Python},
   year    = {2026},
-  version = {0.3.0},
+  version = {0.4.0},
   license = {MIT},
   url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Pacote em Python}
@@ -571,13 +694,13 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
 
   <h3>ABNT</h3>
 <pre><code class="plain">MOREIRA, Gustavo Hoffmann. dsgelab: a general toolkit for solving DSGE models in Python.
-Versão 0.3.0. 2026. Software em Python. Disponível em:
+Versão 0.4.0. 2026. Software em Python. Disponível em:
 https://github.com/GustavoHM/dsgelab. Acesso em: [data].</code></pre>
 
   <h3>No corpo do texto</h3>
   <p>Cite a versão junto do resultado, não só o nome:</p>
   <blockquote style="border-left:3px solid var(--rule); margin:1rem 0; padding:.2rem 0 .2rem 1.1rem;
-     color:var(--muted)">O modelo foi resolvido com o <code>dsgelab</code> 0.3.0
+     color:var(--muted)">O modelo foi resolvido com o <code>dsgelab</code> 0.4.0
      (Moreira, 2026), em perturbação de segunda ordem.</blockquote>
 
   <div class="note"><p><strong>Antes de citar, arquive.</strong> Uma URL de repositório não é uma

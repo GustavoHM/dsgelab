@@ -127,7 +127,8 @@ def steady_state(model: Model, guess, params, *, ctx=None,
         if program is None:
             raise ValueError("no guess, and the model declares no steady_state_model")
         return analytic_steady_state(model, params, program, ctx=ctx, tol=tol)
-    x0 = model.vector(guess) if isinstance(guess, Mapping) else np.asarray(guess, dtype=float)
+    x0 = (model.vector(_with_auxiliaries(model, guess)) if isinstance(guess, Mapping)
+          else np.asarray(guess, dtype=float))
     if x0.size != model.n_vars:
         raise ValueError(f"guess has {x0.size} entries for {model.n_vars} variables")
 
@@ -239,6 +240,19 @@ class SteadyStateError(RuntimeError):
     """A declared (analytic) steady state that does not solve the model."""
 
 
+def _with_auxiliaries(model: Model, values: Mapping) -> dict:
+    """A guess without the auxiliary variables gets them from the variables they carry.
+
+    A lag or a lead has the steady state of its variable; the user declared the
+    variable, and should not have to know the names the translation added.
+    """
+    vals = dict(values)
+    for name, (kind, of) in (getattr(model, "auxiliary", None) or {}).items():
+        if name not in vals and of in vals:
+            vals[name] = vals[of]
+    return vals
+
+
 def analytic_steady_state(model: Model, params, values, *, ctx=None,
                           tol: float = 1e-10) -> SteadyState:
     """A steady state given in closed form, CHECKED against the model's own equations.
@@ -286,7 +300,8 @@ def _calibrated(model: Model, guess, params, targets: dict, *, ctx, positive, to
         if program is None:
             raise ValueError("calibration needs a guess for the steady state")
         guess = program(params)
-    x0 = model.vector(guess) if isinstance(guess, Mapping) else np.asarray(guess, float)
+    x0 = (model.vector(_with_auxiliaries(model, guess)) if isinstance(guess, Mapping)
+          else np.asarray(guess, float))
     names = list(targets)
     theta0 = np.array([float(get_param(params, p)) for p in names])
     g = calibration_residual(model, targets, params)

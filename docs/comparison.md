@@ -68,7 +68,7 @@ globais ou terceira ordem, o **dolo**; de agentes heterogêneos, o **sequence-ja
 | Blanchard-Kahn | ✅ **imposto**, com margem | ✅ `check_bk_condition` | ? | ? | — | ? | ✅ relatado |
 | **Ordem de acurácia autoverificada** | ✅ ordens 2, 3 e 4 | ? | ? | ? | ? | ? | — |
 | Exportar `.mod` do Dynare | ✅ † ida e volta a 5e-14 | ✅ `make_mod_file` | 📄 | — | — | — | — |
-| **Ler `.mod` do Dynare** | ✅ ‡ oito exemplos do Dynare lidos sem porte | — | — | — | — | — | n/a |
+| **Ler `.mod` do Dynare** | ✅ ‡ nove `.mod` do Dynare lidos sem porte | — | — | — | — | — | n/a |
 | Dependências | numpy, scipy (sympy opcional) | sympy, pytensor, PyMC, preliz | numpy, scipy, pandas (pin antigo) | dolo, numpy | **JAX** | numpy, scipy | — |
 | Instala hoje (Python 3.14) | ✅ | ✅ | ❌ falha: fixa um pandas que não compila | ? | ? | ❌ o sdist não tem `setup.py` nem `pyproject.toml` | n/a |
 | Licença | MIT | GPL-3.0 | BSD-2 | ? | ? | ? | GPL |
@@ -169,13 +169,16 @@ a versão de cada item é a do [`ROADMAP.md`](../ROADMAP.md).
 | Suavizador, filtro difuso, máxima verossimilhança, SMC, diagnósticos | ✅ Dynare | **feito**; suavizador e filtro difuso contra o Dynare | 0.3 |
 | Verossimilhança marginal e comparação de modelos | ✅ Dynare | **feito**: Laplace, média harmônica modificada, SMC | 0.3 |
 | Decomposição histórica; previsão condicional | ✅ Dynare (`shock_decomposition`, `+conditional_forecasts`), MacroModelling | **feito**, inclusive em tempo real; contra o Dynare | 0.3 |
-| **Ler `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **feito**: `from_mod`, oito `.mod` do Dynare | 0.4 |
-| Defasagens e avanços arbitrários | 📄 Dynare, 📄 MacroModelling | **feito** pelo caminho do `.mod`; falta em `from_equations` | 0.4 |
-| Restrições ocasionalmente ativas | ✅ Dynare (`+occbin`) | falta; `check_slack` só diagnostica | 0.4 |
-| Trajetória estendida | ✅ Dynare (`extended_path`) | falta | 0.4 |
-| Estado estacionário analítico declarado | 📄 Dynare (`steady_state_model`), ✅ gEconpy | falta como objeto; `from_mod` usa o bloco como ponto de partida | 0.4 |
-| Equações de calibração no modelo | ✅ MacroModelling | falta; `calibrate` faz o mesmo de fora | 0.4 |
-| Homotopia; crescimento balanceado; diagnóstico do modelo | ✅ Dynare | falta; a raiz unitária já é aceita | 0.4 |
+| **Ler `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **feito**: `from_mod`, nove `.mod` do Dynare | 0.4 |
+| Defasagens e avanços arbitrários | 📄 Dynare, 📄 MacroModelling | **feito**, no `.mod` e em `from_equations`, com toda auxiliar listada | 0.4 |
+| Restrições ocasionalmente ativas | ✅ Dynare (`+occbin`) | **feito**: `occbin_simulate`, contra o Dynare com uma e duas restrições a 2e-15, históricos de regime idênticos | 0.4 |
+| Trajetória estendida | ✅ Dynare (`extended_path`) | **feito**, determinística e estocástica (árvore esparsa e cheia, híbrida de ordem 2), contra o Dynare a 1e-11 | 0.4 |
+| Estado estacionário analítico declarado | 📄 Dynare (`steady_state_model`), ✅ gEconpy | **feito**, conferido contra o modelo antes de usado e recusado como o Dynare recusa | 0.4 |
+| Equações de calibração no modelo | ✅ MacroModelling | **feito**, contra o MacroModelling a 4e-15 | 0.4 |
+| Homotopia | ✅ Dynare (`homotopy_setup`) | **feito**, com passo adaptativo; chega à forma fechada onde Newton direto falha | 0.4 |
+| Tendências declaradas e crescimento balanceado | ✅ Dynare (`trend_var`, `deflator`, `+bgp`) | **feito**: destendenciamento com a verificação do Dynare, e o problema do `bgp.write`, com resíduos idênticos aos do Dynare | 0.4 |
+| Diagnóstico do modelo | ✅ Dynare (`model_diagnostics`) | **feito**: `diagnose`, mesmo relatório do Dynare num modelo quebrado de propósito | 0.4 |
+| Vários agentes num equilíbrio | 📄 gEconpy (blocos) | **feito**: `assemble`, nos limites de `Problem` | 0.4 |
 | Identificação local; sensibilidade global | ✅ Dynare (`+identification`, `+gsa`) | falta; `target_jacobian` cobre alvos de estado estacionário | 0.6 |
 | Método dos momentos; restrições sobre IRFs e momentos | ✅ Dynare (`+mom`, `irf_calibration`) | falta | 0.6 |
 | Momentos filtrados; frequência mista; gráficos | ✅ Dynare, gEconpy, MacroModelling | falta | 0.6 |

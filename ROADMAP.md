@@ -17,19 +17,25 @@ A comparação item a item com as outras ferramentas está em
 
 ## Onde estamos
 
-Versão 0.3.0, em `https://github.com/GustavoHM/dsgelab`; reúne os marcos 0.2 e 0.3. Estado estacionário com positividade e
-âncora externa; Klein/QZ com Blanchard–Kahn imposto e, opcionalmente, o critério de raiz unitária
-do Dynare; impulso, momentos e decomposição de variância; segunda ordem com correção de risco,
-média ergódica em forma fechada, simulação podada e impulso generalizado; terceira ordem com o
+Versão 0.4.0, em `https://github.com/GustavoHM/dsgelab`; reúne os marcos 0.2 a 0.4. Estado
+estacionário com positividade e âncora externa, em forma fechada conferida, com equações de
+calibração e homotopia; Klein/QZ com Blanchard–Kahn imposto e, opcionalmente, o critério de raiz
+unitária do Dynare; impulso, momentos e decomposição de variância; segunda ordem com correção de
+risco, média ergódica em forma fechada, simulação podada e impulso generalizado; terceira ordem com o
 bloco cúbico e a inclinação de risco; previsão perfeita com trajetória anunciada de parâmetros e de
-inovações; decomposição histórica e previsão condicional; calibração conjunta com diagnóstico de
-posto; estimação linear por Kalman e Metropolis; projeção de Chebyshev; equações em texto com
-derivadas exatas até a hessiana; derivação de CPOs; **o planejador de Ramsey**; **leitura de
-`.mod`**; exportação para Dynare e MacroModelling.jl.
+inovações, e com erros de expectativa; **restrições ocasionalmente ativas** (OccBin); **trajetória
+estendida**, determinística e estocástica; **modelos em níveis**, com tendências declaradas e o
+caminho de crescimento balanceado; decomposição histórica e previsão condicional; calibração conjunta
+com diagnóstico de posto; filtro e suavizador de Kalman, estimação bayesiana e por máxima
+verossimilhança; projeção de Chebyshev; equações em texto com derivadas exatas até a hessiana e
+defasagens e avanços de qualquer ordem; derivação de CPOs e montagem de vários agentes; o planejador
+de Ramsey, discrição, regras simples ótimas e bem-estar; diagnóstico do modelo; leitura de `.mod`;
+exportação para Dynare e MacroModelling.jl.
 
-A validação contra o Dynare cobre onze modelos: três portados à mão, oito `.mod` lidos sem porte
-(entre eles cinco da pasta `examples/` do próprio Dynare) e três problemas de Ramsey, um deles do
-conjunto de testes de política ótima do Dynare. Detalhes em [`validation/`](validation/README.md).
+A validação contra o Dynare cobre três modelos portados à mão, nove `.mod` lidos sem porte (cinco da
+pasta `examples/` do próprio Dynare) e, dos seus testes, os de política ótima, previsão perfeita,
+estimação, OccBin, trajetória estendida, crescimento balanceado e diagnóstico; as equações de
+calibração, contra o MacroModelling.jl. Detalhes em [`validation/`](validation/README.md).
 
 ## O que conta como pronto
 
@@ -107,27 +113,36 @@ Validado contra o Dynare no `fs2000.mod` da pasta `examples/` dele, com os seus 
 
 ### 0.4 — não linearidades e declaração do modelo
 
+Concluído na versão 0.4.0, em 11 de outubro de 2026.
+
 - [x] **Importar `.mod`** (`from_mod`), com macros, variáveis locais, `steady_state()`, avanços e
-  defasagens de qualquer ordem. Validado em oito `.mod`, lidos sem alteração, contra o Dynare.
-- [x] **Defasagens e avanços arbitrários**, no caminho do `.mod`, com toda variável auxiliar listada
-  em `ModFile.auxiliary`. *Falta o mesmo em `from_equations`. Condição de desenho, herdada da
-  exclusão anterior: o que é predeterminado continua declarado num lugar só, e nenhuma auxiliar
-  nasce em silêncio.*
-- [ ] **Restrições ocasionalmente ativas** pelo método linear por partes de Guerrieri e Iacoviello,
-  sobre o mesmo Klein. Validação contra o `+occbin` do Dynare.
-- [ ] **Trajetória estendida** (*extended path*). Validação contra o `extended_path` do Dynare.
-- [ ] **Estado estacionário analítico declarado**, inclusive o `steady_state_model` de um `.mod`.
-  *Condição de desenho:* um bloco analítico é um segundo modelo do mesmo ponto, e por isso o pacote
-  confere que ele anula o resíduo do modelo dinâmico antes de usá-lo; se não anular, recusa.
-- [ ] **Equações de calibração dentro do modelo**, à maneira do MacroModelling.jl.
-- [ ] **Vários agentes num equilíbrio só**: um montador que junta problemas de otimização às
-  equações de fechamento num único `Model`. Os limites são os de `Problem`; não é uma linguagem de
-  blocos.
-- [ ] **Homotopia e continuação** para estados estacionários difíceis.
-- [ ] **Modelos não estacionários**: tendências declaradas, com verificação do crescimento
-  balanceado. Validação contra o `+bgp` do Dynare. A raiz unitária já é aceita por
-  `qz_criterium`; falta a declaração da tendência.
-- [ ] **Diagnóstico do modelo**: singularidades, equações redundantes, variáveis que não aparecem.
+  defasagens de qualquer ordem. Validado em nove `.mod`, lidos sem alteração, contra o Dynare.
+- [x] **Defasagens e avanços arbitrários**, no `.mod` e em `from_equations`, com toda variável
+  auxiliar listada em `auxiliary`. *A condição de desenho vale nos dois caminhos: o que é
+  predeterminado continua declarado num lugar só, a defasagem de um salto é um estado novo com
+  equação própria, e nenhuma auxiliar nasce em silêncio.*
+- [x] **Restrições ocasionalmente ativas** pelo método linear por partes de Guerrieri e Iacoviello,
+  sobre o mesmo Klein: `OccbinModel`, `occbin_simulate`. Contra o `+occbin` do Dynare com uma e com
+  duas restrições (`borrcon.mod`, `dynrbc.mod`), a 2e-15, com os mesmos históricos de regime.
+- [x] **Trajetória estendida**, determinística e estocástica (árvores esparsa e cheia, correção
+  híbrida de segunda ordem): `extended_path`. Contra o `extended_path` do Dynare em sete variantes do
+  `burnside.mod`, a 1e-11. *Falta a correção híbrida de ordem maior que 2, que pede a perturbação de
+  ordem 4 (0.7).*
+- [x] **Estado estacionário analítico declarado**, inclusive o `steady_state_model` de um `.mod`:
+  `analytic_steady_state`, `ModFile.steady_state(analytic=True)`. *Condição de desenho cumprida:* o
+  bloco analítico é conferido contra o resíduo do modelo dinâmico antes de usado, e recusado se não o
+  anula, como no Dynare.
+- [x] **Equações de calibração dentro do modelo**, à maneira do MacroModelling.jl. Contra o
+  MacroModelling a 4e-15.
+- [x] **Vários agentes num equilíbrio só**: `assemble`. Os limites são os de `Problem`; não é uma
+  linguagem de blocos.
+- [x] **Homotopia e continuação** para estados estacionários difíceis, com passo adaptativo, e o
+  `homotopy_setup` de um `.mod`.
+- [x] **Modelos não estacionários**: `trend_var`, `log_trend_var`, `var(deflator=)` e
+  `var(log_deflator=)` destendenciados como o Dynare faz, com a verificação do crescimento
+  balanceado; `balanced_growth` resolve o problema do `+bgp`, com resíduos idênticos aos do Dynare.
+  *Falta declarar tendências em `from_equations`; hoje o caminho é o `.mod`.*
+- [x] **Diagnóstico do modelo**: `diagnose`, o `model_diagnostics` do Dynare, com o mesmo relatório.
 
 ### 0.5 — release público
 
