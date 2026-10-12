@@ -405,6 +405,7 @@ class ModFile:
     homotopy: dict = field(default_factory=dict)
     occbin: dict | None = field(default=None, repr=False)
     surprise: dict = field(default_factory=dict)
+    trends: dict = field(default_factory=dict)
     varobs: list = field(default_factory=list)
     estimation_options: dict = field(default_factory=dict)
     program: dict = field(default_factory=dict, repr=False)
@@ -670,6 +671,19 @@ class ModFile:
         kwargs.setdefault("cov", self.cov)
         return extended_path(self.model, steady, self.params, shocks, **kwargs)
 
+    def balanced_growth(self, params=None, **kwargs):
+        """:func:`dsgelab.balanced_growth`, with the exogenous variables held at their level.
+
+        Dynare's ``bgp.write`` problem for this file: the states that carry the
+        exogenous variables do not grow and sit at ``EXO_SS``.
+        """
+        from .bgp import balanced_growth
+        params = self.params if params is None else params
+        fixed = {name: float(params.get(f"EXO_SS_{of}", 0.0))
+                 for name, (kind, of) in self.auxiliary.items() if kind == "shock"}
+        fixed.update(kwargs.pop("fixed", {}) or {})
+        return balanced_growth(self.model, params, fixed=fixed, **kwargs)
+
     def occbin_model(self):
         """The :class:`~dsgelab.occbin.OccbinModel` of the file's tagged equations."""
         if self.occbin is None:
@@ -750,6 +764,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     osr_params_list, weights_body, bounds_body = [], [], []
     estim_body, varobs, estim_opts = [], [], {}
     homotopy_body = []
+    deflators: dict = {}
+    trend_vars: dict = {}
     occbin_body = []
     surprise_body = []
     occbin_opts: dict = {}
@@ -793,7 +809,20 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
             i = j + 1
             continue
         if word == "var" and not st.startswith("var_"):
-            endo += _declared(st, "var")
+            names_ = _declared(st, "var")
+            vo = _options(st[len(word):])
+            for key in ("deflator", "log_deflator"):
+                if key in vo:
+                    for n_ in names_:
+                        deflators[n_] = ("log" if key == "log_deflator" else "mul", vo[key])
+            endo += names_
+        elif word in ("trend_var", "log_trend_var"):
+            vo = _options(st[len(word):])
+            key = "log_growth_factor" if word == "log_trend_var" else "growth_factor"
+            if key not in vo:
+                raise DynareImportError(f"{word} needs {key}=: {st!r}")
+            for n_ in _declared(st, word):
+                trend_vars[n_] = ("log" if word == "log_trend_var" else "mul", vo[key])
         elif word == "varexo":
             exo += _declared(st, "varexo")
         elif word == "varexo_det":
@@ -827,6 +856,10 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
 
     if model_stmts is None:
         raise DynareImportError("no model block")
+    for kind_, names_ in (("var", endo), ("varexo", exo), ("parameters", params)):
+        dup = sorted({n_ for n_ in names_ if names_.count(n_) > 1})
+        if dup:
+            raise DynareImportError(f"names declared twice with {kind_}: {dup}")
     clash = (set(endo) & set(exo)) | (set(endo) & set(params)) | (set(exo) & set(params))
     if clash:
         raise DynareImportError(f"names declared twice: {sorted(clash)}")
@@ -847,7 +880,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
         (pvals if pname in pvals else matlab)[pname] = val
 
     # --- model equations (an OccBin equation has variants, tagged bind=/relax=)
-    parser = _Parser(sympy, endo, exo, params)
+    parser = _Parser(sympy, list(endo) + list(trend_vars), exo, params)
     eqs, meta = [], []
     for k, st in enumerate(model_stmts):
         tagm = re.match(r"^\s*\[([^\]]*)\]\s*", st)
@@ -878,6 +911,8 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
     for m_ in meta:
         if m_ is not None and m_[0] not in slot_names:
             slot_names.append(m_[0])
+    if deflators or trend_vars:
+        eqs = _detrend(sympy, parser, eqs, endo, exo, deflators, trend_vars, pvals)
     n_equations = sum(1 for m_ in meta if m_ is None) + len(slot_names)
     planner_present = planner_text is not None or policy_cmd is not None
     if n_equations != len(endo) and not (planner_present and n_equations < len(endo)):
@@ -1117,6 +1152,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    estimated=estimated, varobs=varobs, estimation_options=estim_opts,
                    homotopy=homotopy, occbin=occbin, surprise=surprise,
+                   trends=dict(deflators=dict(deflators), trend_vars=dict(trend_vars)),
                    program=program,
                    optim_weights=weights, osr_bounds=bounds, params={**pvals, **{p_: float("nan") for p_ in steady_params}},
                    guess=guess, cov=cov, endogenous=list(endo), exogenous=list(exo),
@@ -1370,3 +1406,119 @@ def _read_shocks(body, cov, det, sympy, env_all, funcs, exo) -> None:
                 for t in group:
                     det.setdefault(cur, {})[t] = v
             continue
+
+
+def _detrend(sympy, parser, eqs, endo, exo, deflators, trend_vars, pvals, tol=1e-8):
+    """Dynare's detrending: a deflated variable is its stationary part times its deflator.
+
+    ``var(deflator=D) x`` makes ``x`` the detrended variable: every ``x(k)`` of the
+    model becomes ``x(k) * D(k)`` (``x(k) + D(k)`` with ``log_deflator``). A trend
+    variable ``A`` declared by ``trend_var(growth_factor=g)`` then becomes its level
+    at ``t`` times the growth since: ``A(k) = A g(+1) ... g(+k)``, and
+    ``A(-k) = A / (g g(-1) ... g(-k+1))``; with ``log_trend_var`` the growth is a sum.
+    Each equation must then depend on the level of each trend only through a factor
+    -- the balanced-growth condition, Dynare's test: the cross derivative of
+    ``log(lhs - rhs)`` in the trend and in any variable is zero. It is checked at
+    several points, and the level is then set to 1 (0 for a log trend).
+    """
+    S = sympy.Symbol
+    for n_ in deflators:
+        if n_ not in endo:
+            raise DynareImportError(f"deflator declared for {n_!r}, which is not endogenous")
+    level = {a: S(f"__TREND__{a}") for a in trend_vars}
+
+    def dated(name, off):
+        sym = S(f"__D__{name}__{off}")
+        parser.refs[str(sym)] = (name, off)
+        return sym
+
+    def shift(expr, k):
+        sub = {}
+        for s_ in expr.free_symbols:
+            if str(s_) in parser.refs:
+                nm, off = parser.refs[str(s_)]
+                if nm in exo:
+                    raise DynareImportError("a deflator or growth factor may not contain "
+                                            "an exogenous variable")
+                sub[s_] = dated(nm, off + k)
+        return expr.xreplace(sub)
+
+    defl = {n_: (kind, parser.parse(text, f"deflator of {n_}")) for n_, (kind, text)
+            in deflators.items()}
+    growth = {a: (kind, parser.parse(text, f"growth factor of {a}")) for a, (kind, text)
+              in trend_vars.items()}
+    for a, (_, g) in growth.items():
+        bad = {parser.refs[str(s_)][0] for s_ in g.free_symbols if str(s_) in parser.refs} \
+            & (set(trend_vars) | set(deflators))
+        if bad:
+            raise DynareImportError(f"the growth factor of {a} depends on trended {sorted(bad)}")
+
+    def trend_at(a, off):
+        kind, g = growth[a]
+        if kind == "mul":
+            out = level[a]
+            for j in range(1, off + 1):
+                out = out * shift(g, j)
+            for j in range(0, -off):
+                out = out / shift(g, -j)
+        else:
+            out = level[a]
+            for j in range(1, off + 1):
+                out = out + shift(g, j)
+            for j in range(0, -off):
+                out = out - shift(g, -j)
+        return out
+
+    out = []
+    for k, (raw, e) in enumerate(eqs):
+        sub = {}
+        for s_ in e.free_symbols:
+            ref = parser.refs.get(str(s_))
+            if ref and ref[0] in defl:
+                kind, d = defl[ref[0]]
+                sub[s_] = s_ * shift(d, ref[1]) if kind == "mul" else s_ + shift(d, ref[1])
+        e = e.xreplace(sub)
+        sub = {}
+        for s_ in e.free_symbols:
+            ref = parser.refs.get(str(s_))
+            if ref and ref[0] in trend_vars:
+                sub[s_] = trend_at(*ref)
+        e = e.xreplace(sub)
+        _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol)
+        e = e.xreplace({level[a]: (1 if trend_vars[a][0] == "mul" else 0) for a in level})
+        out.append((raw, e))
+    return out
+
+
+def _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol):
+    """d/dy [d log(e)/dT] = 0 for every trend level T: checked at random points."""
+    import numpy as np
+    present = [a for a in level if level[a] in e.free_symbols]
+    if not present:
+        return
+    others = sorted((s_ for s_ in e.free_symbols if s_ not in level.values()), key=str)
+    rng = np.random.default_rng(k)
+    for a in present:
+        T = level[a]
+        dlog = sympy.diff(e, T)
+        f = sympy.lambdify([T] + others, [e, dlog], "numpy")
+        t0 = 1.0 if trend_vars[a][0] == "mul" else 0.0
+        ratios = []
+        for _ in range(6):
+            vals = []
+            for s_ in others:
+                nm = str(s_)
+                v = pvals.get(nm)
+                vals.append(float(v) if v is not None and np.isfinite(v)
+                            else float(rng.uniform(0.6, 1.4)))
+            for t_ in (t0, t0 + 0.37):
+                fe, fd = (complex(x) for x in f(t_, *vals))
+                if abs(fe) > 1e-8 and np.isfinite(abs(fe)) and np.isfinite(abs(fd)):
+                    ratios.append((t_, fd / fe))
+        for t_ in {r[0] for r in ratios}:
+            rs = [r[1] for r in ratios if r[0] == t_]
+            if len(rs) > 1 and max(abs(r - rs[0]) for r in rs) > tol * max(1.0, abs(rs[0])):
+                raise DynareImportError(
+                    f"equation {k + 1} ({raw!r}) is not compatible with balanced growth: "
+                    f"after detrending it still depends on the level of the trend {a!r} "
+                    f"other than through a common factor")

@@ -26,7 +26,7 @@ FILES=()
 if [ $# -eq 0 ]; then
   for f in mods/*.mod mods/examples/*.mod; do FILES+=("$f"); done
 else
-  for n in "$@"; do FILES+=($(ls mods/"$n".mod mods/examples/"$n".mod 2>/dev/null)); done
+  for n in "$@"; do FILES+=($(ls mods/"$n".mod mods/examples/"$n".mod 2>/dev/null || true)); done
 fi
 
 mkdir -p out_import work

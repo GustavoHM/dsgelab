@@ -49,3 +49,10 @@ mkdir -p ep
 for f in burnside.mod linearmodel0.mod; do
   get "$DY/7.1/tests/ep/$f" "ep/$f"
 done
+# Modelos não estacionários: o fs2000 escrito com tendências (trend_var, var(deflator=)), que o
+# Dynare destendencia, e os testes de bgp.write (crescimento balanceado)
+get "$DY/7.1/tests/trend_var/fs2000_nonstationary.mod" examples/fs2000_nonstationary.mod
+mkdir -p bgp
+for f in solow-1/solow.mod ramsey-1/ramsey.mod nk-1/nk.mod; do
+  get "$DY/7.1/tests/bgp/$f" "bgp/$(dirname "$f").mod"
+done

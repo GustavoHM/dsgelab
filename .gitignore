@@ -35,3 +35,5 @@ validation/out_occbin/
 validation/work_occbin/
 validation/out_ep/
 validation/work_ep/
+validation/out_bgp/
+validation/work_bgp/

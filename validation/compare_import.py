@@ -2,12 +2,14 @@
 
 compare.py confronta portes feitos À MÃO de três modelos. Aqui nenhum modelo é reescrito: o
 `.mod` do Dynare é lido como está por `dsgelab.dynare.from_mod`, e o que se compara é o que sai
-dos dois programas a partir do mesmo arquivo. São oito modelos: os três de compare.py e cinco da
+dos dois programas a partir do mesmo arquivo. São nove modelos: os três de compare.py, cinco da
 pasta examples/ do repositório do Dynare (tag 6.4), que exercitam o que um porte à mão não
 exercitaria — c(+2) e choques dentro da função de produção (fs2000), variáveis locais `#` e o
 operador steady_state() (Gali_2015), o macroprocessador (agtrend), choques correlacionados
 (example1, example3) e um modelo médio de 28 equações com indexação e rigidez de salários
-(NK_baseline).
+(NK_baseline) —, e o fs2000 escrito em níveis, com tendências declaradas (trend_var,
+var(deflator=)), de tests/trend_var do Dynare 7.1: o Dynare e o dsgelab o destendenciam cada um
+por si, e o que se compara é o modelo estacionário que sai.
 
 O que vem do Dynare, e por quê:
   * os parâmetros que o .mod NÃO define. O NK_baseline e o RBC_baseline calculam alguns num
