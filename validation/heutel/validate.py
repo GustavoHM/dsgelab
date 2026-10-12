@@ -83,6 +83,8 @@ def dynare_irfs(variant, names, h):
 
 
 def main():
+    # The port's algebra is translated from these same checked files, not shipped with dsgelab.
+    heutel.fetch(HERE/'original')
     manifest=json.loads((HERE/'source-sha256.json').read_text())
     for name, digest in manifest.items():
         actual=hashlib.sha256((HERE/'original'/name).read_bytes()).hexdigest()

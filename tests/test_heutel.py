@@ -10,11 +10,21 @@ from dsgelab.examples import heutel
 REFERENCE = json.loads((Path(__file__).resolve().parents[1]
                         / 'validation/heutel/reference.json').read_text())
 
+try:
+    heutel._algebra()
+    HAVE_SOURCE = True
+except heutel.HeutelSourceMissing:
+    HAVE_SOURCE = False
+# The algebra is translated from Heutel's files on the user's machine
+# (heutel.fetch()); dsgelab does not distribute it.
+needs_source = pytest.mark.skipif(not HAVE_SOURCE, reason="run dsgelab.examples.heutel.fetch() first")
+
 
 def params(variant):
     return heutel.Params() if variant == 'planner' else heutel.Params.source(variant)
 
 
+@needs_source
 @pytest.mark.parametrize('variant', heutel.VARIANTS)
 def test_original_octave_algebra_and_dynare_dynamics(variant):
     p = params(variant)
@@ -33,6 +43,7 @@ def test_original_octave_algebra_and_dynare_dynamics(variant):
     assert sol.klein.shock_residual < 1e-12
 
 
+@needs_source
 @pytest.mark.parametrize('variant', heutel.VARIANTS)
 def test_identities_timing_and_policy_feedback(variant):
     p = params(variant)
@@ -56,6 +67,7 @@ def test_identities_timing_and_policy_feedback(variant):
             np.testing.assert_allclose(irf['e'], irf['q'], atol=1e-12)
 
 
+@needs_source
 def test_literal_planner_defaults_are_not_silently_changed():
     p = heutel.Params.source('planner')
     assert p.theta2 == .1 and p.gamma == .8
@@ -63,6 +75,7 @@ def test_literal_planner_defaults_are_not_silently_changed():
         heutel.build('planner')
 
 
+@needs_source
 def test_zero_ramsey_multiplier_has_an_absolute_coordinate():
     sol = heutel.solve('tax')
     assert sol.klein.n_stable == 4
@@ -72,6 +85,7 @@ def test_zero_ramsey_multiplier_has_an_absolute_coordinate():
     assert levels['a'][0] == pytest.approx(1.01)
 
 
+@needs_source
 def test_changed_calibration_requires_rebuilding():
     model, p, guess = heutel.build('tax_asym')
     from dataclasses import replace
@@ -84,3 +98,18 @@ def test_changed_calibration_requires_rebuilding():
 def test_invalid_variant(variant):
     with pytest.raises(ValueError, match='variant must'):
         heutel.build(variant)
+
+
+def test_fetch_refuses_files_that_differ_from_the_validated_ones(tmp_path):
+    for name in heutel._heutel_source.FILE_SHA256:
+        (tmp_path / name).write_text('h(1,1) = 1;')
+    with pytest.raises(ValueError, match='differs from the file'):
+        heutel.fetch(tmp_path, cache=tmp_path / 'cache')
+    assert not (tmp_path / 'cache').exists()
+
+
+def test_missing_translation_says_how_to_get_it(tmp_path, monkeypatch):
+    monkeypatch.setenv('DSGELAB_HEUTEL_DIR', str(tmp_path))
+    monkeypatch.setattr(heutel._heutel_source, '_loaded', {})
+    with pytest.raises(heutel.HeutelSourceMissing, match=r'heutel\.fetch\(\)'):
+        heutel.solve('tax')

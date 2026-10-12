@@ -3,6 +3,9 @@
 The original hand-linearised systems are retained; this is not a nonlinear
 model suitable for second-order welfare or nonlinear perfect foresight.
 See ``docs/heutel.md`` for source calibration and timing details.
+
+The scalar algebra comes from Heutel's MATLAB files, which dsgelab does not
+distribute: run :func:`fetch` once to download, check and translate them.
 """
 from __future__ import annotations
 
@@ -13,7 +16,9 @@ from scipy.optimize import least_squares, root
 
 from ..model import Model
 from ..solve import solve as solve_model
-from . import _heutel_algebra as algebra
+from . import _heutel_source
+from ._heutel_source import HeutelSourceMissing, fetch
+from ._heutel_source import load as _algebra
 
 VARIANTS = ("planner", "tax", "tax_asym", "quota_asym")
 BASE_NAMES = ("c", "e", "k", "x", "mu", "y", "z", "i")
@@ -82,7 +87,7 @@ def steady_levels(variant="tax", params=None):
         raise ValueError("parameters outside the admissible calibration domain")
     if variant != "planner" and (p.theta2 == 1 or p.erowcoef != 4):
         raise ValueError("source tax equations require theta2 != 1 and erowcoef = 4")
-    fn = algebra.planner_ss if variant == "planner" else algebra.tax_ss
+    fn = _algebra().planner_ss if variant == "planner" else _algebra().tax_ss
     guess = [28.0245, 2.2270, 0.0339] if variant == "planner" else [27.8, 2.29]
     with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
         result = root(lambda x: fn(x, p), guess, tol=1e-11)
@@ -104,7 +109,7 @@ def steady_levels(variant="tax", params=None):
     if variant == "planner":
         ss = _planner_levels(*candidate, p)
     else:
-        ss = algebra.tax_levels(*candidate, p)
+        ss = _algebra().tax_levels(*candidate, p)
         ss["a"] = 1.0
     if not all(np.isfinite(v) for v in ss.values()) or not 0 < ss["mu"] < 1 \
             or any(ss[k] <= 0 for k in BASE_NAMES):
@@ -122,7 +127,7 @@ def structural_system(variant="tax", params=None):
     ss = steady_levels(variant, p)
     if variant == "planner":
         names = BASE_NAMES + ("a",)
-        h = algebra.planner_matrix(ss, p)
+        h = _algebra().planner_matrix(ss, p)
     else:
         names = BASE_NAMES + ("tau", "r", "lambda", "zeta", "omega", "a")
         # Quota and tax share steady allocations; the pre-policy source matrix
@@ -130,14 +135,14 @@ def structural_system(variant="tax", params=None):
         tax_ss = dict(ss)
         if variant == "quota_asym":
             tax_ss["tau"] = p.theta1*p.theta2*ss["mu"]**(p.theta2-1)*ss["y"]**p.gamma
-        h = algebra.tax_matrix(tax_ss, p)
+        h = _algebra().tax_matrix(tax_ss, p)
         if variant.endswith("asym"):
             h[10:14] = 0
             h[10, 22] = 1
             h[10, 5] = -p.policy_slope
             h[11, 24] = h[12, 25] = h[13, 26] = 1
         if variant == "quota_asym":
-            h = algebra.quota_firm_rows(h, ss, p)
+            h = _algebra().quota_firm_rows(h, ss, p)
             names = BASE_NAMES + ("q", "r", "lambda", "zeta", "omega", "a")
     return names, h, ss
 
@@ -159,7 +164,7 @@ def build(variant="tax", params=None):
         # singular. Evaluate its linear coefficients per UNIT of multiplier,
         # which is the analytic zero-multiplier limit (no division by zero).
         unit_ss = dict(ss, **{"lambda": 1.0})
-        unit_h = algebra.tax_matrix(unit_ss, p)
+        unit_h = _algebra().tax_matrix(unit_ss, p)
         columns = [names.index("lambda") + t*n for t in range(3)]
         h[:, columns] = unit_h[:, columns]
     lagged = [name for j, name in enumerate(names)
