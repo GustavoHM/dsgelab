@@ -1,21 +1,30 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsgelab"
 version = "0.4.0"
-description = "General-purpose toolkit for solving DSGE models: steady state, Klein/QZ first order, second-order perturbation, perfect-foresight transitions and calibration by targets."
+description = "Solve, simulate and estimate DSGE models in Python: perturbation to third order, perfect foresight, OccBin, optimal policy, Bayesian estimation and Dynare .mod import, validated against Dynare."
 readme = "README.md"
-requires-python = ">=3.10"
-license = {text = "MIT"}
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{name = "Gustavo Hoffmann Moreira", email = "gustavo@gakusai.net"}]
 keywords = ["dsge", "perturbation", "rational expectations", "klein", "macroeconomics"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
     "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Mathematics",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.24",
@@ -37,6 +46,9 @@ dsgelab = "dsgelab.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+dsgelab = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

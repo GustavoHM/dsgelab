@@ -1,0 +1,4 @@
+# The Python that PythonCall (through MacroModelling's SymPy) runs on. Left free, CondaPkg
+# picks the newest on conda-forge, and a release PythonCall cannot load yet breaks the run.
+[deps]
+python = ">=3.12,<3.15"

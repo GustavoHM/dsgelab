@@ -45,15 +45,25 @@ which the import can be checked line by line against the ``.mod``.
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 from .model import Model
 from .steady import SteadyState, steady_state
+
+if TYPE_CHECKING:
+    from .bgp import BalancedGrowth
+    from .estimation import EstimationProblem
+    from .extended_path import ExtendedPath
+    from .foresight import News
+    from .kalman import Data
+    from .occbin import OccbinModel, OccbinResult
 
 __all__ = ["DynareImportError", "ModFile", "from_mod", "read_expectation_errors_csv"]
 
@@ -474,7 +484,8 @@ class ModFile:
         k0 = self.initial_states(steady, exo_first={e: level(e, 1) for e in self.exogenous})
         return shocks, k0
 
-    def news(self, table: Mapping[int, Mapping], T: int, params=None) -> tuple:
+    def news(self, table: Mapping[int, Mapping], T: int,
+             params: Mapping[str, float] | None = None) -> tuple[list[News], SteadyState]:
         """Dynare's information sets as :class:`~dsgelab.foresight.News`.
 
         ``table`` maps each period in which information arrives (Dynare's
@@ -538,7 +549,7 @@ class ModFile:
         """
         return {f"SHK_{e}": e for e in self.exogenous}
 
-    def estimation_problem(self, data, **kwargs):
+    def estimation_problem(self, data: Data, **kwargs: Any) -> EstimationProblem:
         """An :class:`~dsgelab.EstimationProblem` from this file's estimation blocks.
 
         ``estimated_params`` gives the priors (and ``"stderr e"`` names for shock
@@ -581,6 +592,7 @@ class ModFile:
         def steady_fn(p):
             return self.steady_state(params=p)
 
+        kw: dict[str, Any]
         kw = dict(model=self.model, data=data, params=params, observables=list(self.varobs),
                   priors=priors, free=free, cov=sd, measurement=meas or None,
                   transforms="log" if loglin else "level",
@@ -595,8 +607,9 @@ class ModFile:
         kw.update(kwargs)
         return EstimationProblem(**kw)
 
-    def steady_state(self, guess: Mapping[str, float] | None = None, params=None, *,
-                     analytic: bool = False, **kwargs) -> SteadyState:
+    def steady_state(self, guess: Mapping[str, float] | None = None,
+                     params: dict[str, float] | None = None, *,
+                     analytic: bool = False, **kwargs: Any) -> SteadyState:
         """Solve the steady state, iterating on ``steady_state(x)`` terms if any.
 
         With ``analytic=True`` the file's ``steady_state_model`` (or ``initval``)
@@ -664,14 +677,16 @@ class ModFile:
                 break
         return ss
 
-    def extended_path(self, shocks=None, *, steady: SteadyState | None = None, **kwargs):
+    def extended_path(self, shocks: ArrayLike | None = None, *,
+                      steady: SteadyState | None = None, **kwargs: Any) -> ExtendedPath:
         """:func:`dsgelab.extended_path` with this file's covariance of the shocks."""
         from .extended_path import extended_path
         steady = self.steady_state() if steady is None else steady
         kwargs.setdefault("cov", self.cov)
         return extended_path(self.model, steady, self.params, shocks, **kwargs)
 
-    def balanced_growth(self, params=None, **kwargs):
+    def balanced_growth(self, params: Mapping[str, float] | None = None,
+                        **kwargs: Any) -> BalancedGrowth:
         """:func:`dsgelab.balanced_growth`, with the exogenous variables held at their level.
 
         Dynare's ``bgp.write`` problem for this file: the states that carry the
@@ -684,7 +699,7 @@ class ModFile:
         fixed.update(kwargs.pop("fixed", {}) or {})
         return balanced_growth(self.model, params, fixed=fixed, **kwargs)
 
-    def occbin_model(self):
+    def occbin_model(self) -> OccbinModel:
         """The :class:`~dsgelab.occbin.OccbinModel` of the file's tagged equations."""
         if self.occbin is None:
             raise DynareImportError("this .mod has no occbin_constraints")
@@ -693,7 +708,8 @@ class ModFile:
         om._models[frozenset()] = self.model
         return om
 
-    def occbin_simulate(self, shocks=None, *, steady: SteadyState | None = None, **kwargs):
+    def occbin_simulate(self, shocks: Mapping[str, Mapping[int, float]] | None = None, *,
+                        steady: SteadyState | None = None, **kwargs: Any) -> OccbinResult:
         """:func:`dsgelab.occbin_simulate` with the file's surprise shocks and options.
 
         ``occbin_setup(simul_periods=)`` and ``occbin_solver(simul_maxit=,
@@ -723,7 +739,8 @@ class ModFile:
 
 
 # ------------------------------------------------------------------- import
-def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jacobian",
+def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
+             derivatives: str = "jacobian",
              name: str | None = None) -> ModFile:
     """Read a Dynare ``.mod`` file.
 
@@ -1163,7 +1180,7 @@ def from_mod(source, *, defines: Mapping | None = None, derivatives: str = "jaco
 
 
 
-def read_expectation_errors_csv(path) -> dict:
+def read_expectation_errors_csv(path: str | os.PathLike[str]) -> dict:
     """Read the CSV of ``perfect_foresight_with_expectation_errors_setup(datafile=...)``.
 
     The file has one column per (exogenous variable, period of information), a

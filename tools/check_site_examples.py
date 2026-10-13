@@ -1,16 +1,20 @@
 #!/usr/bin/env python
-"""Executa os blocos de código de site/*.html.
+"""Executa os blocos de código de site/**/*.html, nas duas línguas.
 
 Um exemplo que não roda é pior do que exemplo nenhum. Cada página tem o seu
 espaço de nomes, e dentro da página os blocos compartilham nomes, na ordem.
+Os blocos rodam num diretório temporário: os que exportam modelos gravam
+arquivos, e eles não devem ir parar no repositório.
 
     python tools/check_site_examples.py
 """
 from __future__ import annotations
 
 import html
+import os
 import re
 import sys
+import tempfile
 import traceback
 import types
 from pathlib import Path
@@ -30,10 +34,11 @@ def blocks(page: Path):
 
 
 def main() -> int:
-    pages = sorted(SITE.glob("*.html"))
+    pages = sorted(SITE.rglob("*.html"))
     failures = 0
     for page in pages:
-        name = f"__dsgelab_site_{page.stem}__"
+        slug = "_".join(page.relative_to(SITE).with_suffix("").parts).replace("-", "_")
+        name = f"__dsgelab_site_{slug}__"
         module = types.ModuleType(name)
         sys.modules[name] = module
         ns = module.__dict__
@@ -53,4 +58,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    with tempfile.TemporaryDirectory() as tmp:
+        os.chdir(tmp)
+        raise SystemExit(main())

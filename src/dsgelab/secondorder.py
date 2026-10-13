@@ -31,13 +31,15 @@ matrix-free GMRES takes over above a size threshold, since the direct form costs
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.linalg import solve_discrete_lyapunov
 from scipy.sparse.linalg import LinearOperator, lgmres
 
 from .linearize import second_derivatives
-from .model import Model
+from .model import Covariance, Model
 from .solution import FirstOrderSolution, shock_covariance
 
 __all__ = ["SecondOrderSolution", "solve_second_order"]
@@ -88,7 +90,8 @@ class SecondOrderSolution:
         return out
 
     def irf(self, name: str, size: float = 0.01, periods: int = 40, *,
-            n_draws: int = 0, seed: int = 0, state=None, percent: bool = False) -> dict:
+            n_draws: int = 0, seed: int = 0, state: ArrayLike | None = None,
+            percent: bool = False) -> dict[str, np.ndarray]:
         """Generalised impulse response of the pruned second-order rule.
 
         The path with the innovation ``size`` in period 0, minus the path with
@@ -146,8 +149,9 @@ class SecondOrderSolution:
         return paths
 
     # -- simulation ------------------------------------------------------
-    def simulate(self, periods: int = 1000, cov=None, *, seed: int | None = None,
-                 burn: int = 200, pruning: bool = True, levels: bool = False) -> dict:
+    def simulate(self, periods: int = 1000, cov: Covariance = None, *,
+                 seed: int | None = None, burn: int = 200, pruning: bool = True,
+                 levels: bool = False) -> dict[str, np.ndarray]:
         """Simulate the second-order rules.
 
         ``pruning`` applies the Kim-Kim-Schaumburg-Sims scheme, which keeps the
@@ -187,7 +191,7 @@ class SecondOrderSolution:
         paths.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
         return self.first.to_levels(paths) if levels else paths
 
-    def mean_correction(self, cov=None) -> dict:
+    def mean_correction(self, cov: Covariance = None) -> dict[str, float]:
         """Ergodic mean of each variable, in the rescaled deviation units.
 
         Zero to first order for every variable by construction, so what this
@@ -218,7 +222,7 @@ class SecondOrderSolution:
         out.update({n: float(mean_u[i]) for i, n in enumerate(self.model.jumps)})
         return out
 
-    def ergodic_mean(self, cov=None, levels: bool = True) -> dict:
+    def ergodic_mean(self, cov: Covariance = None, levels: bool = True) -> dict[str, float]:
         """Mean of every variable, in levels by default (steady state plus the correction)."""
         corr = self.mean_correction(cov)
         if not levels:
@@ -228,7 +232,8 @@ class SecondOrderSolution:
                          + coords.scale[self.model.position(n)] * v)
                 for n, v in corr.items()}
 
-    def accuracy(self, sizes=(0.02, 0.01, 0.005), seed: int = 0) -> dict:
+    def accuracy(self, sizes: Sequence[float] = (0.02, 0.01, 0.005),
+                 seed: int = 0) -> dict[str, Any]:
         """Deterministic accuracy check: the residual must fall as ``||k||^3``.
 
         The risk terms are switched off, so this reads the QUADRATIC part alone
@@ -254,7 +259,7 @@ class SecondOrderSolution:
         return _order_report(list(sizes), out)
 
 
-def solve_second_order(first: FirstOrderSolution, cov=None, *, h: float = 1e-4,
+def solve_second_order(first: FirstOrderSolution, cov: Covariance = None, *, h: float = 1e-4,
                        direct_limit: int = 6000, hessian: np.ndarray | None = None
                        ) -> SecondOrderSolution:
     """Compute the second-order terms around an existing first-order solution.
@@ -345,14 +350,14 @@ def _solve_sylvester(Abar, Bbar, P, R, direct_limit: int = 6000, order: int = 2)
     shape = (n,) + (nk,) * order
     R2 = R.reshape(n, q)
 
-    # 'mab...,ai,bj,...->mij...' — contrai cada eixo de estado com P
-    letras = "abcdefgh"[:order]
-    alvo = "ijklmnop"[:order]
-    receita = (f"m{letras}," + ",".join(f"{letras[t]}{alvo[t]}" for t in range(order))
-               + f"->m{alvo}")
+    # 'mab...,ai,bj,...->mij...': contracts each state axis with P
+    letters = "abcdefgh"[:order]
+    target = "ijklmnop"[:order]
+    recipe = (f"m{letters}," + ",".join(f"{letters[t]}{target[t]}" for t in range(order))
+              + f"->m{target}")
 
     def kron_P(W):
-        return np.einsum(receita, W, *([P] * order))
+        return np.einsum(recipe, W, *([P] * order))
 
     def apply(Wflat):
         W = Wflat.reshape(shape)
@@ -370,6 +375,6 @@ def _solve_sylvester(Abar, Bbar, P, R, direct_limit: int = 6000, order: int = 2)
     sol, info = lgmres(op, R2.ravel(), x0=x0, rtol=1e-12, atol=0.0, maxiter=4000)
     if info != 0:
         raise RuntimeError(
-            f"a equação de Sylvester generalizada de ordem {order} não convergiu "
-            f"(lgmres info={info}); eleve `direct_limit` para forçar a solução direta")
+            f"the order-{order} generalised Sylvester equation did not converge "
+            f"(lgmres info={info}); raise `direct_limit` to force the direct solve")
     return sol.reshape(shape)

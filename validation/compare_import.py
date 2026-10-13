@@ -8,7 +8,7 @@ exercitaria — c(+2) e choques dentro da função de produção (fs2000), vari�
 operador steady_state() (Gali_2015), o macroprocessador (agtrend), choques correlacionados
 (example1, example3) e um modelo médio de 28 equações com indexação e rigidez de salários
 (NK_baseline) —, e o fs2000 escrito em níveis, com tendências declaradas (trend_var,
-var(deflator=)), de tests/trend_var do Dynare 7.1: o Dynare e o dsgelab o destendenciam cada um
+var(deflator=)), de tests/trend_var do Dynare 7.2: o Dynare e o dsgelab o destendenciam cada um
 por si, e o que se compara é o modelo estacionário que sai.
 
 O que vem do Dynare, e por quê:

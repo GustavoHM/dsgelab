@@ -1,0 +1,25 @@
+name: Feature request
+description: Something dsgelab does not do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A feature enters only with a validation against an independent reference (see CONTRIBUTING.md). Pointing to one is the most useful thing a request can do.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you need, and for what model
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: Independent reference
+      description: Another tool that does it (with the function or option), a closed form, or a paper with numbers to reproduce.
+  - type: checkboxes
+    id: roadmap
+    attributes:
+      label: Roadmap
+      options:
+        - label: I checked ROADMAP.md, and this is not already planned there (or I say below which item it refines).

@@ -3,7 +3,7 @@
 #
 # Uso:  bash run_ep.sh
 #
-# Os arquivos vêm de tests/ep do Dynare 7.1 (fetch.sh) e rodam sem alteração até a última
+# Os arquivos vêm de tests/ep do Dynare 7.2 (fetch.sh) e rodam sem alteração até a última
 # simulação, exceto a tolerância do solver: o Dynare para em resíduo 1e-5 por omissão
 # (options_.dynatol), e a cópia pede 1e-12, porque a comparação é de algoritmos. No burnside,
 # a cópia para no `toc` (o que vem depois compara com um arquivo .mat que o teste não traz); no linearmodel0, a

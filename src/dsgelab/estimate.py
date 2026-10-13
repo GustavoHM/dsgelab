@@ -18,12 +18,15 @@ of motion.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import minimize
 from scipy.stats import invgamma, norm
 
-from .model import Model, set_params
+from .model import Covariance, Model, Params, Point, set_params
+from .solution import FirstOrderSolution
 from .solve import solve
 
 __all__ = ["EstimationResult", "log_likelihood", "log_posterior", "estimate"]
@@ -100,7 +103,8 @@ def _data_matrix(data, names, sol) -> np.ndarray:
     return np.column_stack(cols)
 
 
-def log_likelihood(sol, Y: np.ndarray, Z: np.ndarray, R: np.ndarray, Sigma: np.ndarray) -> float:
+def log_likelihood(sol: FirstOrderSolution, Y: np.ndarray, Z: np.ndarray, R: np.ndarray,
+                   Sigma: np.ndarray) -> float:
     """Gaussian log likelihood of ``Y`` under the linear state space of ``sol``.
 
     ``Y`` has shape ``(T, n_obs)`` and is already in hat-deviations. The filter is
@@ -143,16 +147,18 @@ def _stationary_variance(P, Q, Sigma) -> np.ndarray:
     return 0.5 * (V + V.T)
 
 
-def log_posterior(model: Model, data, *, params, free: dict, priors: dict, guess,
-                  observables: list[str], measurement, cov=None,
-                  positive=()) -> float:
+def log_posterior(model: Model, data: Mapping[str, ArrayLike], *, params: Params, free: dict,
+                  priors: dict, guess: Point, observables: list[str],
+                  measurement: ArrayLike, cov: Covariance = None,
+                  positive: Sequence[str] = ()) -> float:
     """Log posterior at ``free``. ``-inf`` when the model has no saddle path."""
     return _posterior(model, data, params, free, priors, guess, observables,
                       measurement, cov, positive)
 
 
-def estimate(model: Model, data, *, params, free: dict, priors: dict, guess,
-             observables: list[str], measurement, cov=None, positive=(),
+def estimate(model: Model, data: Mapping[str, ArrayLike], *, params: Params, free: dict,
+             priors: dict, guess: Point, observables: list[str],
+             measurement: ArrayLike, cov: Covariance = None, positive: Sequence[str] = (),
              bounds: dict | None = None, draws: int = 0, seed: int = 0,
              proposal: dict | None = None) -> EstimationResult:
     """Maximise the posterior and, if ``draws > 0``, run Metropolis–Hastings.

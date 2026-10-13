@@ -3,7 +3,7 @@
 #
 # Uso:  bash run_occbin.sh
 #
-# Os arquivos vêm de tests/occbin do Dynare 7.1 (fetch.sh). O modelo, o estado estacionário,
+# Os arquivos vêm de tests/occbin do Dynare 7.2 (fetch.sh). O modelo, o estado estacionário,
 # os choques-surpresa e as opções do occbin_solver são os do teste; a cópia de trabalho
 # (work_occbin/, também o que compare_occbin.py lê) junta o .inc ao .mod e corta o que vem
 # depois da simulação (gráficos, suavizador). No dynrbc, só o cenário de impulso (option=1).

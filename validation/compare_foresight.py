@@ -1,6 +1,6 @@
 """compare_foresight.py — previsão perfeita, com e sem erros de expectativa, contra o Dynare.
 
-Os cinco arquivos são de tests/deterministic_simulations do Dynare 7.1, lidos por
+Os cinco arquivos são de tests/deterministic_simulations do Dynare 7.2, lidos por
 `dsgelab.from_mod`:
 
   rbc_det1.mod   condição inicial fora do estado estacionário (histval)

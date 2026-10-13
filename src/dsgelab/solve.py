@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from typing import Any, Callable, Sequence
+
 import numpy as np
 
 from .klein import klein
 from .linearize import first_order_system
-from .model import Model
+from .model import Model, Params, Point
 from .solution import FirstOrderSolution
 from .steady import SteadyState, steady_state
 
 __all__ = ["solve"]
 
 
-def solve(model: Model, params, *, steady=None, guess=None, ctx=None,
-          ctx_update=None, positive=(), h: float = 1e-6,
+def solve(model: Model, params: Params, *, steady: SteadyState | None = None,
+          guess: Point | None = None, ctx: Any = None,
+          ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
+          positive: Sequence[str] = (), h: float = 1e-6,
           equilibrate: bool = True, tol: float = 1e-11,
           qz_criterium: float | None = None) -> FirstOrderSolution:
     """Solve ``model`` at ``params`` to first order.

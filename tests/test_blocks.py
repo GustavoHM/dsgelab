@@ -52,13 +52,13 @@ def test_cada_equacao_diz_de_onde_veio():
     """O resultado tem de ser auditável, e não um bloco opaco de álgebra."""
     foc = optimality_conditions(_problema_rbc())
     origens = set(foc["detail"].values())
-    assert "CPO do controle c" in origens
-    assert "Euler do estado k" in origens
-    assert any(o.startswith("restrição 1") for o in origens)
+    assert "FOC for control c" in origens
+    assert "Euler equation for state k" in origens
+    assert any(o.startswith("constraint 1") for o in origens)
 
 
 def test_nome_nao_declarado_e_recusado():
-    with pytest.raises(FOCError, match="não declarado"):
+    with pytest.raises(FOCError, match="undeclared"):
         optimality_conditions(Problem("log(c)", controls=["c"],
                                       constraints=["c = w*n"], parameters=["beta"]))
 

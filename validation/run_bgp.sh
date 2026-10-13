@@ -4,7 +4,7 @@
 #
 # Uso:  bash run_bgp.sh
 #
-# Os arquivos vêm de tests/bgp do Dynare 7.1 (fetch.sh). A cópia de trabalho para antes do bloco
+# Os arquivos vêm de tests/bgp do Dynare 7.2 (fetch.sh). A cópia de trabalho para antes do bloco
 # verbatim do teste (que resolve com o fsolve do MATLAB, ausente ou diferente no Octave); depois
 # do pré-processamento, chama bgp.write(M_) e avalia a função gerada, bgpfun, em cinco pontos
 # fixos z = [níveis; fatores de crescimento]. Exporta para out_bgp/<nome>.mat os pontos e os

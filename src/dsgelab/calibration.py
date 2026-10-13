@@ -16,12 +16,12 @@ solver happened to stop at.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 from scipy.optimize import least_squares
 
-from .model import Model, set_params
+from .model import Model, Params, Point, set_params
 from .steady import SteadyState, steady_state
 
 __all__ = ["CalibrationResult", "calibrate", "target_jacobian"]
@@ -31,7 +31,7 @@ __all__ = ["CalibrationResult", "calibrate", "target_jacobian"]
 class CalibrationResult:
     """Calibrated parameters, the steady state they imply and the fit achieved."""
 
-    params: object
+    params: Params
     values: dict
     steady: SteadyState
     targets: dict
@@ -63,12 +63,13 @@ def _observed(model, ss, params, observables):
     return dict(observables(ss, params))
 
 
-def calibrate(model: Model, params, *, free: Mapping[str, float],
+def calibrate(model: Model, params: Params, *, free: Mapping[str, float],
               targets: Mapping[str, float],
-              guess, observables: Callable | None = None,
+              guess: Point | None, observables: Callable | None = None,
               bounds: Mapping[str, tuple] | None = None,
-              ctx=None, ctx_update=None, positive: Sequence[str] = (),
-              steady_tol: float = 1e-11, tol: float = 1e-10,
+              ctx: Any = None,
+              ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
+              positive: Sequence[str] = (), steady_tol: float = 1e-11, tol: float = 1e-10,
               maxiter: int = 200, warm_start: bool = True,
               raise_on_fail: bool = True) -> CalibrationResult:
     """Solve for the ``free`` parameters that make the model hit ``targets``.
@@ -109,7 +110,8 @@ def calibrate(model: Model, params, *, free: Mapping[str, float],
                 lo[i], hi[i] = bounds[k]
         x0 = np.clip(x0, lo + 1e-12, hi - 1e-12)
 
-    state = {"guess": guess, "ss": None, "params": None, "achieved": None, "calls": 0}
+    state: dict[str, Any] = {"guess": guess, "ss": None, "params": None, "achieved": None,
+                             "calls": 0}
 
     def evaluate(x):
         p = set_params(params, {k: float(v) for k, v in zip(names, x)})
@@ -149,11 +151,12 @@ def calibrate(model: Model, params, *, free: Mapping[str, float],
         message=res.message, names=names)
 
 
-def target_jacobian(model: Model, params, *, free: Sequence[str],
-                    targets: Sequence[str], guess,
+def target_jacobian(model: Model, params: Params, *, free: Sequence[str],
+                    targets: Sequence[str], guess: Point | None,
                     observables: Callable | None = None, step: float = 1e-5,
-                    ctx=None, ctx_update=None, positive: Sequence[str] = (),
-                    steady_tol: float = 1e-11) -> dict:
+                    ctx: Any = None,
+                    ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
+                    positive: Sequence[str] = (), steady_tol: float = 1e-11) -> dict:
     """Elasticity of each target with respect to each free parameter.
 
     Reported both as a level derivative and as an elasticity, together with the

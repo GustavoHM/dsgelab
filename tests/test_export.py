@@ -28,8 +28,8 @@ def test_dynare_separa_estoques_predeterminados_de_processos_exogenos():
     ss = dk.steady_state(model, guess, params)
     texto = to_dynare(model, params, steady=ss, cov={"eps_a": 0.007})
     assert "predetermined_variables k;" in texto
-    assert "predeterminados : k" in texto
-    assert "exógenos        : a" in texto
+    assert "predetermined : k" in texto
+    assert "exogenous     : a" in texto
     assert "rho*log(a(-1))" in texto          # equação do AR deslocada
     assert "k(+1)" in texto                    # estoque decidido em t
     assert "var eps_a = 4.9" in texto

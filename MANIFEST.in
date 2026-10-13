@@ -1,0 +1,5 @@
+# The sdist carries the test suite, and test_heutel.py reads its reference
+# values from validation/. Nothing else under validation/ is needed to test.
+include CHANGELOG.md CITATION.cff LICENSE README.md
+recursive-include tests *.py
+include validation/heutel/reference.json

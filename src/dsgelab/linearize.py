@@ -26,10 +26,12 @@ by name matters. Adding a mean-zero shock to a model that scaled by name gives
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from .model import Model
+from .model import Model, Params
 from .steady import SteadyState
 
 __all__ = ["Coordinates", "LinearSystem", "first_order_system", "second_derivatives",
@@ -43,10 +45,10 @@ class Coordinates:
     center: np.ndarray
     scale: np.ndarray
 
-    def to_level(self, yhat) -> np.ndarray:
+    def to_level(self, yhat: ArrayLike) -> np.ndarray:
         return self.center + self.scale * np.asarray(yhat, dtype=float)
 
-    def to_hat(self, x) -> np.ndarray:
+    def to_hat(self, x: ArrayLike) -> np.ndarray:
         return (np.asarray(x, dtype=float) - self.center) / self.scale
 
     @classmethod
@@ -78,7 +80,7 @@ def _residual_at(model: Model, coords: Coordinates, params, ctx):
     return f
 
 
-def first_order_system(model: Model, ss: SteadyState, params, *, ctx="inherit",
+def first_order_system(model: Model, ss: SteadyState, params: Params, *, ctx: Any = "inherit",
                        h: float = 1e-6, equilibrate: bool = True) -> LinearSystem:
     """Build ``A``, ``B``, ``C`` by central differences around the steady state.
 
@@ -137,9 +139,9 @@ def _assemble(dF_next, dF_now, dF_eps, coords, steady_residual, equilibrate):
                         steady_residual=steady_residual, row_scale=row_scale)
 
 
-def second_derivatives(model: Model, ss: SteadyState, params, *, ctx="inherit",
+def second_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any = "inherit",
                        h: float = 1e-4, row_scale: np.ndarray | None = None,
-                       at: np.ndarray | None = None) -> np.ndarray:
+                       at: ArrayLike | None = None) -> np.ndarray:
     """Hessian of every residual with respect to ``w = [y_{t+1}; y_t; eps]``.
 
     Returns an ``(n_eq, m, m)`` array with ``m = 2 n + n_shocks``, in the same
@@ -160,7 +162,7 @@ def second_derivatives(model: Model, ss: SteadyState, params, *, ctx="inherit",
 
     w0 = np.zeros(m) if at is None else np.asarray(at, dtype=float)
     if w0.size != m:
-        raise ValueError(f"`at` deve ter {m} entradas, tem {w0.size}")
+        raise ValueError(f"`at` must have {m} entries, it has {w0.size}")
 
     exact = model.hessian(coords.to_level(w0[:n]), coords.to_level(w0[n:2 * n]),
                           w0[2 * n:], params, ctx)
@@ -209,21 +211,21 @@ def second_derivatives(model: Model, ss: SteadyState, params, *, ctx="inherit",
     return H
 
 
-def third_derivatives(model: Model, ss: SteadyState, params, *, ctx="inherit",
+def third_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any = "inherit",
                       h: float = 1e-3, h_hess: float = 1e-4,
                       row_scale: np.ndarray | None = None) -> np.ndarray:
-    """Terceiras derivadas de cada resíduo, ``(n_eq, m, m, m)`` com ``m = 2n + n_shocks``.
+    """Third derivatives of each residual, ``(n_eq, m, m, m)`` with ``m = 2n + n_shocks``.
 
-    Obtidas por diferenças centrais da HESSIANA, e não da função. É a escolha que torna a terceira
-    ordem viável. Diferenciar a função três vezes custa ``O(m^3)`` avaliações e divide pelo CUBO do
-    passo: para um modelo de 19 variáveis e 5 choques são oitenta mil avaliações e sobra menos de
-    metade dos dígitos. Diferenciar a hessiana custa ``2m`` avaliações dela, e quando ela é
-    analítica — o que o front end simbólico entrega — o resultado herda essa exatidão numa única
-    diferença central.
+    Obtained by central differences of the HESSIAN, not of the function. That choice is what makes
+    the third order feasible. Differentiating the function three times costs ``O(m^3)``
+    evaluations and divides by the CUBE of the step: for a model with 19 variables and 5 shocks
+    that is eighty thousand evaluations, and less than half of the digits survive. Differentiating
+    the Hessian costs ``2m`` evaluations of it, and when the Hessian is analytic, as the symbolic
+    front end supplies it, the result inherits that exactness in a single central difference.
 
-    O passo externo ``h`` é maior que o interno ``h_hess`` de propósito: quem diferencia um objeto
-    já obtido por diferenças precisa de um passo que domine o ruído desse objeto, e não de um passo
-    menor, que o amplificaria.
+    The outer step ``h`` is larger than the inner ``h_hess`` on purpose: differentiating an object
+    that was itself obtained by differences needs a step that dominates that object's noise, not a
+    smaller step, which would amplify it.
     """
     if isinstance(ctx, str) and ctx == "inherit":
         ctx = ss.ctx
@@ -238,9 +240,9 @@ def third_derivatives(model: Model, ss: SteadyState, params, *, ctx="inherit",
         e = np.zeros(m); e[i] = h
         T[:, :, :, i] = (hess(e) - hess(-e)) / (2 * h)
 
-    # A terceira derivada é simétrica nos três índices. Impô-lo remove o ruído assimétrico da
-    # diferenciação em vez de o carregar para dentro da equação de Sylvester, onde ele se
-    # propagaria para todos os coeficientes.
+    # The third derivative is symmetric in its three indices. Imposing that removes the asymmetric
+    # noise of the differencing instead of carrying it into the Sylvester equation, where it would
+    # spread to every coefficient.
     T = (T + np.transpose(T, (0, 2, 1, 3)) + np.transpose(T, (0, 1, 3, 2))
          + np.transpose(T, (0, 3, 1, 2)) + np.transpose(T, (0, 2, 3, 1))
          + np.transpose(T, (0, 3, 2, 1))) / 6.0

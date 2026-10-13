@@ -23,12 +23,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import combinations
-from typing import Callable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import numpy as np
 
 from .linearize import first_order_system
-from .model import Model
+from .model import Model, Point
 from .solve import solve
 from .steady import SteadyState, steady_state
 
@@ -63,7 +63,7 @@ class OccbinModel:
     def names(self) -> list[str]:
         return list(self.constraints)
 
-    def regime(self, binding=()) -> Model:
+    def regime(self, binding: Iterable[str] = ()) -> Model:
         key = frozenset(binding)
         if key not in self._models:
             self._models[key] = self.build(key)
@@ -75,8 +75,9 @@ class OccbinModel:
 
     @classmethod
     def from_equations(cls, equations: Sequence[str], *, constraints: Mapping[str, Mapping],
-                       states, jumps, shocks, parameters, name: str = "model",
-                       **kwargs) -> "OccbinModel":
+                       states: Sequence[str], jumps: Sequence[str], shocks: Sequence[str],
+                       parameters: Sequence[str], name: str = "model",
+                       **kwargs: Any) -> "OccbinModel":
         """Equations as in :func:`dsgelab.from_equations`, with Dynare's tags.
 
         An equation that changes with the regime is written once per variant, each
@@ -139,7 +140,8 @@ class OccbinModel:
         return cls(build=build, constraints=parsed)
 
     # -- constraint tests on a path in levels ------------------------------------
-    def test(self, name: str, kind: str, levels: Mapping[str, np.ndarray], params) -> np.ndarray:
+    def test(self, name: str, kind: str, levels: Mapping[str, np.ndarray],
+             params: Mapping[str, float]) -> np.ndarray:
         """Where ``kind`` ("bind" or "relax") of constraint ``name`` holds on ``levels``."""
         spec = self.constraints[name][kind]
         T = len(next(iter(levels.values())))
@@ -191,10 +193,11 @@ def _regime_system(model: Model, ss: SteadyState, params):
     return sys_.A, sys_.B, np.asarray(c, dtype=float)
 
 
-def occbin_simulate(om: OccbinModel, params, shocks: Mapping[str, Mapping[int, float]],
+def occbin_simulate(om: OccbinModel, params: Mapping[str, float],
+                    shocks: Mapping[str, Mapping[int, float]],
                     *, periods: int = 100, maxit: int = 30, curb_retrench: bool = False,
                     check_ahead: int = 200, steady: SteadyState | None = None,
-                    guess=None, initial: Mapping[str, float] | None = None,
+                    guess: Point | None = None, initial: Mapping[str, float] | None = None,
                     qz_criterium: float | None = None) -> OccbinResult:
     """Simulate surprise shocks under occasionally binding constraints.
 

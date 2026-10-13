@@ -1,56 +1,59 @@
-"""Perturbação de terceira ordem.
+"""Third-order perturbation.
 
-O que ela acrescenta à segunda. A segunda ordem corrige a MÉDIA das regras de decisão; a terceira
-corrige a INCLINAÇÃO delas em resposta ao risco, e é o que faz um prêmio de risco variar no tempo em
-vez de ser uma constante. Modelos em que a resposta a um choque depende do tamanho do choque —
-assimetria entre expansão e recessão, aversão a risco recursiva, restrições que apertam de um lado
-só — não são representáveis em segunda ordem por construção.
+What it adds to the second order. The second order corrects the MEAN of the decision rules; the
+third corrects their SLOPE in response to risk, and it is what makes a risk premium vary over time
+instead of being a constant. Models in which the response to a shock depends on the size of the
+shock (asymmetry between expansion and recession, recursive risk aversion, constraints that bind
+on one side only) cannot be represented at second order by construction.
 
-Estrutura
+Structure
 ---------
-A solução ganha os termos cúbicos::
+The solution gains the cubic terms::
 
     u_t     = F k + 1/2 g_kk[k,k] + 1/2 g_ss + 1/6 g_kkk[k,k,k] + 1/2 g_ssk[k]
     k_{t+1} = P k + 1/2 h_kk[k,k] + 1/2 h_ss + 1/6 h_kkk[k,k,k] + 1/2 h_ssk[k] + Q eps
 
-Os coeficientes cúbicos ``g_kkk`` e ``h_kkk`` resolvem a MESMA equação de Sylvester generalizada da
-segunda ordem, com um fator de Kronecker a mais::
+The cubic coefficients ``g_kkk`` and ``h_kkk`` solve the SAME generalised Sylvester equation as
+the second order, with one more Kronecker factor::
 
     Abar W3 + Bbar W3 (P kron P kron P) = -K3
 
-Os termos ``g_ssk`` e ``h_ssk`` — o risco entrando na inclinação — resolvem um sistema linear de
-tamanho ``n * n_k`` depois disso.
+The terms ``g_ssk`` and ``h_ssk`` (risk entering the slope) then solve a linear system of size
+``n * n_k``.
 
-O que está implementado, e o que NÃO está
------------------------------------------
-**Implementado:** o bloco cúbico ``g_kkk`` e ``h_kkk``, verificado pelo teste de ordem de acurácia —
-alimentar as regras cúbicas de volta no sistema não linear tem de deixar resíduo de ordem
-``||k||^4``, isto é, dividir o deslocamento pela metade tem de dividir o resíduo por dezesseis. É o
-mesmo teste que separa a segunda ordem da primeira, um grau acima, e um coeficiente cúbico errado
-não o sobrevive.
+What is implemented, and what is NOT
+------------------------------------
+**Implemented:** the cubic block ``g_kkk`` and ``h_kkk``, verified by the order-of-accuracy test.
+Feeding the cubic rules back into the nonlinear system has to leave a residual of order
+``||k||^4``, that is, halving the displacement has to divide the residual by sixteen. It is the
+same test that separates the second order from the first, one degree higher, and a wrong cubic
+coefficient does not survive it.
 
-**Implementado também:** ``g_ssk`` e ``h_ssk``. A inovação continua a entrar na primeira ordem por
-``Q eps``. A curvatura de segunda ordem dessa inovação, ``h_ee``, é resolvida antes de tomar a
-esperança, e a sua derivada em relação ao estado, contraída com a covariância, é ``h_ssk``. No
-AR(1) logarítmico isso tem de dar ``h_ssk[a, a] = ρ σ²``, com sinal positivo: a média condicional
-é ``(1+â)^ρ exp(σ²/2)``, e o termo cruzado entre ``â`` e ``σ²`` tem esse coeficiente. Uma derivação
-anterior acertava o módulo e invertia o sinal porque lia o termo pelo canal aditivo, que não o
-guarda. Aqui o canal é a curvatura em ``eps``, e o sinal sai da equação, não de um ajuste.
+**Also implemented:** ``g_ssk`` and ``h_ssk``. The innovation still enters at first order through
+``Q eps``. The second-order curvature in that innovation, ``h_ee``, is solved for before taking
+the expectation, and its derivative with respect to the state, contracted with the covariance, is
+``h_ssk``. In the log AR(1) this has to give ``h_ssk[a, a] = ρ σ²``, with a positive sign: the
+conditional mean is ``(1+â)^ρ exp(σ²/2)``, and the cross term between ``â`` and ``σ²`` has that
+coefficient. An earlier derivation got the magnitude right and the sign wrong because it read the
+term through the additive channel, which does not keep it. Here the channel is the curvature in
+``eps``, and the sign comes out of the equation, not out of an adjustment.
 
-O que isto não é: o tensor completo do Dynare, ``g(y_{-1}, u, σ)``, com ``g_uuu`` e ``g_σσu``.
-O termo que a regra de decisão usa para o prêmio de risco variar com o estado é ``σ² k``, e é esse
-que entra em ``jumps`` e ``next_states``.
+What this is not: Dynare's full tensor, ``g(y_{-1}, u, σ)``, with ``g_uuu`` and ``g_σσu``. The
+term the decision rule uses for the risk premium to vary with the state is ``σ² k``, and that is
+the one that enters ``jumps`` and ``next_states``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.linalg import solve_discrete_lyapunov
 
 from .linearize import second_derivatives, third_derivatives
-from .model import Model
+from .model import Covariance, Model
 from .secondorder import SecondOrderSolution, _solve_sylvester
 from .solution import shock_covariance
 
@@ -59,13 +62,13 @@ __all__ = ["ThirdOrderSolution", "solve_third_order"]
 
 @dataclass
 class ThirdOrderSolution:
-    """Segunda ordem, mais o bloco cúbico e a inclinação de risco ``σ² k``."""
+    """Second order, plus the cubic block and the risk slope ``σ² k``."""
 
     second: SecondOrderSolution
     g_kkk: np.ndarray            # (n_u, n_k, n_k, n_k)
     h_kkk: np.ndarray            # (n_k, n_k, n_k, n_k)
-    g_ssk: np.ndarray            # (n_u, n_k)   risco na inclinação dos saltos
-    h_ssk: np.ndarray            # (n_k, n_k)   risco na inclinação dos estados
+    g_ssk: np.ndarray            # (n_u, n_k)   risk in the slope of the jumps
+    h_ssk: np.ndarray            # (n_k, n_k)   risk in the slope of the states
     sylvester_residual: float = 0.0
     risk_slope_residual: float = 0.0
     Sigma: np.ndarray = field(repr=False, default=None)
@@ -86,8 +89,8 @@ class ThirdOrderSolution:
     def Q(self) -> np.ndarray:
         return self.second.Q
 
-    # -- regras de decisão ------------------------------------------------
-    def jumps(self, k, risk: bool = True) -> np.ndarray:
+    # -- decision rules ---------------------------------------------------
+    def jumps(self, k: ArrayLike, risk: bool = True) -> np.ndarray:
         k = np.asarray(k, dtype=float)
         out = (self.F @ k
                + 0.5 * np.einsum("rab,a,b->r", self.second.g_kk, k, k)
@@ -96,7 +99,8 @@ class ThirdOrderSolution:
             out = out + 0.5 * self.second.g_ss + 0.5 * self.g_ssk @ k
         return out
 
-    def next_states(self, k, eps=None, risk: bool = True) -> np.ndarray:
+    def next_states(self, k: ArrayLike, eps: np.ndarray | None = None,
+                    risk: bool = True) -> np.ndarray:
         k = np.asarray(k, dtype=float)
         out = (self.P @ k
                + 0.5 * np.einsum("rab,a,b->r", self.second.h_kk, k, k)
@@ -107,15 +111,16 @@ class ThirdOrderSolution:
             out = out + self.Q @ eps
         return out
 
-    # -- simulação --------------------------------------------------------
-    def simulate(self, periods: int = 1000, cov=None, *, seed: int | None = None,
-                 burn: int = 200, levels: bool = False) -> dict:
-        """Simulação PODADA de terceira ordem (Andreasen, Fernández-Villaverde e Rubio-Ramírez).
+    # -- simulation -------------------------------------------------------
+    def simulate(self, periods: int = 1000, cov: Covariance = None, *,
+                 seed: int | None = None, burn: int = 200,
+                 levels: bool = False) -> dict[str, np.ndarray]:
+        """PRUNED third-order simulation (Andreasen, Fernández-Villaverde and Rubio-Ramírez).
 
-        A poda é decomposta em três camadas — primeira, segunda e terceira ordem —, cada uma
-        alimentada apenas pelas anteriores. Sem ela um mapa cúbico iterado diverge, e mais depressa
-        do que o quadrático: não é um artefato a calibrar, é o que fazer com um polinômio de grau
-        três num laço.
+        Pruning splits the state into three layers (first, second and third order), each fed only
+        by the ones before it. Without it an iterated cubic map diverges, and faster than the
+        quadratic one: this is not an artefact to calibrate, it is what to do with a polynomial of
+        degree three in a loop.
         """
         rng = np.random.default_rng(seed)
         Sigma = shock_covariance(self.model.shocks,
@@ -126,19 +131,19 @@ class ThirdOrderSolution:
         nk = self.P.shape[0]
         eps = rng.standard_normal((total, self.model.n_shocks)) @ L.T
 
-        kf = np.zeros((total, nk))          # primeira ordem
-        ks = np.zeros((total, nk))          # correção de segunda
-        kt = np.zeros((total, nk))          # correção de terceira
+        kf = np.zeros((total, nk))          # first order
+        ks = np.zeros((total, nk))          # second-order correction
+        kt = np.zeros((total, nk))          # third-order correction
         u = np.zeros((total, self.F.shape[0]))
         gkk, hkk = self.second.g_kk, self.second.h_kk
         for t in range(1, total):
-            f_ant, s_ant, t_ant = kf[t - 1], ks[t - 1], kt[t - 1]
-            kf[t] = self.P @ f_ant + self.Q @ eps[t]
-            ks[t] = (self.P @ s_ant + 0.5 * np.einsum("rab,a,b->r", hkk, f_ant, f_ant)
+            f_prev, s_prev, t_prev = kf[t - 1], ks[t - 1], kt[t - 1]
+            kf[t] = self.P @ f_prev + self.Q @ eps[t]
+            ks[t] = (self.P @ s_prev + 0.5 * np.einsum("rab,a,b->r", hkk, f_prev, f_prev)
                      + 0.5 * self.second.h_ss)
-            kt[t] = (self.P @ t_ant + np.einsum("rab,a,b->r", hkk, f_ant, s_ant)
-                     + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.h_kkk, f_ant, f_ant, f_ant)
-                     + 0.5 * self.h_ssk @ f_ant)
+            kt[t] = (self.P @ t_prev + np.einsum("rab,a,b->r", hkk, f_prev, s_prev)
+                     + (1.0 / 6.0) * np.einsum("rabc,a,b,c->r", self.h_kkk, f_prev, f_prev, f_prev)
+                     + 0.5 * self.h_ssk @ f_prev)
             k = kf[t] + ks[t] + kt[t]
             u[t] = (self.F @ k
                     + 0.5 * np.einsum("rab,a,b->r", gkk, kf[t], kf[t])
@@ -152,14 +157,15 @@ class ThirdOrderSolution:
         paths.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
         return self.second.first.to_levels(paths) if levels else paths
 
-    # -- verificação ------------------------------------------------------
-    def accuracy(self, sizes=(0.02, 0.01, 0.005), seed: int = 0) -> dict:
-        """Verificação determinística: o resíduo tem de cair como ``||k||^4``.
+    # -- verification -----------------------------------------------------
+    def accuracy(self, sizes: Sequence[float] = (0.02, 0.01, 0.005),
+                 seed: int = 0) -> dict[str, Any]:
+        """Deterministic check: the residual has to fall as ``||k||^4``.
 
-        Os termos de risco são desligados, de modo que o que se lê é o bloco CÚBICO sozinho contra o
-        sistema não linear. Dividir o deslocamento pela metade tem de dividir o resíduo por
-        dezesseis; uma razão perto de oito significa que o bloco cúbico está errado e a solução não
-        é melhor do que a de segunda ordem.
+        The risk terms are switched off, so what is read is the CUBIC block alone against the
+        nonlinear system. Halving the displacement has to divide the residual by sixteen; a ratio
+        near eight means that the cubic block is wrong and the solution is no better than the
+        second-order one.
         """
         from .solution import _order_report
         rng = np.random.default_rng(seed)
@@ -180,23 +186,23 @@ class ThirdOrderSolution:
         return _order_report(list(sizes), out)
 
 
-def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
+def solve_third_order(second: SecondOrderSolution, cov: Covariance = None, *, h: float = 1e-3,
                       h_hess: float = 1e-4, direct_limit: int = 6000,
                       third: np.ndarray | None = None) -> ThirdOrderSolution:
-    """Calcula os termos de terceira ordem a partir de uma solução de segunda.
+    """Compute the third-order terms from a second-order solution.
 
     Parameters
     ----------
     second : SecondOrderSolution
-        Saída de :func:`dsgelab.solve_second_order`.
-    cov : mapping, array ou None
-        Covariância dos choques. Entra em ``g_ssk`` e ``h_ssk`` pela contração da curvatura
-        em ``eps`` com ``Σ``. A simulação usa a mesma matriz.
+        Output of :func:`dsgelab.solve_second_order`.
+    cov : mapping, array or None
+        Shock covariance. It enters ``g_ssk`` and ``h_ssk`` through the contraction of the
+        curvature in ``eps`` with ``Σ``. The simulation uses the same matrix.
     h, h_hess : float
-        Passos externo e interno da terceira derivada; ver
+        Outer and inner steps of the third derivative; see
         :func:`dsgelab.linearize.third_derivatives`.
     third : array, optional
-        Tensor de terceiras derivadas já calculado, para reaproveitar numa varredura.
+        An already computed tensor of third derivatives, to reuse across a sweep.
     """
     first = second.first
     model = first.model
@@ -216,38 +222,38 @@ def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
     Q = first.Q if first.Q is not None else np.zeros((nk, ne))
     g_kk, h_kk = second.g_kk, second.h_kk
 
-    # --- derivadas do mapa composto em relação aos estados -----------------
+    # --- derivatives of the composite map with respect to the states -------
     M = np.vstack([P, F @ P])
     N = np.vstack([np.eye(nk), F])
     Z = np.vstack([M, N, np.zeros((ne, nk))])                    # (m, nk)
 
-    # segunda derivada do mapa composto
+    # second derivative of the composite map
     d2_yp_k = h_kk
     d2_yp_u = np.einsum("ra,aij->rij", F, h_kk) + np.einsum("rab,ai,bj->rij", g_kk, P, P)
     Z2 = np.concatenate([d2_yp_k, d2_yp_u,
                          np.zeros((nk, nk, nk)), g_kk,
                          np.zeros((ne, nk, nk))], axis=0)        # (m, nk, nk)
 
-    # --- blocos da equação de Sylvester ------------------------------------
+    # --- blocks of the Sylvester equation ----------------------------------
     A1 = f1[:, :nk] + f1[:, nk:] @ F
     A2 = f1[:, nk:]
     A3 = f2[:, nk:]
     Abar = np.hstack([A1, A3])
     Bbar = np.hstack([np.zeros((n, nk)), A2])
 
-    # termo conhecido: g_kk cruzado com (h_kk, P), somado sobre as três permutações
-    cruz = (np.einsum("rab,aij,bl->rijl", g_kk, h_kk, P)
+    # known term: g_kk crossed with (h_kk, P), summed over the three permutations
+    cross = (np.einsum("rab,aij,bl->rijl", g_kk, h_kk, P)
             + np.einsum("rab,ail,bj->rijl", g_kk, h_kk, P)
             + np.einsum("rab,ajl,bi->rijl", g_kk, h_kk, P))
 
-    K3 = (np.einsum("ea,aijl->eijl", A2, cruz)
+    K3 = (np.einsum("ea,aijl->eijl", A2, cross)
           + np.einsum("eab,ai,bjl->eijl", H, Z, Z2)
           + np.einsum("eab,aj,bil->eijl", H, Z, Z2)
           + np.einsum("eab,al,bij->eijl", H, Z, Z2)
           + np.einsum("eabc,ai,bj,cl->eijl", T, Z, Z, Z))
 
     W3 = _solve_sylvester(Abar, Bbar, P, -K3, direct_limit=direct_limit, order=3)
-    # a simetria nos três índices é exata na teoria; impô-la remove o ruído numérico
+    # symmetry in the three indices is exact in theory; imposing it removes numerical noise
     W3 = sum(np.transpose(W3, (0,) + tuple(1 + np.array(perm)))
              for perm in ((0, 1, 2), (0, 2, 1), (1, 0, 2),
                           (1, 2, 0), (2, 0, 1), (2, 1, 0))) / 6.0
@@ -267,13 +273,13 @@ def solve_third_order(second: SecondOrderSolution, cov=None, *, h: float = 1e-3,
 
 
 def _risk_slope(nk, nu, n, ne, f1, f2, H, T, P, F, Q, g_kk, g_kkk, Sigma):
-    """``g_ssk``, ``h_ssk`` a partir da curvatura da regra em relação à inovação.
+    """``g_ssk``, ``h_ssk`` from the curvature of the rule with respect to the innovation.
 
-    A regra de primeira ordem escreve ``k' = P k + Q eps``. A segunda derivada dessa regra em
-    ``eps``, ``h_ee``, resolve o resíduo ex post diferenciado duas vezes. A esperança
-    ``h_ee : Σ`` é a correção de média. Diferenciar essa curvatura em relação ao estado e
-    contrair de novo com ``Σ`` é ``h_ssk``. ``g_ssk`` fecha o mesmo sistema linear que a
-    correção de média, agora em cada direção do estado.
+    The first-order rule writes ``k' = P k + Q eps``. The second derivative of that rule in
+    ``eps``, ``h_ee``, solves the ex-post residual differentiated twice. The expectation
+    ``h_ee : Σ`` is the mean correction. Differentiating that curvature with respect to the state
+    and contracting again with ``Σ`` gives ``h_ssk``. ``g_ssk`` closes the same linear system as
+    the mean correction, now in each direction of the state.
     """
     A1 = f1[:, :nk] + f1[:, nk:] @ F
     A2 = f1[:, nk:]

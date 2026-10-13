@@ -46,15 +46,25 @@ diffuse periods.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence, TypeAlias
 
 import numpy as np
+from numpy.typing import ArrayLike
+
+from .model import Covariance
+
+if TYPE_CHECKING:
+    from .solution import FirstOrderSolution
 
 __all__ = ["StateSpace", "FilterResult", "SmootherResult", "Forecast", "state_space",
            "kalman_filter", "kalman_smoother", "shock_decomposition",
            "realtime_shock_decomposition", "forecast"]
 
 _LOG2PI = np.log(2.0 * np.pi)
+
+#: Observed data: a mapping of observable name to series, or a ``(T, n_obs)``
+#: array in the order of the observables.
+Data: TypeAlias = Mapping[str, ArrayLike] | ArrayLike
 
 
 @dataclass
@@ -71,7 +81,7 @@ class StateSpace:
     states: list
     shocks: list
     transforms: list
-    solution: object = field(default=None, repr=False)
+    solution: FirstOrderSolution | None = field(default=None, repr=False)
 
     @property
     def n_states(self) -> int:
@@ -81,7 +91,7 @@ class StateSpace:
     def n_obs(self) -> int:
         return self.Z.shape[0]
 
-    def data_matrix(self, data) -> np.ndarray:
+    def data_matrix(self, data: Data) -> np.ndarray:
         """``(T, n_obs)`` from a mapping of series or an array, in the observables' order."""
         if isinstance(data, Mapping):
             cols = [np.asarray(data[n], dtype=float).ravel() for n in self.observables]
@@ -97,8 +107,10 @@ class StateSpace:
         return Y
 
 
-def state_space(sol, observables: Sequence[str], *, transforms=None, measurement=None,
-                cov=None) -> StateSpace:
+def state_space(sol: FirstOrderSolution, observables: Sequence[str], *,
+                transforms: str | Mapping[str, str] | None = None,
+                measurement: Mapping[str, float] | ArrayLike | None = None,
+                cov: Covariance = None) -> StateSpace:
     """The state space of a :class:`~dsgelab.FirstOrderSolution`.
 
     Parameters
@@ -231,7 +243,7 @@ def _ldl_transform(ss: StateSpace, Y):
     return Zs, ds, np.diag(D).copy(), Ys, Linv
 
 
-def kalman_filter(ss: StateSpace, data, *, init: str = "auto", univariate: bool | None = None,
+def kalman_filter(ss: StateSpace, data: Data, *, init: str = "auto", univariate: bool | None = None,
                   tol: float = 1e-12) -> FilterResult:
     """Kalman filter and Gaussian log likelihood.
 
@@ -364,7 +376,8 @@ class SmootherResult:
         return {e: self.shocks[:, j] for j, e in enumerate(self.space.shocks)}
 
 
-def kalman_smoother(ss: StateSpace, data=None, *, filtered: FilterResult | None = None,
+def kalman_smoother(ss: StateSpace, data: Data | None = None, *,
+                    filtered: FilterResult | None = None,
                     init: str = "auto") -> SmootherResult:
     """Fixed-interval smoother (Durbin and Koopman, 2012), exact through a diffuse start."""
     fr = filtered if filtered is not None else kalman_filter(ss, data, init=init)
@@ -497,7 +510,7 @@ def shock_decomposition(smoothed: SmootherResult, *, variables: Sequence[str] | 
     return out
 
 
-def realtime_shock_decomposition(space: StateSpace, data, *, init: str = "auto",
+def realtime_shock_decomposition(space: StateSpace, data: Data, *, init: str = "auto",
                                  variables: Sequence[str] | None = None,
                                  initial_shock_states: Mapping[str, str] | None = None,
                                  first: int = 2) -> dict:
@@ -548,7 +561,7 @@ class Forecast:
     coverage: float
 
 
-def forecast(space: StateSpace, data, horizon: int, *, init: str = "auto",
+def forecast(space: StateSpace, data: Data, horizon: int, *, init: str = "auto",
              coverage: float = 0.9, variables: Sequence[str] | None = None,
              include_measurement: bool = False, logs: Sequence[str] = ()) -> Forecast:
     """Forecast from the end of the sample, with Gaussian bands.

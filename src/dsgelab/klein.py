@@ -26,6 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.linalg import ordqz
 
 __all__ = ["klein", "KleinSolution", "BlanchardKahnError", "shock_loading"]
@@ -70,7 +71,7 @@ class KleinSolution:
         return M
 
 
-def klein(A, B, n_k: int, C=None, tol: float = 1e-9,
+def klein(A: ArrayLike, B: ArrayLike, n_k: int, C: ArrayLike | None = None, tol: float = 1e-9,
           qz_criterium: float | None = None) -> KleinSolution:
     """Solve ``A E_t x_{t+1} = B x_t + C eps_{t+1}`` for the saddle path.
 

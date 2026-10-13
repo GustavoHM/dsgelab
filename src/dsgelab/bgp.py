@@ -19,11 +19,13 @@ auxiliary ``LAG1_v`` grows with ``v``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any, Mapping
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import least_squares
 
-from .model import Model
+from .model import Model, Params
 
 __all__ = ["BalancedGrowth", "balanced_growth"]
 
@@ -50,7 +52,8 @@ class BalancedGrowth:
         return [v for v, g in self.growth.items() if abs(g - 1) > 1e-8]
 
 
-def bgp_residual(model: Model, params, X, G, ctx=None) -> np.ndarray:
+def bgp_residual(model: Model, params: Params, X: ArrayLike, G: ArrayLike,
+                 ctx: Any = None) -> np.ndarray:
     """``[f(X g, X, 0); f(X g^2, X g, 0)]``: the two dates of a balanced growth path."""
     X, G = np.asarray(X, dtype=float), np.asarray(G, dtype=float)
     e = np.zeros(model.n_shocks)
@@ -58,7 +61,10 @@ def bgp_residual(model: Model, params, X, G, ctx=None) -> np.ndarray:
                            model.residuals(X * G * G, X * G, e, params, ctx)])
 
 
-def balanced_growth(model: Model, params, *, guess=None, growth=None, fixed=None, ctx=None,
+def balanced_growth(model: Model, params: Params, *,
+                    guess: dict[str, float] | ArrayLike | None = None,
+                    growth: dict[str, float] | ArrayLike | None = None,
+                    fixed: Mapping[str, float] | None = None, ctx: Any = None,
                     tol: float = 1e-12, seed: int | None = 0, max_nfev: int = 100000,
                     tries: int = 20) -> BalancedGrowth:
     """Solve for the balanced growth path.

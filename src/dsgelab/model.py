@@ -25,11 +25,21 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass, fields, is_dataclass, replace
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence, TypeAlias
 
 import numpy as np
+from numpy.typing import ArrayLike
 
 __all__ = ["Model", "VarView", "get_param", "set_params"]
+
+#: Parameters as the routines accept them: a dataclass, a mapping or any object
+#: with attributes, read through :func:`get_param` and copied by :func:`set_params`.
+Params: TypeAlias = Any
+#: A point given by variable name or as a vector in the model's variable order.
+Point: TypeAlias = Mapping[str, float] | ArrayLike
+#: A shock covariance: standard deviations by shock name, a vector of them, a
+#: matrix, or ``None`` for the identity (see :func:`dsgelab.shock_covariance`).
+Covariance: TypeAlias = Mapping[str, float] | ArrayLike | None
 
 
 class VarView:
@@ -41,13 +51,13 @@ class VarView:
         self._x = x
         self._idx = index
 
-    def __getitem__(self, name: str):
+    def __getitem__(self, name: str) -> Any:
         try:
             return self._x[self._idx[name]]
         except KeyError:
             raise KeyError(f"unknown variable {name!r}; known: {list(self._idx)}") from None
 
-    def __getattr__(self, name: str):
+    def __getattr__(self, name: str) -> Any:
         try:
             return self._x[self._idx[name]]
         except KeyError:
@@ -56,7 +66,7 @@ class VarView:
     def __contains__(self, name: str) -> bool:
         return name in self._idx
 
-    def get(self, name: str, default=None):
+    def get(self, name: str, default: Any = None) -> Any:
         i = self._idx.get(name)
         return default if i is None else self._x[i]
 
@@ -73,7 +83,7 @@ class VarView:
                 n += 1
         return np.array([self._x[self._idx[f"{prefix}{i}"]] for i in range(n)])
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float]:
         return {k: float(self._x[i]) for k, i in self._idx.items()}
 
     @property
@@ -84,14 +94,14 @@ class VarView:
         return f"VarView({self.to_dict()})"
 
 
-def get_param(params, name: str):
+def get_param(params: Params, name: str) -> Any:
     """Read a parameter from a dataclass, a mapping or an arbitrary object."""
     if isinstance(params, Mapping):
         return params[name]
     return getattr(params, name)
 
 
-def set_params(params, updates: Mapping[str, float]):
+def set_params(params: Params, updates: Mapping[str, float]) -> Params:
     """Return a COPY of ``params`` with ``updates`` applied.
 
     Copying rather than mutating is not fastidiousness: calibration and policy
@@ -151,7 +161,7 @@ class Model:
     jacobian_fn: Callable | None = None
     hessian_fn: Callable | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.states = list(self.states)
         self.jumps = list(self.jumps)
         self.shocks = list(self.shocks)
@@ -196,7 +206,7 @@ class Model:
         return len(self.shocks)
 
     @property
-    def index(self) -> dict:
+    def index(self) -> dict[str, int]:
         return dict(self._index)
 
     def position(self, name: str) -> int:
@@ -212,7 +222,8 @@ class Model:
             raise KeyError(f"unknown shock {name!r}") from None
 
     # -- evaluation ------------------------------------------------------
-    def residuals(self, x_next, x_now, eps, params, ctx=None) -> np.ndarray:
+    def residuals(self, x_next: ArrayLike, x_now: ArrayLike, eps: ArrayLike | None,
+                  params: Params, ctx: Any = None) -> np.ndarray:
         """Evaluate the equilibrium residuals at a point."""
         x_next = np.asarray(x_next, dtype=float)
         x_now = np.asarray(x_now, dtype=float)
@@ -229,7 +240,8 @@ class Model:
                 f"{self.n_vars} variables ({self.n_states} states + {self.n_jumps} jumps)")
         return r
 
-    def jacobian(self, x_next, x_now, eps, params, ctx=None) -> np.ndarray | None:
+    def jacobian(self, x_next: ArrayLike, x_now: ArrayLike, eps: ArrayLike | None,
+                 params: Params, ctx: Any = None) -> np.ndarray | None:
         """Exact ``(n_eq, 2n + n_shocks)`` derivative matrix, or ``None`` if unavailable."""
         if self.jacobian_fn is None:
             return None
@@ -242,7 +254,8 @@ class Model:
             raise ValueError(f"jacobian_fn returned {J.shape}, expected {want}")
         return J
 
-    def hessian(self, x_next, x_now, eps, params, ctx=None) -> np.ndarray | None:
+    def hessian(self, x_next: ArrayLike, x_now: ArrayLike, eps: ArrayLike | None,
+                params: Params, ctx: Any = None) -> np.ndarray | None:
         """Exact ``(n_eq, m, m)`` second derivatives with ``m = 2n + n_shocks``, or ``None``."""
         if self.hessian_fn is None:
             return None
@@ -262,7 +275,7 @@ class Model:
             raise KeyError(f"missing values for {missing}")
         return np.array([float(values[n]) for n in self.names])
 
-    def dict(self, x) -> dict:
+    def dict(self, x: ArrayLike) -> dict[str, float]:
         """Unpack a variable vector into a name->value mapping."""
         x = np.asarray(x, dtype=float)
         return {n: float(x[i]) for i, n in enumerate(self.names)}

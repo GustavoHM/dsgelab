@@ -27,7 +27,7 @@ git clone https://github.com/GustavoHM/dsgelab && cd dsgelab
 pip install -e ".[symbolic,test]" && pytest
 ```
 
-Requires Python 3.10+, numpy and scipy. Pandas is not needed.
+Requires Python 3.11+, numpy and scipy. Pandas is not needed.
 
 ## Quick start
 
@@ -64,8 +64,9 @@ sol = solve(model, params, guess={"k": 0.2, "a": 1.0, "c": 0.36})
 ```
 
 Variables are addressed by **name**, in `cur` for period `t` and `nxt` for `t+1`.
-An index slip in a hand-packed residual vector is silent and is the single most
-expensive class of error in this kind of code; naming removes the class.
+When variables are read from a vector by position, swapping one index for another
+raises no error, and the program silently solves a different model from the one
+intended. Reading each variable by name rules that mistake out.
 
 ## What is in the box
 
@@ -130,7 +131,8 @@ matrix that means nothing.
 - [`docs/design-notes.md`](docs/design-notes.md) — numerical decisions and the pitfalls they avoid
 - [`docs/from-scripts.md`](docs/from-scripts.md) — porting an existing research script
 - [`docs/comparison.md`](docs/comparison.md) — how this package compares with the ones that already exist, and where it does not win
-- [`ROADMAP.md`](ROADMAP.md) — what is still missing, and what is left out on purpose
+- [`ROADMAP.md`](ROADMAP.md) — what is still missing, and when it is planned
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — how to report a problem and what a contribution needs
 - [`site/`](site/) — a GitHub-Pages-ready page with runnable examples
 
 ## Heutel environmental-policy example
@@ -142,6 +144,7 @@ and independently solved Dynare impulse responses and moments.
 
 ```python
 from dsgelab.examples import heutel
+heutel.fetch()          # once per machine, see below
 sol = heutel.solve("tax")
 irf = sol.irf("eps_a", size=0.01, periods=100)
 ```
@@ -151,13 +154,17 @@ steady-state check; the common baseline is an explicit choice:
 `heutel.solve("planner", heutel.Params())`. See the documentation for differences
 between the supplied code and the published paper.
 
-[`docs/ai-memory.md`](docs/ai-memory.md) explains shared project context across
-Codex, Claude Code, Grok, Kimi, Cursor, Gemini and Antigravity.
+The port's scalar algebra is translated from Heutel's MATLAB files, which carry no
+licence, so it is not distributed with the package. `heutel.fetch()` downloads the
+public copy from Georgia State University's repository, checks each file against the
+SHA-256 of the files the port was validated on, and writes the translation to
+`~/.cache/dsgelab/heutel` (or to `DSGELAB_HEUTEL_DIR`).
 
 ## Verification
 
-`pytest` runs 36 tests, and they check against answers known on paper rather than
-against previous output:
+Every result is checked against an independent reference, in two layers. The test suite
+(`pytest`, 146 tests, numpy and scipy only) checks against answers known on paper rather
+than against previous output:
 
 - the RBC with log utility and full depreciation, whose solution is exactly
   `P = [[α, 1], [0, ρ]]` and `F = [α, 1]`;
@@ -176,6 +183,43 @@ against previous output:
 ```
 pip install -e ".[symbolic,test]" && pytest
 ```
+
+The second layer, in [`validation/`](validation/README.md), runs Dynare's own `.mod` files
+and test cases in Octave + Dynare, and a calibration in MacroModelling.jl, and compares
+each with `dsgelab`: steady states, impulse responses, moments, optimal policy, perfect
+foresight, estimation, OccBin, the extended path, balanced growth and diagnostics.
+`bash validation/run_all.sh` runs all of it; CI runs it weekly.
+
+## Known limitations
+
+What the package does not do yet, so that nobody finds out halfway through a project.
+The [roadmap](ROADMAP.md) says when each is planned.
+
+- **Third order is partial.** The cubic block and the risk slope `g_σσk` are there; the
+  full Dynare decision-rule tensor with the innovation as an argument, the stochastic
+  steady state, and sparse tensors for large models are not. The tensors are dense: for
+  the 71-variable model that motivated the package they do not fit in memory.
+- **Estimation is linear.** The likelihood comes from the Kalman filter on the
+  first-order solution. There is no particle or inversion filter, so no estimation at
+  second or third order, and no gradient-based samplers (HMC/NUTS).
+- **No identification analysis, global sensitivity, or method of moments** (Dynare's
+  `+identification`, `+gsa`, `+mom`), and no HP- or band-pass-filtered theoretical moments.
+- **Global methods are limited** to Chebyshev collocation with up to three states. No
+  value or time iteration, endogenous grid, sparse grids, or Tauchen/Rouwenhorst.
+- **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
+- **No plotting.** Results are arrays and dictionaries; plotting is left to the user.
+- **The extended path's hybrid correction stops at second order.**
+- **Trends are declared only through a `.mod` file**, not yet in `from_equations`.
+- **`from_mod` reads the model, not the script.** Commands such as `stoch_simul`,
+  `estimation` or `identification` are skipped, not run, and their options are not
+  applied. In the model itself, what the reader cannot translate is refused with the
+  line that caused it: `@#include`, `@#for`, `varexo_det`, leads of a shock,
+  `expectation`, `diff`, `adl`, external functions. Coverage is validated on the Dynare
+  examples and tests listed in `validation/`.
+- **Some of the validation material is in Portuguese.** The documentation, the code and
+  the site are in English, with a Portuguese version of the site under `site/pt-br/`.
+  The comparison scripts in `validation/` still print their reports in Portuguese, and
+  the roadmap is written in Portuguese.
 
 ## Citing
 

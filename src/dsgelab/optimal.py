@@ -64,12 +64,20 @@ which is a mistake the impulse responses of the real variables will not show.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Sequence
+from types import ModuleType
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from .model import Model
+from .model import Covariance, Model, Params, Point
 from .steady import SteadyState, steady_state
+
+if TYPE_CHECKING:
+    import sympy
+
+    from .dynare import ModFile
+    from .solution import FirstOrderSolution
 
 __all__ = ["RamseyError", "ramsey_model", "ramsey_steady_state", "ramsey_multipliers",
            "PrivateBlock", "DiscretionError", "DiscretionSolution", "discretionary_policy",
@@ -104,15 +112,16 @@ class PrivateBlock:
     parameters: list
     labels: list
     instruments: list | None = None
-    objective: object = None          # sympy, current-period symbols, MAXIMISED
-    discount: object = None           # sympy, in the parameters
+    objective: sympy.Expr | None = None   # sympy, current-period symbols, MAXIMISED
+    discount: sympy.Expr | None = None    # sympy, in the parameters
     name: str = "model"
 
     @property
     def variables(self) -> list:
         return list(self.states) + list(self.jumps)
 
-    def tables(self, sympy):
+    def tables(self, sympy: ModuleType) -> tuple[dict[str, Any], dict[str, Any],
+                                                 dict[str, Any], dict[str, Any]]:
         S = sympy.Symbol
         return ({v: S(v) for v in self.variables}, {v: S(f"{v}__next") for v in self.variables},
                 {e: S(e) for e in self.shocks}, {p: S(p) for p in self.parameters})
@@ -186,10 +195,13 @@ def _private_block(equations, *, states=None, jumps=None, shocks=None, parameter
     return block
 
 
-def ramsey_model(equations, *, states: Sequence[str] | None = None,
+def ramsey_model(equations: Sequence[str] | ModFile | PrivateBlock, *,
+                 states: Sequence[str] | None = None,
                  jumps: Sequence[str] | None = None, shocks: Sequence[str] | None = None,
                  parameters: Sequence[str] | None = None,
-                 instruments: Sequence[str] | None = None, objective=None, discount=None,
+                 instruments: Sequence[str] | None = None,
+                 objective: str | sympy.Expr | None = None,
+                 discount: str | float | sympy.Expr | None = None,
                  name: str = "ramsey", derivatives: str = "both",
                  multiplier_prefix: str = "MULT_", auxiliary: str = "auto") -> Model:
     """Build the Ramsey planner's equilibrium as a :class:`~dsgelab.Model`.
@@ -355,7 +367,7 @@ def _ramsey(model: Model) -> dict:
     return info
 
 
-def ramsey_multipliers(model: Model, private, params) -> dict:
+def ramsey_multipliers(model: Model, private: Mapping[str, float], params: Params) -> dict:
     """Multipliers, auxiliaries and lags consistent with a private steady state.
 
     At a steady state the first-order conditions are LINEAR in the multipliers
@@ -401,7 +413,8 @@ def ramsey_multipliers(model: Model, private, params) -> dict:
     return out
 
 
-def ramsey_steady_state(model: Model, private, params, **kwargs) -> SteadyState:
+def ramsey_steady_state(model: Model, private: Mapping[str, float], params: Params,
+                        **kwargs: Any) -> SteadyState:
     """The planner's steady state, started from a guess of the private allocation.
 
     The multipliers are first fitted by :func:`ramsey_multipliers`; the whole
@@ -458,7 +471,8 @@ class DiscretionSolution:
         e[self.shocks.index(name)] = size
         return self.irf_impulse(e, periods=periods, levels=levels)
 
-    def irf_impulse(self, impulse, periods: int = 40, *, levels: bool = False) -> dict:
+    def irf_impulse(self, impulse: ArrayLike, periods: int = 40, *,
+                    levels: bool = False) -> dict[str, np.ndarray]:
         y = self.G @ np.asarray(impulse, dtype=float)
         out = np.zeros((periods, len(self.names)))
         for t in range(periods):
@@ -468,18 +482,19 @@ class DiscretionSolution:
         out = out + base
         return {n: out[:, i] for i, n in enumerate(self.names)}
 
-    def covariance(self, cov=None) -> np.ndarray:
+    def covariance(self, cov: Covariance = None) -> np.ndarray:
         from scipy.linalg import solve_discrete_lyapunov
         Sigma = self._cov(cov)
         return solve_discrete_lyapunov(self.H, self.G @ Sigma @ self.G.T)
 
-    def moments(self, cov=None) -> dict:
+    def moments(self, cov: Covariance = None) -> dict[str, Any]:
         V = self.covariance(cov)
         sd = np.sqrt(np.maximum(np.diag(V), 0.0))
         return dict(names=list(self.names), cov=V, std=sd,
                     std_by_name=dict(zip(self.names, sd)))
 
-    def welfare(self, cov=None, *, initial=None, shock=None) -> dict:
+    def welfare(self, cov: Covariance = None, *, initial: Mapping[str, float] | None = None,
+                shock: ArrayLike | None = None) -> dict[str, float]:
         """Discounted objective, conditional and unconditional.
 
         In a linear-quadratic problem the objective is ``U + 1/2 y' U_yy y`` and
@@ -591,13 +606,16 @@ def _dennis(AAlag, AA0, AAlead, BB, bigw, instr_id, beta, maxit, tol, qz_criteri
     return H[:endo_nbr, :endo_nbr], G[:endo_nbr], it
 
 
-def discretionary_policy(equations, *, params, states: Sequence[str] | None = None,
+def discretionary_policy(equations: Sequence[str] | ModFile | PrivateBlock, *,
+                         params: Params, states: Sequence[str] | None = None,
                          jumps: Sequence[str] | None = None,
                          shocks: Sequence[str] | None = None,
                          parameters: Sequence[str] | None = None,
-                         instruments: Sequence[str] | None = None, objective=None,
-                         discount=None, steady: Mapping[str, float] | None = None,
-                         cov=None, tol: float = 1e-12, maxiter: int = 3000,
+                         instruments: Sequence[str] | None = None,
+                         objective: str | sympy.Expr | None = None,
+                         discount: str | float | sympy.Expr | None = None,
+                         steady: Mapping[str, float] | None = None,
+                         cov: Covariance = None, tol: float = 1e-12, maxiter: int = 3000,
                          qz_criterium: float = 1 + 1e-6) -> DiscretionSolution:
     """Optimal policy under discretion, in the linear-quadratic class.
 
@@ -708,13 +726,13 @@ class OSRResult:
     """The coefficients that minimise the loss, and what the loss is there."""
 
     params: dict              # the optimal rule coefficients
-    all_params: object        # the full parameter set at the optimum
+    all_params: Params        # the full parameter set at the optimum
     loss: float
     initial_loss: float
     success: bool
     message: str
     evaluations: int
-    solution: object          # FirstOrderSolution at the optimum
+    solution: FirstOrderSolution | None   # FirstOrderSolution at the optimum
 
 
 def _weight_matrix(names, weights):
@@ -735,9 +753,14 @@ def _weight_matrix(names, weights):
     return W
 
 
-def osr(model: Model, params, *, rule_params: Sequence[str], weights=None, objective=None,
-        discount=None, cov=None, guess=None, steady: SteadyState | None = None,
-        steady_fn=None, bounds=None, qz_criterium: float | None = None,
+def osr(model: Model, params: Params, *, rule_params: Sequence[str],
+        weights: Mapping[str | tuple[str, str], float] | ArrayLike | None = None,
+        objective: str | sympy.Expr | None = None,
+        discount: str | float | sympy.Expr | None = None, cov: Covariance = None,
+        guess: Point | None = None, steady: SteadyState | None = None,
+        steady_fn: Callable[[Params], SteadyState] | None = None,
+        bounds: Mapping[str, tuple[float | None, float | None]] | None = None,
+        qz_criterium: float | None = None,
         method: str | None = None, options: Mapping | None = None,
         penalty: float = 1e8) -> OSRResult:
     """Optimal simple rule: the rule coefficients that minimise a quadratic loss.

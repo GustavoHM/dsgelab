@@ -3,7 +3,7 @@
 #
 # Uso:  bash run_foresight.sh
 #
-# Os arquivos vêm de tests/deterministic_simulations do Dynare 7.1 (fetch.sh) e rodam sem
+# Os arquivos vêm de tests/deterministic_simulations do Dynare 7.2 (fetch.sh) e rodam sem
 # alteração, exceto os comandos de gráfico (rplot), que a cópia remove, e a tolerância do solver. Exporta para
 # out_foresight/<nome>.mat a trajetória oo_.endo_simul, a exógena oo_.exo_simul e os nomes.
 set -euo pipefail

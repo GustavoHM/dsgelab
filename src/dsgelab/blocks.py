@@ -1,41 +1,44 @@
-"""Derivar as condições de primeira ordem a partir do problema do agente.
+"""Derive the first-order conditions from an agent's problem.
 
-Opcional: requer ``sympy`` (``pip install dsgelab[symbolic]``).
+Optional: requires ``sympy`` (``pip install dsgelab[symbolic]``).
 
-O que faz, e o que não faz
---------------------------
-Recebe um problema de otimização recursivo declarado — função-objetivo do período, variáveis de
-escolha, estados e restrições — e devolve as CPOs como EQUAÇÕES EM TEXTO, prontas para
-:func:`dsgelab.symbolic.from_equations`. O que se ganha não é digitação: é que a álgebra deixa de
-ser feita à mão. Derivar um lagrangiano com quatro restrições e três estados à mão é onde entram os
-erros de sinal e os termos esquecidos, e eles não aparecem no estado estacionário.
+What it does, and what it does not
+----------------------------------
+It takes a declared recursive optimisation problem (the period objective, the choice variables,
+the states and the constraints) and returns the FOCs as EQUATIONS IN TEXT, ready for
+:func:`dsgelab.symbolic.from_equations`. The gain is not in typing: the algebra is no longer done
+by hand. Deriving a Lagrangian with four constraints and three states by hand is where sign errors
+and forgotten terms come in, and they do not show up in the steady state.
 
-O que NÃO faz: escolher o problema por você. Condições de transversalidade, restrições de
-desigualdade, complementaridade e envelopes não padrão continuam sendo do modelador — o pacote
-deriva o que você declarou, e a declaração é a modelagem.
+What it does NOT do is choose the problem for you. Transversality conditions, inequality
+constraints, complementarity and non-standard envelopes remain the modeller's job: the package
+derives what you declared, and the declaration is the modelling.
 
-A matemática
-------------
-Com ``y`` os controles, ``k`` os estados e ``h_j`` as restrições escritas como ``= 0``, o
-lagrangiano do período é
+The mathematics
+---------------
+With ``y`` the controls, ``k`` the states and ``h_j`` the constraints written as ``= 0``, the
+period Lagrangian is
 
     L_t = u(y_t, k_t) + SUM_j lm_j,t * h_j(y_t, k_t, k_{t+1})
 
-e as condições são
+and the conditions are
 
-    dL_t/dy_t = 0                                    para cada controle
-    dL_t/dk_{t+1} + beta * E_t[ dL_{t+1}/dk_{t+1} ] = 0    para cada estado
+    dL_t/dy_t = 0                                    for each control
+    dL_t/dk_{t+1} + beta * E_t[ dL_{t+1}/dk_{t+1} ] = 0    for each state
 
-A segunda é a Euler, e o segundo termo é a derivada do lagrangiano do período SEGUINTE em relação ao
-estado que ele herda — obtida deslocando ``dL_t/dk_t`` um período à frente. Se esse deslocamento
-produzir um termo em ``t+2``, o problema não é representável em dois períodos e a função recusa,
-dizendo qual estado o causou, em vez de devolver equações erradas.
+The second is the Euler equation, and its second term is the derivative of the NEXT period's
+Lagrangian with respect to the state it inherits, obtained by shifting ``dL_t/dk_t`` one period
+ahead. If that shift produces a term in ``t+2``, the problem cannot be represented in two periods
+and the function refuses, naming the state that caused it, instead of returning wrong equations.
 """
 
 from __future__ import annotations
 
 import re
-from typing import Mapping, Sequence
+from typing import TYPE_CHECKING, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from .model import Model
 
 __all__ = ["FOCError", "optimality_conditions", "Problem", "assemble"]
 
@@ -50,17 +53,17 @@ def _require_sympy():
     try:
         import sympy  # noqa: F401
     except ImportError as exc:      # pragma: no cover
-        raise FOCError("a derivação de CPOs precisa de sympy: "
+        raise FOCError("deriving FOCs requires sympy: "
                        "pip install 'dsgelab[symbolic]'") from exc
     import sympy
     return sympy
 
 
-def _parse(text, local_dict, global_dict, rotulo):
+def _parse(text, local_dict, global_dict, label):
     from sympy.parsing.sympy_parser import parse_expr, standard_transformations
     t = _LEAD.sub(r"\1__next", str(text))
     if t.count("=") > 1:
-        raise FOCError(f"{rotulo}: mais de um '='")
+        raise FOCError(f"{label}: more than one '='")
     if "=" in t:
         lhs, rhs = t.split("=")
         t = f"({lhs}) - ({rhs})"
@@ -68,33 +71,35 @@ def _parse(text, local_dict, global_dict, rotulo):
         return parse_expr(t, local_dict=local_dict, global_dict=global_dict,
                           transformations=standard_transformations)
     except Exception as exc:
-        raise FOCError(f"{rotulo}: não consigo analisar {text!r} ({exc})") from exc
+        raise FOCError(f"{label}: cannot parse {text!r} ({exc})") from exc
 
 
 class Problem:
-    """Um problema de otimização recursivo, declarado.
+    """A declared recursive optimisation problem.
 
     Parameters
     ----------
     objective : str
-        Retorno do PERÍODO, ``u(y_t, k_t)``. O fator de desconto entra por ``discount`` e não aqui.
+        The PERIOD return, ``u(y_t, k_t)``. The discount factor enters through ``discount``, not
+        here.
     controls : sequence of str
-        Variáveis escolhidas em ``t`` que não são estados.
+        Variables chosen at ``t`` that are not states.
     states : sequence of str
-        Variáveis predeterminadas. O valor escolhido em ``t`` é ``k(+1)``.
+        Predetermined variables. The value chosen at ``t`` is ``k(+1)``.
     constraints : sequence of str
-        Restrições de igualdade, ``"lhs = rhs"`` ou expressão que se anula. Cada uma ganha um
-        multiplicador.
+        Equality constraints, ``"lhs = rhs"`` or an expression that equals zero. Each one gets a
+        multiplier.
     discount : str
-        Nome do parâmetro de desconto.
+        Name of the discount parameter.
     parameters : sequence of str
-        Todo nome que não é variável nem multiplicador. Um nome não declarado levanta erro em vez
-        de virar símbolo livre: um erro de digitação não pode virar um parâmetro novo.
+        Every name that is neither a variable nor a multiplier. An undeclared name raises an error
+        instead of becoming a free symbol: a typo cannot turn into a new parameter.
     exogenous : sequence of str, optional
-        Variáveis que entram no problema e o agente NÃO escolhe — produtividade, preços tomados
-        como dados. Não geram CPO.
+        Variables that enter the problem but the agent does NOT choose, such as productivity or
+        prices taken as given. They produce no FOC.
     multipliers : sequence of str, optional
-        Nomes dos multiplicadores, na ordem das restrições. Ausentes, chamam-se ``lm_1``, ``lm_2``…
+        Names of the multipliers, in the order of the constraints. When absent they are called
+        ``lm_1``, ``lm_2``…
     """
 
     def __init__(self, objective: str, *, controls: Sequence[str], states: Sequence[str] = (),
@@ -113,113 +118,114 @@ class Problem:
         self.multipliers = (list(multipliers) if multipliers is not None
                             else [f"lm_{i + 1}" for i in range(n)])
         if len(self.multipliers) != n:
-            raise FOCError(f"{n} restrições e {len(self.multipliers)} multiplicadores")
-        todos = self.controls + self.states + self.exogenous + self.multipliers
-        dup = {v for v in todos if todos.count(v) > 1}
+            raise FOCError(f"{n} constraints and {len(self.multipliers)} multipliers")
+        all_names = self.controls + self.states + self.exogenous + self.multipliers
+        dup = {v for v in all_names if all_names.count(v) > 1}
         if dup:
-            raise FOCError(f"nomes repetidos entre variáveis e multiplicadores: {sorted(dup)}")
+            raise FOCError(f"names repeated among variables and multipliers: {sorted(dup)}")
 
     def __repr__(self) -> str:
-        return (f"Problem({self.name!r}, {len(self.controls)} controles, "
-                f"{len(self.states)} estados, {len(self.constraints)} restrições)")
+        return (f"Problem({self.name!r}, {len(self.controls)} controls, "
+                f"{len(self.states)} states, {len(self.constraints)} constraints)")
 
 
 def optimality_conditions(problem: Problem) -> dict:
-    """Deriva as CPOs. Devolve equações em texto, prontas para ``from_equations``.
+    """Derive the FOCs. Returns text equations, ready for ``from_equations``.
 
     Returns
     -------
-    dict com
-        ``equations``   as CPOs mais as restrições, como strings;
-        ``jumps``       controles e multiplicadores — as variáveis não predeterminadas que o
-                        problema introduz;
-        ``states``      os estados, na ordem declarada;
-        ``multipliers`` os nomes usados;
-        ``detail``      um mapa de cada equação à sua origem (qual controle, qual estado, qual
-                        restrição), para que o resultado seja auditável e não um bloco opaco.
+    dict with
+        ``equations``   the FOCs plus the constraints, as strings;
+        ``jumps``       controls and multipliers, the non-predetermined variables that the
+                        problem introduces;
+        ``states``      the states, in the declared order;
+        ``multipliers`` the names used;
+        ``detail``      a map from each equation to its origin (which control, which state, which
+                        constraint), so that the result can be audited rather than being an opaque
+                        block.
     """
     sympy = _require_sympy()
     p = problem
 
-    variaveis = p.controls + p.states + p.exogenous + p.multipliers
-    cur = {v: sympy.Symbol(v) for v in variaveis}
-    nxt = {v: sympy.Symbol(f"{v}__next") for v in variaveis}
-    nxt2 = {v: sympy.Symbol(f"{v}__next2") for v in variaveis}
+    variables = p.controls + p.states + p.exogenous + p.multipliers
+    cur = {v: sympy.Symbol(v) for v in variables}
+    nxt = {v: sympy.Symbol(f"{v}__next") for v in variables}
+    nxt2 = {v: sympy.Symbol(f"{v}__next2") for v in variables}
     par = {q: sympy.Symbol(q) for q in list(p.parameters) + [p.discount]}
 
     local = {}
     local.update(cur)
-    local.update({f"{v}__next": nxt[v] for v in variaveis})
+    local.update({f"{v}__next": nxt[v] for v in variables})
     local.update(par)
-    conhecidos = set(cur.values()) | set(nxt.values()) | set(par.values())
-    funcoes = {"log": sympy.log, "exp": sympy.exp, "sqrt": sympy.sqrt, "Abs": sympy.Abs,
-               "sin": sympy.sin, "cos": sympy.cos, "Min": sympy.Min, "Max": sympy.Max}
-    local_dict = dict(local); local_dict.update(funcoes)
+    known = set(cur.values()) | set(nxt.values()) | set(par.values())
+    functions = {"log": sympy.log, "exp": sympy.exp, "sqrt": sympy.sqrt, "Abs": sympy.Abs,
+                 "sin": sympy.sin, "cos": sympy.cos, "Min": sympy.Min, "Max": sympy.Max}
+    local_dict = dict(local); local_dict.update(functions)
     global_dict = {"Symbol": sympy.Symbol, "Integer": sympy.Integer,
                    "Float": sympy.Float, "Rational": sympy.Rational,
                    "factorial": sympy.factorial}
 
-    def analisa(texto, rotulo):
-        e = _parse(texto, local_dict, global_dict, rotulo)
-        desconhecidos = {s for s in e.free_symbols if s not in conhecidos}
-        if desconhecidos:
+    def parse_checked(text, label):
+        e = _parse(text, local_dict, global_dict, label)
+        unknown = {s for s in e.free_symbols if s not in known}
+        if unknown:
             raise FOCError(
-                f"{rotulo}: nome(s) não declarado(s) {sorted(str(s) for s in desconhecidos)}. "
-                f"Declare-os em controls, states, exogenous ou parameters.")
+                f"{label}: undeclared name(s) {sorted(str(s) for s in unknown)}. "
+                f"Declare them in controls, states, exogenous or parameters.")
         return e
 
-    u = analisa(p.objective, "objetivo")
-    hs = [analisa(c, f"restrição {i + 1}") for i, c in enumerate(p.constraints)]
+    u = parse_checked(p.objective, "objective")
+    hs = [parse_checked(c, f"constraint {i + 1}") for i, c in enumerate(p.constraints)]
 
-    # lagrangiano do período
+    # period Lagrangian
     L = u + sum(cur[m] * h for m, h in zip(p.multipliers, hs))
 
-    def avanca(expr):
-        """Desloca a expressão um período à frente: x -> x(+1), x(+1) -> x(+2)."""
-        return expr.xreplace({nxt[v]: nxt2[v] for v in variaveis}) \
-                   .xreplace({cur[v]: nxt[v] for v in variaveis})
+    def lead(expr):
+        """Shift the expression one period ahead: x -> x(+1), x(+1) -> x(+2)."""
+        return expr.xreplace({nxt[v]: nxt2[v] for v in variables}) \
+                   .xreplace({cur[v]: nxt[v] for v in variables})
 
     printer = _plain_printer(sympy)
-    equacoes, detalhe, ordem_jumps = [], {}, []
+    equations, detail, jump_order = [], {}, []
 
-    # (1) CPO de cada controle
+    # (1) FOC for each control
     for c in p.controls:
-        # Sem `simplify`: ele às vezes põe a expressão sobre um denominador que é uma VARIÁVEL,
-        # e um resíduo dividido por k(+1) só é equivalente enquanto k(+1) não se aproxima de zero.
-        # A derivada crua é exatamente a CPO.
+        # No `simplify`: it sometimes puts the expression over a denominator that is a VARIABLE,
+        # and a residual divided by k(+1) is equivalent only while k(+1) stays away from zero.
+        # The raw derivative is exactly the FOC.
         foc = sympy.expand(sympy.diff(L, cur[c]))
         txt = printer(foc)
-        equacoes.append(txt)
-        detalhe[txt] = f"CPO do controle {c}"
+        equations.append(txt)
+        detail[txt] = f"FOC for control {c}"
 
-    # (2) Euler de cada estado
+    # (2) Euler equation for each state
     for k in p.states:
-        agora = sympy.diff(L, nxt[k])                  # efeito de escolher k(+1) hoje
-        depois = avanca(sympy.diff(L, cur[k]))         # o que k(+1) rende amanhã
-        proibidos = [v for v in variaveis if nxt2[v] in depois.free_symbols]
-        if proibidos:
+        now = sympy.diff(L, nxt[k])                    # effect of choosing k(+1) today
+        later = lead(sympy.diff(L, cur[k]))            # what k(+1) yields tomorrow
+        forbidden = [v for v in variables if nxt2[v] in later.free_symbols]
+        if forbidden:
             raise FOCError(
-                f"a Euler do estado {k!r} exige termos em t+2 ({sorted(proibidos)}): o problema "
-                f"não é representável em dois períodos. Introduza a variável em t+1 como um "
-                f"controle com a sua própria definição.")
-        euler = sympy.expand(agora + par[p.discount] * depois)
+                f"the Euler equation for state {k!r} requires terms in t+2 ({sorted(forbidden)}): "
+                f"the problem cannot be represented in two periods. Introduce the variable at t+1 "
+                f"as a control with its own definition.")
+        euler = sympy.expand(now + par[p.discount] * later)
         txt = printer(euler)
-        equacoes.append(txt)
-        detalhe[txt] = f"Euler do estado {k}"
+        equations.append(txt)
+        detail[txt] = f"Euler equation for state {k}"
 
-    # (3) as restrições, que também são equações do modelo
+    # (3) the constraints, which are also equations of the model
     for i, (c, h) in enumerate(zip(p.constraints, hs), start=1):
         txt = printer(h)
-        equacoes.append(txt)
-        detalhe[txt] = f"restrição {i}: {c}"
+        equations.append(txt)
+        detail[txt] = f"constraint {i}: {c}"
 
-    ordem_jumps = list(p.controls) + list(p.multipliers)
-    return dict(equations=equacoes, jumps=ordem_jumps, states=list(p.states),
-                multipliers=list(p.multipliers), detail=detalhe)
+    jump_order = list(p.controls) + list(p.multipliers)
+    return dict(equations=equations, jumps=jump_order, states=list(p.states),
+                multipliers=list(p.multipliers), detail=detail)
 
 
 def _plain_printer(sympy):
-    """Imprime na sintaxe de ``from_equations``: ``x__next`` volta a ser ``x(+1)``."""
+    """Print in the syntax of ``from_equations``: ``x__next`` becomes ``x(+1)`` again."""
     from sympy.printing.str import StrPrinter
     pr = StrPrinter(settings={"order": "none"})
 
@@ -233,22 +239,22 @@ def _plain_printer(sympy):
 def assemble(problems: Sequence[Problem], *, equations: Sequence[str] = (),
              states: Sequence[str] = (), jumps: Sequence[str] = (),
              shocks: Sequence[str] = (), parameters: Sequence[str] = (),
-             name: str = "model", derivatives: str = "both"):
-    """Junta vários problemas de otimização e as equações de fechamento num só ``Model``.
+             name: str = "model", derivatives: str = "both") -> Model:
+    """Combine several optimisation problems and the closing equations into one ``Model``.
 
-    Cada problema dá as suas CPOs, as suas restrições e os seus multiplicadores
-    (:func:`optimality_conditions`). O fechamento -- condições de mercado,
-    processos exógenos, definições -- é texto do modelador, em ``equations``, e
-    as variáveis que só ele introduz (preços, choques agregados) são declaradas
-    em ``states`` e ``jumps``. Não é uma linguagem de blocos: os limites são os de
-    :class:`Problem` (restrições de igualdade, nada em ``t+2``).
+    Each problem contributes its FOCs, its constraints and its multipliers
+    (:func:`optimality_conditions`). The closure -- market clearing, exogenous
+    processes, definitions -- is the modeller's text, in ``equations``, and the
+    variables that only the closure introduces (prices, aggregate shocks) are
+    declared in ``states`` and ``jumps``. This is not a block language: the limits
+    are those of :class:`Problem` (equality constraints, nothing in ``t+2``).
 
-    O que se confere antes de montar: uma variável escolhida por dois agentes é
-    recusada (um preço que os dois tomam como dado é ``exogenous`` dos dois);
-    multiplicadores com o nome padrão repetido entre agentes recebem o prefixo
-    do agente (``household_lm_1``); e o número de equações tem de ser o de
-    variáveis, com a contagem por bloco na mensagem quando não é. A origem de
-    cada equação fica em ``model.assembly``.
+    What is checked before assembling: a variable chosen by two agents is refused
+    (a price that both take as given is ``exogenous`` to both); multipliers whose
+    default name is repeated across agents get the agent's name as a prefix
+    (``household_lm_1``); and the number of equations must equal the number of
+    variables, with the count per block in the message when it does not. The
+    origin of each equation is kept in ``model.assembly``.
     """
     from .symbolic import from_equations
 

@@ -3,6 +3,64 @@
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes.
 
+## Unreleased
+
+Toward the roadmap's milestone 0.5, the public release. No new solver features.
+
+### Added
+
+- `py.typed`: the package declares its type annotations (PEP 561).
+- CI tests the built wheel, not the checkout, on Linux, macOS and Windows with Python
+  3.11 to 3.14; the sdist is installed and tested from its own tree; the site examples
+  run; `twine check --strict` passes on both artifacts. `DSGELAB_TEST_INSTALLED=1`
+  makes the suite import the installed package instead of `src/`.
+- `validation/run_all.sh` runs the whole external validation and summarises which
+  comparisons passed; `validation/setup_octave_packages.sh` installs the Octave packages
+  at the versions the comparison used, checked by sha256; `validation/macromodelling/`
+  is a Julia project with MacroModelling.jl pinned. A weekly CI job runs all three.
+- A release workflow that publishes by trusted publishing, to TestPyPI first, tests what
+  TestPyPI serves, and only then publishes to PyPI.
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and pull-request templates; a section
+  of known limitations in the README.
+- The site in English, with the Portuguese version under `site/pt-br/`; the examples of
+  both run.
+- `validation/heutel/fetch.sh` downloads Heutel's MATLAB files from the public copy at
+  Georgia State University's repository and checks them; the six `.m` files are
+  byte-identical to the ones the port was validated on.
+- `dsgelab.examples.heutel.fetch()` downloads the same public copy, checks every file
+  by SHA-256, and writes the translated algebra of the port to a cache directory
+  (`~/.cache/dsgelab/heutel`, or `DSGELAB_HEUTEL_DIR`). Without it, `heutel.solve`
+  raises `HeutelSourceMissing` naming the call to make, and the Heutel tests are
+  skipped.
+
+### Changed
+
+- The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
+  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
+  licence. `heutel.fetch()` generates it on the user's machine;
+  `validation/heutel/translate.py` is gone.
+- Python 3.11 or later is required. Python 3.10 is dropped: SciPy 1.15.3, the last
+  release for it, does not load on macOS 27.
+- Error messages, the labels of derived first-order conditions ("FOC for control c",
+  "Euler equation for state k", "constraint i: ...") and the header comments of files
+  written by `to_dynare` and `to_macromodelling` are in English. The exported model text
+  is unchanged.
+- The external validation runs on Dynare 7.2, with Octave 11.3.0 and the Octave packages
+  statistics 2.0.0 and datatypes 1.5.0. Every comparison prints the same numbers as on
+  Dynare 7.1; the Heutel errors move in their last digit.
+
+### Fixed
+
+- The sdist now carries `validation/heutel/reference.json`, which its own test suite
+  reads.
+- `validation/compare_diagnostics.py` honours `OCTAVE` and `DYNARE_MATLAB` and looks in
+  the same places as the other scripts, instead of only in Homebrew's.
+- `modelo.mod` and `modelo.jl`, written by a site example, had been committed at the
+  repository root; they are gone, and `tools/check_site_examples.py` now runs the
+  examples in a temporary directory.
+- Package metadata uses the SPDX license expression (`license = "MIT"`), which
+  setuptools will require from 2027.
+
 ## 0.4.0 — 2026-10-11
 
 The roadmap's milestone 0.4: nonlinearities and the declaration of the model. Each item is
@@ -51,6 +109,10 @@ against a closed form.
 
 ### Changed
 
+- The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
+  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
+  licence. `heutel.fetch()` generates it on the user's machine;
+  `validation/heutel/translate.py` is gone.
 - `perfect_foresight(jacobian="auto")` is the default: the stacked Jacobian is assembled
   sparse from the model's exact derivatives when it has them (forward differences
   otherwise); ex-post states use them too.
@@ -70,6 +132,10 @@ forecasting), each item validated against Dynare 7.1 on Dynare's own files.
 
 ### Changed
 
+- The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
+  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
+  licence. `heutel.fetch()` generates it on the user's machine;
+  `validation/heutel/translate.py` is gone.
 - Renamed from `dsgekit` to `dsgelab`: `dsgekit` is taken on PyPI by an unrelated
   project. The import name, distribution name, CLI entry point and URLs move together.
 

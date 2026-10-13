@@ -153,27 +153,57 @@ Nenhum recurso novo. Os itens abaixo são condição para publicar.
 - [x] **Renomear.** `dsgekit` estava tomado no PyPI por um pacote concorrente, *"A Python toolkit
   for DSGE models"*. O pacote agora é `dsgelab`, livre no PyPI em 11 de outubro de 2026. Falta
   reservar o nome com um primeiro upload ao TestPyPI e ao PyPI.
-- [x] **Um repositório canônico.** `https://github.com/GustavoHM/dsgelab`. As cópias do repositório de pesquisa foram arquivadas.
-- [ ] **Idioma.** Código, docstrings e `docs/api.md` estão em inglês; o site, o roadmap, a
-  comparação e a validação, em português. O site público precisa de versão em inglês, como o do
-  `cgelab` já tem.
+- [x] **Um repositório canônico.** `https://github.com/GustavoHM/dsgelab`. As cópias do
+  repositório de pesquisa foram arquivadas.
+- [ ] **Idioma.** Feito em 12 de outubro de 2026: o site tem versão em inglês na raiz e a
+  portuguesa em `site/pt-br/`, como o do `cgelab`, e os exemplos rodam nas duas; o código não tem
+  mais texto em português (mensagens de erro, rótulos das CPOs, cabeçalho dos arquivos
+  exportados). Em 13 de outubro foram traduzidos `docs/comparison.md`, `docs/whitepaper.md` (e
+  o PDF, regenerado), `docs/heutel.md`, `validation/README.md`, `site/README.md` e o
+  `CITATION.cff`. Falta traduzir as docstrings e as mensagens que os scripts de `validation/`
+  imprimem, e os comentários de `tests/` e `tools/`, e decidir se o roadmap fica em português.
 - [ ] **Validação reproduzível por terceiros.** A evidência publicada roda na mão de qualquer um:
-  os `.mod` do Dynare, as soluções fechadas e o Heutel (2012). Falta tirar da documentação pública
-  as afirmações que só o modelo do artigo sustenta, ou marcá-las como tal.
+  os `.mod` do Dynare, as soluções fechadas e o Heutel (2012). Feito em 12 de outubro de 2026:
+  `validation/run_all.sh` roda tudo de uma vez; as versões ficam fixadas (pacotes do Octave por
+  sha256 em `setup_octave_packages.sh`, MacroModelling.jl em `validation/macromodelling/`, `.mod`
+  em tags do Dynare); os arquivos do Heutel vêm da cópia pública da Georgia State University
+  (`validation/heutel/fetch.sh`), idêntica byte a byte nos seis `.m`. Tudo passa no Dynare 7.2,
+  Octave 11.3.0, statistics 2.0.0 e datatypes 1.5.0. Falta tirar da documentação pública as
+  afirmações que só o modelo do artigo sustenta, ou marcá-las como tal.
+- [ ] **Revisão de segurança antes do release público.**
+- [ ] **Revisão do autor de todo texto que vai a público.** Nada é publicado — repositório
+  tornado público, site, release no GitHub, PyPI, Zenodo — antes de Gustavo revisar todos os
+  textos que vão junto: README, CHANGELOG, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, modelos de
+  *issue* e de *pull request*, `CITATION.cff`, a descrição no `pyproject.toml`, o site nas duas
+  línguas, `docs/` e `validation/README.md`.
 
 **Engenharia de publicação**
 
-- [ ] Integração contínua: testes em Python 3.10 a 3.14, em Linux, macOS e Windows;
-  `check_site_examples.py`. Há um `tests.yml`; falta a matriz completa.
-- [ ] Validações externas como tarefa agendada na CI: Octave e Dynare no Ubuntu; Julia com
-  MacroModelling.jl.
-- [ ] Instalação testada a partir da *wheel*: no Python 3.14 a instalação editável pode quebrar em
-  silêncio no macOS.
+- [ ] Integração contínua: testes em Python 3.11 a 3.14, em Linux, macOS e Windows;
+  `check_site_examples.py`. *Escrito* (`tests.yml`): a suíte roda contra a *wheel* instalada em
+  12 combinações, o sdist é testado a partir da própria árvore, os exemplos do site rodam.
+  Conferido localmente no macOS em 3.11, 3.12 e 3.14. Falta a primeira execução no GitHub. O
+  Python 3.10 saiu do suporte em 12 de outubro de 2026: o SciPy 1.15.3, a última versão para ele,
+  não carrega no macOS 27 (`__thread_bss`).
+- [ ] Validações externas como tarefa agendada na CI. *Escrito* (`validation.yml`, semanal e sob
+  demanda): no macOS, com Octave e Dynare do Homebrew — no Ubuntu o Dynare dos repositórios fica
+  atrás, e compilá-lo a cada semana não compensa —, os pacotes do Octave fixados, Julia 1.12.7
+  com MacroModelling.jl. O Dynare do Homebrew acompanha a versão corrente, e é isso que faz da
+  tarefa o aviso antecipado de que os riscos abaixo falam. Falta a primeira execução no GitHub.
+- [x] Instalação testada a partir da *wheel*: em Python 3.14 no macOS, 144 testes contra a *wheel*
+  instalada (`DSGELAB_TEST_INSTALLED=1`), e o sdist com o que os próprios testes leem.
 - [ ] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes.
+  *Escrito* (`release.yml`, disparado por uma tag `v*`): confere a tag contra a versão, publica no
+  TestPyPI, roda a suíte contra o que o TestPyPI serve e só então publica no PyPI. `twine check
+  --strict` passa. Falta cadastrar o *trusted publisher* nos dois índices e criar os ambientes
+  `testpypi` e `pypi` no repositório.
 - [ ] DOI no Zenodo a cada release; `CITATION.cff` com ORCID e DOI.
-- [ ] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
-- [ ] `py.typed` e anotações de tipo na API pública.
-- [ ] Seção de limitações conhecidas no README.
+- [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
+- [x] `py.typed` e anotações de tipo na API pública: nenhuma função ou método público sem
+  anotação; o `mypy` não acusa erro novo. Os invólucros preguiçosos de `__init__.py`
+  (`from_equations`, `assemble`, `to_dynare`...) aceitam `*args, **kwargs`, e o verificador de
+  tipos não confere os argumentos deles.
+- [x] Seção de limitações conhecidas no README.
 
 **Política de versões a partir da 0.5.** Versionamento semântico. Antes da 1.0 uma versão menor
 ainda pode mudar a API, mas toda remoção ou mudança incompatível passa antes por um aviso de
@@ -247,4 +277,4 @@ modelos não pague por isso.
 **Validação dependente de ferramentas externas.** Quase toda a evidência vem de comparar com o
 Dynare e o MacroModelling.jl. Se uma dessas ferramentas mudar de comportamento entre versões, as
 validações quebram sem que o pacote tenha mudado. Por isso os `.mod` vêm de tags fixas do Dynare
-(6.4 para os exemplos, 7.1 para os testes), e a versão usada fica registrada nos scripts.
+(6.4 para os exemplos, 7.2 para os testes; os arquivos usados são idênticos aos da 7.1), e a versão usada fica registrada nos scripts.

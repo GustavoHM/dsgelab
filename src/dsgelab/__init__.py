@@ -25,6 +25,8 @@ The canonical form behind it is Klein's::
 with the Blanchard-Kahn condition enforced rather than reported.
 """
 
+from typing import Any
+
 from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, diagnose, steady_state_invariance)
@@ -91,13 +93,13 @@ __all__ = [
 ]
 
 
-def from_equations(*args, **kwargs):
+def from_equations(*args: Any, **kwargs: Any) -> Model:
     """Declare a model as text equations. Requires sympy; see :mod:`dsgelab.symbolic`."""
     from .symbolic import from_equations as _fe
     return _fe(*args, **kwargs)
 
 
-def optimality_conditions(*args, **kwargs):
+def optimality_conditions(*args: Any, **kwargs: Any) -> dict:
     """Derive first-order conditions from a stated optimisation problem.
 
     Requires sympy; see :mod:`dsgelab.blocks`.
@@ -106,7 +108,7 @@ def optimality_conditions(*args, **kwargs):
     return _oc(*args, **kwargs)
 
 
-def assemble(*args, **kwargs):
+def assemble(*args: Any, **kwargs: Any) -> Model:
     """Join several optimisation problems and closure equations into one Model.
 
     Requires sympy; see :func:`dsgelab.blocks.assemble`.
@@ -115,13 +117,13 @@ def assemble(*args, **kwargs):
     return _as(*args, **kwargs)
 
 
-def to_dynare(*args, **kwargs):
+def to_dynare(*args: Any, **kwargs: Any) -> str:
     """Write a symbolically-declared model as a Dynare ``.mod``. See :mod:`dsgelab.export`."""
     from .export import to_dynare as _td
     return _td(*args, **kwargs)
 
 
-def to_macromodelling(*args, **kwargs):
+def to_macromodelling(*args: Any, **kwargs: Any) -> str:
     """Write a symbolically-declared model for MacroModelling.jl. See :mod:`dsgelab.export`."""
     from .export import to_macromodelling as _tm
     return _tm(*args, **kwargs)

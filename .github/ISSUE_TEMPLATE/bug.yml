@@ -1,0 +1,34 @@
+name: Wrong result or error
+description: dsgelab returns a wrong number, fails on a model it should solve, or raises unexpectedly.
+labels: [bug]
+body:
+  - type: textarea
+    id: model
+    attributes:
+      label: The smallest model that shows it
+      description: Python code or a .mod file (from_mod reads it). The smaller, the faster it gets fixed.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: got
+    attributes:
+      label: What dsgelab returns
+      description: The output or the full traceback.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and why
+      description: A closed form, a published number, or what Dynare / MacroModelling.jl / another tool returns for the same model, with its version.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of python -c "import dsgelab, numpy, scipy, sys; print(dsgelab.__version__, numpy.__version__, scipy.__version__, sys.version)"
+    validations:
+      required: true

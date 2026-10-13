@@ -1,35 +1,36 @@
-"""Exportar um modelo declarado em dsgelab para Dynare e para MacroModelling.jl.
+"""Export a model declared in dsgelab to Dynare and to MacroModelling.jl.
 
-Só funciona para modelos construídos com :func:`dsgelab.symbolic.from_equations`: as equações
-precisam existir como EXPRESSÕES para serem reimpressas noutra sintaxe, e uma função Python de
-resíduos não pode ser descompilada. Um modelo declarado por callable levanta
-:class:`ExportError` dizendo isso.
+Works only for models built with :func:`dsgelab.symbolic.from_equations`: the equations have to
+exist as EXPRESSIONS to be printed again in another syntax, and a Python residual function cannot
+be decompiled. A model declared by callable raises :class:`ExportError` saying so.
 
-A tradução da datação
----------------------
-É a única parte que não é mecânica, e é onde um porte feito à mão erra. O dsgelab tem DOIS tipos de
-estado, e eles se exportam de maneiras diferentes:
+Translating the dating
+----------------------
+This is the only part that is not mechanical, and it is where a port made by hand goes wrong.
+dsgelab has TWO kinds of state, and they are exported in different ways:
 
-* **Estoques predeterminados** — capital e afins, cuja linha do carregamento de choque ``Q`` é nula,
-  isto é, que não recebem inovação diretamente. No dsgelab ``cur["k"]`` é o estoque DISPONÍVEL em
-  ``t``. No Dynare isso se declara com ``predetermined_variables`` e escreve-se ``k`` sem defasagem;
-  ``nxt["k"]`` vira ``k(+1)``. No MacroModelling, ``k[-1]`` e ``k[0]``.
-* **Processos exógenos** — os que recebem inovação. Seguem o dating PADRÃO do Dynare, em que a
-  inovação se realiza em ``t`` e move a variável em ``t``, e por isso a equação é escrita um período
-  ATRÁS: ``nxt.a = rho*cur.a + eps`` vira ``a = rho*a(-1) + eps_a``. É a mesma equação numa data
-  diferente, e é o que põe a inovação sem defasagem, como o Dynare exige.
+* **Predetermined stocks**: capital and the like, whose row of the shock loading ``Q`` is zero,
+  that is, which receive no innovation directly. In dsgelab ``cur["k"]`` is the stock AVAILABLE at
+  ``t``. In Dynare this is declared with ``predetermined_variables`` and ``k`` is written without a
+  lag; ``nxt["k"]`` becomes ``k(+1)``. In MacroModelling, ``k[-1]`` and ``k[0]``.
+* **Exogenous processes**: those that receive an innovation. They follow Dynare's STANDARD dating,
+  in which the innovation is realised at ``t`` and moves the variable at ``t``, so the equation is
+  written one period EARLIER: ``nxt.a = rho*cur.a + eps`` becomes ``a = rho*a(-1) + eps_a``. It is
+  the same equation at a different date, and it is what leaves the innovation without a lag, as
+  Dynare requires.
 
-Saltos seguem o dating padrão: ``cur["c"]`` vira ``c`` e ``nxt["c"]`` vira ``c(+1)``.
+Jumps follow the standard dating: ``cur["c"]`` becomes ``c`` and ``nxt["c"]`` becomes ``c(+1)``.
 
-Esta é a convenção do porte que já existe neste repositório e que confere com o Python a 1,3e-05
-pontos percentuais. Escrever os processos exógenos com lead em vez de os deslocar dá um modelo que
-resolve e cujas correções de risco somem em silêncio.
+This is the convention of the port that already exists in this repository, which agrees with the
+Python to 1.3e-05 percentage points. Writing the exogenous processes with a lead instead of
+shifting them gives a model that solves and whose risk corrections vanish silently.
 
-E os desvios-padrão
--------------------
-No Dynare vão no bloco ``shocks``; no MacroModelling as inovações são normais PADRÃO e o
-desvio-padrão entra NA EQUAÇÃO. Esquecer isso no segundo caso dá variâncias unitárias e momentos
-absurdos, e é por isso que o exportador multiplica ``sig_<choque>`` na equação e declara o parâmetro.
+And the standard deviations
+---------------------------
+In Dynare they go in the ``shocks`` block; in MacroModelling the innovations are STANDARD normal
+and the standard deviation enters IN THE EQUATION. Forgetting this in the second case gives unit
+variances and absurd moments, which is why the exporter multiplies by ``sig_<shock>`` in the
+equation and declares the parameter.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
-from .model import Model, get_param
+from .model import Covariance, Model, Params, get_param
 from .steady import SteadyState
 
 __all__ = ["ExportError", "to_dynare", "to_macromodelling"]
@@ -60,50 +61,50 @@ def _symbolic(model: Model) -> dict:
 
 
 def _classify(model: Model, sym: dict) -> tuple[list, list]:
-    """Separa os estados em estoques PREDETERMINADOS e processos EXÓGENOS.
+    """Split the states into PREDETERMINED stocks and EXOGENOUS processes.
 
-    Um estado é exógeno quando aparece numa equação que carrega uma inovação; os demais são
-    estoques, cuja linha do carregamento de choque é nula porque uma decisão tomada em ``t`` não
-    responde a um choque de ``t+1``. A classificação vem das EQUAÇÕES e não de uma solução, para
-    que o exportador funcione sem resolver o modelo.
+    A state is exogenous when it appears in an equation that carries an innovation; the others are
+    stocks, whose row of the shock loading is zero because a decision taken at ``t`` does not
+    respond to a shock at ``t+1``. The classification comes from the EQUATIONS and not from a
+    solution, so that the exporter works without solving the model.
     """
     eps_syms = set(sym["symbols"]["eps"].values())
     cur, nxt = sym["symbols"]["cur"], sym["symbols"]["nxt"]
-    exogenos, com_choque = set(), []
+    exogenous, with_shock = set(), []
     for expr in sym["expressions"]:
-        livres = expr.free_symbols
-        if not (livres & eps_syms):
+        free = expr.free_symbols
+        if not (free & eps_syms):
             continue
-        com_choque.append(expr)
+        with_shock.append(expr)
         for v in model.states:
-            if cur[v] in livres or nxt[v] in livres:
-                exogenos.add(v)
-    predeterminados = [v for v in model.states if v not in exogenos]
-    return predeterminados, sorted(exogenos, key=model.states.index)
+            if cur[v] in free or nxt[v] in free:
+                exogenous.add(v)
+    predetermined = [v for v in model.states if v not in exogenous]
+    return predetermined, sorted(exogenous, key=model.states.index)
 
 
 def _shifted_ok(model: Model, sym: dict, expr) -> bool:
-    """A equação pode ser reescrita um período atrás sem inventar defasagens de saltos?
+    """Can the equation be rewritten one period earlier without inventing lags of jumps?
 
-    Deslocar uma equação para trás é legítimo — o que vale em todo ``t`` vale em ``t-1`` —, mas se
-    ela contiver um SALTO em ``t`` esse salto vira ``c(-1)``, e o Dynare responde criando uma
-    variável auxiliar e mudando a contagem de estados. Um processo exógeno puro não tem esse
-    problema, e é para eles que o deslocamento existe.
+    Shifting an equation back is legitimate, since what holds at every ``t`` holds at ``t-1``, but
+    if it contains a JUMP at ``t`` that jump becomes ``c(-1)``, and Dynare responds by creating an
+    auxiliary variable and changing the count of states. A pure exogenous process does not have
+    this problem, and the shift exists for those.
     """
     cur = sym["symbols"]["cur"]
-    livres = expr.free_symbols
-    return not any(cur[v] in livres for v in model.jumps)
+    free = expr.free_symbols
+    return not any(cur[v] in free for v in model.jumps)
 
 
-def _renamer(model: Model, sym: dict, style: str, *, predeterminados, shift: bool):
-    """Substituição dos símbolos do dsgelab pelos nomes da linguagem de destino."""
+def _renamer(model: Model, sym: dict, style: str, *, predetermined, shift: bool):
+    """Replace dsgelab's symbols with the names of the target language."""
     import sympy
     cur, nxt = sym["symbols"]["cur"], sym["symbols"]["nxt"]
-    pre = set(predeterminados)
+    pre = set(predetermined)
     sub = {}
     for v in model.names:
         if style == "dynare":
-            if shift:                      # equação reescrita um período atrás
+            if shift:                      # equation rewritten one period earlier
                 now, ahead = (f"{v}(-2)", f"{v}(-1)") if v in pre else (f"{v}(-1)", v)
             else:
                 now, ahead = (v, f"{v}(+1)") if v in pre else (v, f"{v}(+1)")
@@ -134,22 +135,22 @@ def _printer():
 
 
 def _equations(model: Model, sym: dict, style: str) -> tuple[list[str], list, list]:
-    """Equações na sintaxe de destino, mais as listas de estados predeterminados e exógenos."""
+    """Equations in the target syntax, plus the lists of predetermined and exogenous states."""
     printer = _printer()
-    predeterminados, exogenos = _classify(model, sym)
+    predetermined, exogenous = _classify(model, sym)
     eps_syms = set(sym["symbols"]["eps"].values())
-    sub_normal = _renamer(model, sym, style, predeterminados=predeterminados, shift=False)
-    sub_shift = _renamer(model, sym, style, predeterminados=predeterminados, shift=True)
+    sub_normal = _renamer(model, sym, style, predetermined=predetermined, shift=False)
+    sub_shift = _renamer(model, sym, style, predetermined=predetermined, shift=True)
     out = []
     for expr in sym["expressions"]:
-        tem_choque = bool(expr.free_symbols & eps_syms)
-        if tem_choque and not _shifted_ok(model, sym, expr):
+        has_shock = bool(expr.free_symbols & eps_syms)
+        if has_shock and not _shifted_ok(model, sym, expr):
             raise ExportError(
-                "uma equação com inovação também contém um salto datado em t, e deslocá-la um "
-                "período atrás criaria uma defasagem de salto que muda a contagem de estados no "
-                "Dynare. Isole o processo exógeno na sua própria equação.")
-        out.append(printer.doprint(expr.xreplace(sub_shift if tem_choque else sub_normal)))
-    return out, predeterminados, exogenos
+                "an equation with an innovation also contains a jump dated t, and shifting it one "
+                "period back would create a lagged jump that changes the count of states in "
+                "Dynare. Isolate the exogenous process in its own equation.")
+        out.append(printer.doprint(expr.xreplace(sub_shift if has_shock else sub_normal)))
+    return out, predetermined, exogenous
 
 
 def _shock_sd(model: Model, cov) -> np.ndarray:
@@ -162,7 +163,8 @@ def _shock_sd(model: Model, cov) -> np.ndarray:
 # Dynare
 # ---------------------------------------------------------------------------
 
-def to_dynare(model: Model, params, *, steady: SteadyState | None = None, cov=None,
+def to_dynare(model: Model, params: Params, *, steady: SteadyState | None = None,
+              cov: Covariance = None,
               path: str | Path | None = None, order: int = 1, irf: int = 40,
               extra: str = "") -> str:
     """Write the model as a Dynare ``.mod`` file and return its text.
@@ -181,23 +183,24 @@ def to_dynare(model: Model, params, *, steady: SteadyState | None = None, cov=No
         Appended verbatim before ``stoch_simul``, for options this exporter does not model.
     """
     sym = _symbolic(model)
-    eqs, predeterminados, exogenos = _equations(model, sym, "dynare")
+    eqs, predetermined, exogenous = _equations(model, sym, "dynare")
     pars = list(sym["parameters"])
 
-    lines = [f"// {model.name} — GERADO por dsgelab.to_dynare. Não editar à mão.",
+    lines = [f"// {model.name} — GENERATED by dsgelab.to_dynare. Do not edit by hand.",
              "//",
-             "// Datação. Estoques predeterminados entram em `predetermined_variables`: a variável",
-             "// escrita sem defasagem é o estoque DISPONÍVEL em t, e X(+1) é o decidido em t.",
-             "// Processos exógenos seguem o dating PADRÃO do Dynare — a inovação realiza-se em t e",
-             "// move a variável em t —, e por isso a sua equação vai escrita um período atrás.",
-             f"//   predeterminados : {', '.join(predeterminados) or '(nenhum)'}",
-             f"//   exógenos        : {', '.join(exogenos) or '(nenhum)'}",
+             "// Dating. Predetermined stocks go in `predetermined_variables`: the variable",
+             "// written without a lag is the stock AVAILABLE at t, and X(+1) is the one decided",
+             "// at t. Exogenous processes follow Dynare's STANDARD dating (the innovation is",
+             "// realised at t and moves the variable at t), so their equation is written one",
+             "// period earlier.",
+             f"//   predetermined : {', '.join(predetermined) or '(none)'}",
+             f"//   exogenous     : {', '.join(exogenous) or '(none)'}",
              "",
              f"var {', '.join(model.names)};",
              f"varexo {', '.join(model.shocks)};",
              ""]
-    if predeterminados:
-        lines += [f"predetermined_variables {' '.join(predeterminados)};", ""]
+    if predetermined:
+        lines += [f"predetermined_variables {' '.join(predetermined)};", ""]
     lines.append(f"parameters {', '.join(pars)};")
     for p in pars:
         lines.append(f"{p} = {float(get_param(params, p))!r};")
@@ -234,7 +237,8 @@ def to_dynare(model: Model, params, *, steady: SteadyState | None = None, cov=No
 # MacroModelling.jl
 # ---------------------------------------------------------------------------
 
-def to_macromodelling(model: Model, params, *, cov=None, path: str | Path | None = None,
+def to_macromodelling(model: Model, params: Params, *, cov: Covariance = None,
+                      path: str | Path | None = None,
                       name: str | None = None) -> str:
     """Write the model as a MacroModelling.jl ``@model``/``@parameters`` file.
 
@@ -243,16 +247,17 @@ def to_macromodelling(model: Model, params, *, cov=None, path: str | Path | None
     that produces unit variances and moments off by orders of magnitude.
     """
     sym = _symbolic(model)
-    eqs, predeterminados, exogenos = _equations(model, sym, "macromodelling")
+    eqs, predetermined, exogenous = _equations(model, sym, "macromodelling")
     pars = list(sym["parameters"])
     sd, _ = _shock_sd(model, cov)
     tag = name or model.name.replace("-", "_").replace(" ", "_")
 
-    lines = [f"# {tag} — GERADO por dsgelab.to_macromodelling. Não editar à mão.",
-             "# Datação: um estoque predeterminado disponível em t é `x[-1]`; um salto em t é",
-             "# `x[0]`. As inovações são normais PADRÃO aqui, logo o desvio-padrão entra NA EQUAÇÃO.",
-             f"#   predeterminados : {', '.join(predeterminados) or '(nenhum)'}",
-             f"#   exógenos        : {', '.join(exogenos) or '(nenhum)'}",
+    lines = [f"# {tag} — GENERATED by dsgelab.to_macromodelling. Do not edit by hand.",
+             "# Dating: a predetermined stock available at t is `x[-1]`; a jump at t is",
+             "# `x[0]`. The innovations are STANDARD normal here, so the standard deviation enters",
+             "# IN THE EQUATION.",
+             f"#   predetermined : {', '.join(predetermined) or '(none)'}",
+             f"#   exogenous     : {', '.join(exogenous) or '(none)'}",
              "",
              "using MacroModelling",
              "",

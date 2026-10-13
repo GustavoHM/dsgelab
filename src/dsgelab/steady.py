@@ -18,12 +18,12 @@ a plain root-find earn their place, because both recur in applied models:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 from scipy.optimize import root
 
-from .model import Model
+from .model import Model, Params, Point
 
 __all__ = ["SteadyState", "steady_state", "analytic_steady_state", "SteadyStateError"]
 
@@ -33,9 +33,9 @@ class SteadyState:
     """Solved steady state and the evidence that it is one."""
 
     x: np.ndarray
-    values: dict
+    values: dict[str, float]
     residual: float
-    ctx: object = None
+    ctx: Any = None
     outer_iterations: int = 0
     success: bool = True
     message: str = ""
@@ -47,7 +47,7 @@ class SteadyState:
     def __contains__(self, name: str) -> bool:
         return name in self.values
 
-    def get(self, name: str, default=None):
+    def get(self, name: str, default: Any = None) -> Any:
         return self.values.get(name, default)
 
     def scale(self, floor: float = 1e-8) -> np.ndarray:
@@ -64,8 +64,8 @@ class SteadyState:
         return np.abs(self.x) > floor
 
 
-def steady_state(model: Model, guess, params, *, ctx=None,
-                 ctx_update: Callable | None = None,
+def steady_state(model: Model, guess: Point | None, params: Params, *, ctx: Any = None,
+                 ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
                  positive: Sequence[str] = (),
                  method: str = "hybr", tol: float = 1e-11,
                  outer_maxiter: int = 60, outer_tol: float = 1e-12,
@@ -253,7 +253,9 @@ def _with_auxiliaries(model: Model, values: Mapping) -> dict:
     return vals
 
 
-def analytic_steady_state(model: Model, params, values, *, ctx=None,
+def analytic_steady_state(model: Model, params: Params,
+                          values: Mapping[str, float] | Callable[[Params], Mapping[str, float]],
+                          *, ctx: Any = None,
                           tol: float = 1e-10) -> SteadyState:
     """A steady state given in closed form, CHECKED against the model's own equations.
 

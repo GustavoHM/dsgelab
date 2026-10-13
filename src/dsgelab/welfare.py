@@ -29,12 +29,15 @@ already has.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
 import numpy as np
 
-from .model import Model, get_param
+from .model import Covariance, Model, Params, get_param
 from .steady import SteadyState, steady_state
+
+if TYPE_CHECKING:
+    import sympy
 
 __all__ = ["WelfareError", "Welfare", "welfare", "welfare_model", "consumption_equivalent"]
 
@@ -96,7 +99,8 @@ def _objective(model: Model, objective, discount):
     return sympy, U, beta
 
 
-def welfare_model(model: Model, objective=None, discount=None, *,
+def welfare_model(model: Model, objective: str | sympy.Expr | None = None,
+                  discount: str | float | sympy.Expr | None = None, *,
                   name: str = "WELFARE") -> Model:
     """``model`` plus the jump ``name`` with ``name = U + beta * name(+1)``."""
     from .symbolic import model_from_expressions
@@ -118,8 +122,10 @@ def welfare_model(model: Model, objective=None, discount=None, *,
     return aug
 
 
-def welfare(model: Model, params, *, steady: SteadyState, cov, objective=None,
-            discount=None, initial: Mapping[str, float] | None = None,
+def welfare(model: Model, params: Params, *, steady: SteadyState, cov: Covariance,
+            objective: str | sympy.Expr | None = None,
+            discount: str | float | sympy.Expr | None = None,
+            initial: Mapping[str, float] | None = None,
             name: str = "WELFARE", qz_criterium: float | None = None) -> Welfare:
     """Conditional and unconditional welfare, at second order.
 
@@ -186,8 +192,9 @@ def welfare(model: Model, params, *, steady: SteadyState, cov, objective=None,
 
 
 def consumption_equivalent(objective: str, variable: str, target: float, reference: float,
-                           *, model: Model, params, steady: SteadyState, cov, discount,
-                           bracket=(-0.5, 0.5), **kwargs) -> float:
+                           *, model: Model, params: Params, steady: SteadyState,
+                           cov: Covariance, discount: str | float | sympy.Expr,
+                           bracket: tuple[float, float] = (-0.5, 0.5), **kwargs: Any) -> float:
     """The permanent proportional change in ``variable`` that equates two welfare levels.
 
     Solves ``W(lambda) = target`` where ``W(lambda)`` is the unconditional

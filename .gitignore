@@ -37,3 +37,18 @@ validation/out_ep/
 validation/work_ep/
 validation/out_bgp/
 validation/work_bgp/
+# the Python environment CondaPkg builds for validation/macromodelling
+validation/macromodelling/.CondaPkg/
+validation/macromodelling/Manifest.toml
+# local review tool for the public texts, not part of the package
+.review/
+
+# Local configuration of the AI coding tools the author uses; not part of the package.
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.ai-memory.toml
+.vscode/
+.claude/
+.github/copilot-instructions.md
+docs/ai-memory.md

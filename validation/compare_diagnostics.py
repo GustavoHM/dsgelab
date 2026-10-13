@@ -22,6 +22,7 @@ da tolerância do próprio Dynare.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -36,11 +37,22 @@ HERE = Path(__file__).resolve().parent
 MOD = HERE / "diagnostics" / "walras.mod"
 
 
-def dynare_report() -> str | None:
-    octave = shutil.which("octave") or "/opt/homebrew/bin/octave"
-    matlab = Path("/opt/homebrew/opt/dynare/lib/dynare/matlab")
-    if not Path(octave).exists() or not matlab.exists():
+def _tools() -> tuple[str, Path] | None:
+    """O Octave e o diretório matlab/ do Dynare; OCTAVE e DYNARE_MATLAB têm precedência."""
+    octave = os.environ.get("OCTAVE") or shutil.which("octave") or "/opt/homebrew/bin/octave"
+    candidates = [os.environ.get("DYNARE_MATLAB"), "/opt/homebrew/opt/dynare/lib/dynare/matlab",
+                  "/opt/homebrew/lib/dynare/matlab", "/usr/local/opt/dynare/lib/dynare/matlab",
+                  "/usr/lib/dynare/matlab"]
+    matlab = next((Path(c) for c in candidates if c and Path(c).is_dir()), None)
+    if not Path(octave).exists() or matlab is None:
         return None
+    return octave, matlab
+
+
+def dynare_report() -> str | None:
+    if (tools := _tools()) is None:
+        return None
+    octave, matlab = tools
     with tempfile.TemporaryDirectory() as d:
         shutil.copy(MOD, d)
         out = subprocess.run([octave, "--no-gui", "--eval",
@@ -153,10 +165,9 @@ def check_closed_forms() -> bool:
 
 
 def _run_dynare(mod: Path) -> str | None:
-    octave = shutil.which("octave") or "/opt/homebrew/bin/octave"
-    matlab = Path("/opt/homebrew/opt/dynare/lib/dynare/matlab")
-    if not Path(octave).exists() or not matlab.exists():
+    if (tools := _tools()) is None:
         return None
+    octave, matlab = tools
     with tempfile.TemporaryDirectory() as d:
         shutil.copy(mod, d)
         out = subprocess.run([octave, "--no-gui", "--eval",

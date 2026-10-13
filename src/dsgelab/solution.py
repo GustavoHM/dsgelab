@@ -8,14 +8,15 @@ them back as levels.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.linalg import solve_discrete_lyapunov
 
 from .klein import KleinSolution
 from .linearize import Coordinates, LinearSystem
-from .model import Model
+from .model import Covariance, Model, Params
 from .steady import SteadyState
 
 __all__ = ["FirstOrderSolution", "shock_covariance"]
@@ -55,7 +56,7 @@ def _mask_nonstationary(V: np.ndarray, J: np.ndarray, U1, tol: float = 1e-10) ->
     return V
 
 
-def shock_covariance(shocks: Sequence[str], cov) -> np.ndarray:
+def shock_covariance(shocks: Sequence[str], cov: Covariance) -> np.ndarray:
     """Coerce a covariance given as a mapping of standard deviations, a vector or a matrix."""
     ne = len(shocks)
     if cov is None:
@@ -84,8 +85,8 @@ class FirstOrderSolution:
     steady: SteadyState
     system: LinearSystem
     klein: KleinSolution
-    params: object = None
-    ctx: object = None
+    params: Params = None
+    ctx: Any = None
     _cache: dict = field(default_factory=dict, repr=False)
 
     # -- shorthands ------------------------------------------------------
@@ -122,7 +123,8 @@ class FirstOrderSolution:
         return np.vstack([np.eye(self.klein.n_k), self.F])
 
     # -- paths -----------------------------------------------------------
-    def state_path(self, k0, periods: int = 40, shocks: np.ndarray | None = None) -> np.ndarray:
+    def state_path(self, k0: ArrayLike, periods: int = 40,
+                   shocks: np.ndarray | None = None) -> np.ndarray:
         """Propagate the states from an initial deviation, optionally feeding innovations."""
         k = np.zeros((periods, self.klein.n_k))
         k[0] = np.asarray(k0, dtype=float)
@@ -132,7 +134,8 @@ class FirstOrderSolution:
                 k[t] = k[t] + self.Q @ shocks[t]
         return k
 
-    def historical_decomposition(self, states) -> dict:
+    def historical_decomposition(self, states: ArrayLike | Mapping[str, ArrayLike]
+                                 ) -> dict[str, Any]:
         """Recover the innovations in a state path and the path each one produces.
 
         ``states`` is a ``(T, n_k)`` array of hat-deviations, or a mapping of
@@ -164,10 +167,10 @@ class FirstOrderSolution:
         return {"eps": eps, "initial": initial, "contributions": contributions,
                 "states": k}
 
-    def conditional_forecast(self, conditions: Mapping[str, np.ndarray], *,
-                             periods: int | None = None, initial=None,
+    def conditional_forecast(self, conditions: Mapping[str, ArrayLike], *,
+                             periods: int | None = None, initial: ArrayLike | None = None,
                              controlled: Sequence[str] | None = None,
-                             levels: bool = False) -> dict:
+                             levels: bool = False) -> dict[str, np.ndarray]:
         """Forecast in which named variables follow prescribed paths.
 
         ``conditions`` maps a variable name to its path over dates ``1..H`` (a
@@ -242,14 +245,14 @@ class FirstOrderSolution:
             raise ValueError(f"expected {self.klein.n_k} states, got {arr.shape}")
         return arr
 
-    def variables(self, k: np.ndarray) -> dict:
+    def variables(self, k: np.ndarray) -> dict[str, np.ndarray]:
         """Deviation paths of every variable implied by a state path."""
         u = k @ self.F.T
         out = {n: k[:, i] for i, n in enumerate(self.state_names)}
         out.update({n: u[:, i] for i, n in enumerate(self.jump_names)})
         return out
 
-    def to_levels(self, paths: Mapping[str, np.ndarray]) -> dict:
+    def to_levels(self, paths: Mapping[str, ArrayLike]) -> dict[str, np.ndarray]:
         """Convert deviation paths to levels using the steady state and the scaling."""
         out = {}
         for name, dev in paths.items():
@@ -259,7 +262,8 @@ class FirstOrderSolution:
 
     # -- impulse responses ----------------------------------------------
     def irf(self, name: str, size: float = 1.0, periods: int = 40, *,
-            kind: str = "shock", levels: bool = False, percent: bool = True) -> dict:
+            kind: str = "shock", levels: bool = False,
+            percent: bool = True) -> dict[str, np.ndarray]:
         """Impulse response of every variable.
 
         ``kind="shock"`` applies an innovation of ``size`` standard-deviation
@@ -293,8 +297,8 @@ class FirstOrderSolution:
             return self.to_levels(paths)
         return {n: v * (100.0 if percent else 1.0) for n, v in paths.items()}
 
-    def irf_impulse(self, impulse, periods: int = 40, *, levels: bool = False,
-                    percent: bool = True) -> dict:
+    def irf_impulse(self, impulse: ArrayLike, periods: int = 40, *, levels: bool = False,
+                    percent: bool = True) -> dict[str, np.ndarray]:
         """Impulse response to an arbitrary innovation VECTOR.
 
         :meth:`irf` moves one named shock; this moves a whole vector at once,
@@ -316,8 +320,9 @@ class FirstOrderSolution:
         return {n: v * (100.0 if percent else 1.0) for n, v in paths.items()}
 
     # -- simulation ------------------------------------------------------
-    def simulate(self, periods: int = 1000, cov=None, *, seed: int | None = None,
-                 burn: int = 100, levels: bool = False) -> dict:
+    def simulate(self, periods: int = 1000, cov: Covariance = None, *,
+                 seed: int | None = None, burn: int = 100,
+                 levels: bool = False) -> dict[str, np.ndarray]:
         """Simulate the linear solution.
 
         ``burn`` periods are discarded so the draw starts from the ergodic
@@ -337,7 +342,7 @@ class FirstOrderSolution:
         return self.to_levels(paths) if levels else paths
 
     # -- second moments --------------------------------------------------
-    def covariance(self, cov=None) -> np.ndarray:
+    def covariance(self, cov: Covariance = None) -> np.ndarray:
         """Unconditional covariance of ``x_t = [k_t; u_t]`` in deviations.
 
         With a unit root (a solution found with ``qz_criterium``), the variables
@@ -351,7 +356,7 @@ class FirstOrderSolution:
         Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
         return _mask_nonstationary(J @ Vk @ J.T, J, U1)
 
-    def moments(self, cov=None, lags: int = 1) -> dict:
+    def moments(self, cov: Covariance = None, lags: int = 1) -> dict[str, Any]:
         """Standard deviations, correlations and autocorrelations of every variable.
 
         Variables that load on a unit root get ``nan``.
@@ -378,7 +383,8 @@ class FirstOrderSolution:
                     autocorr={j: dict(zip(names, v)) for j, v in auto.items()},
                     std_by_name=dict(zip(names, sd)))
 
-    def variance_decomposition(self, cov=None, horizon: int | None = None) -> dict:
+    def variance_decomposition(self, cov: Covariance = None,
+                               horizon: int | None = None) -> dict[str, Any]:
         """Share of each shock in the (forecast error) variance of each variable.
 
         ``horizon=None`` gives the unconditional decomposition; an integer gives
@@ -409,7 +415,8 @@ class FirstOrderSolution:
                     variance=shares, share=frac)
 
     # -- diagnostics -----------------------------------------------------
-    def accuracy(self, sizes=(0.02, 0.01, 0.005), seed: int = 0) -> dict:
+    def accuracy(self, sizes: Sequence[float] = (0.02, 0.01, 0.005),
+                 seed: int = 0) -> dict[str, Any]:
         """Check the solution against the NONLINEAR system it approximates.
 
         Feeds the first-order decision rules back into the original residuals at

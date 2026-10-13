@@ -1,6 +1,6 @@
 """compare_ep.py — trajetória estendida, determinística e estocástica, contra o Dynare.
 
-Os arquivos são de tests/ep do Dynare 7.1, lidos por `dsgelab.from_mod`; os choques são os que o
+Os arquivos são de tests/ep do Dynare 7.2, lidos por `dsgelab.from_mod`; os choques são os que o
 Dynare usou, exportados por run_ep.sh.
 
   burnside.mod      Burnside (1998), 100 períodos, as sete variantes do teste que não pedem

@@ -16,13 +16,14 @@ converging.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Sequence
+from typing import Any, Callable, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
 
-from .model import Model
+from .model import Model, Params
 from .steady import SteadyState
 
 __all__ = ["TransitionPath", "perfect_foresight", "path_of", "News",
@@ -48,7 +49,7 @@ class TransitionPath:
     def __getitem__(self, name: str) -> np.ndarray:
         return self.levels[:, self.model.position(name)]
 
-    def values(self) -> dict:
+    def values(self) -> dict[str, np.ndarray]:
         return {n: self.levels[:, i] for i, n in enumerate(self.model.names)}
 
     def derived(self, fn: Callable) -> dict:
@@ -90,7 +91,7 @@ def _shock_path(shocks, T: int, n_shocks: int) -> np.ndarray:
     return arr
 
 
-def path_of(value, periods: int) -> list:
+def path_of(value: Any, periods: int) -> list:
     """Normalise a constant, a sequence or a callable into a per-period list."""
     if callable(value):
         return [value(t) for t in range(periods)]
@@ -103,8 +104,9 @@ def path_of(value, periods: int) -> list:
 
 
 def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *,
-                      params, T: int = 120, ctx=None, initial_states=None,
-                      shocks=None, maxiter: int = 50, tol: float = 1e-10,
+                      params: Params | Sequence[Params] | Callable[[int], Params], T: int = 120,
+                      ctx: Any = None, initial_states: ArrayLike | None = None,
+                      shocks: ArrayLike | None = None, maxiter: int = 50, tol: float = 1e-10,
                       damping: float = 1.0, jacobian: str = "auto", h: float = 1e-7,
                       guess: np.ndarray | None = None,
                       raise_on_fail: bool = True) -> TransitionPath:
@@ -285,8 +287,8 @@ class News:
     """
 
     period: int
-    shocks: object = None
-    params: object = None
+    shocks: ArrayLike | None = None
+    params: Params = None
     terminal: SteadyState | None = None
     states: dict | None = None
 
@@ -339,9 +341,11 @@ def _expost_states(model: Model, y_prev, y_guess, eps, params, ctx, h: float = 1
 
 
 def perfect_foresight_with_expectation_errors(
-        model: Model, start: SteadyState, terminal: SteadyState, *, params, T: int,
-        news: Sequence[News], shocks=None, ctx=None, initial_states=None,
-        constant_simulation_length: bool = False, **kwargs) -> TransitionPath:
+        model: Model, start: SteadyState, terminal: SteadyState, *,
+        params: Params | Sequence[Params] | Callable[[int], Params], T: int, news: Sequence[News],
+        shocks: ArrayLike | None = None, ctx: Any = None,
+        initial_states: ArrayLike | None = None, constant_simulation_length: bool = False,
+        **kwargs: Any) -> TransitionPath:
     """Perfect foresight in which agents learn, at given dates, that they were wrong.
 
     At each date in ``news`` the agents take the states the realised path has

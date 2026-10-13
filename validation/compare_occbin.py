@@ -1,6 +1,6 @@
 """compare_occbin.py — restrições ocasionalmente ativas (OccBin) contra o Dynare.
 
-Os dois arquivos são de tests/occbin do Dynare 7.1, lidos por `dsgelab.from_mod` com suas
+Os dois arquivos são de tests/occbin do Dynare 7.2, lidos por `dsgelab.from_mod` com suas
 equações marcadas (`bind=`/`relax=`), o bloco `occbin_constraints`, os choques-surpresa e as
 opções de `occbin_setup`/`occbin_solver`:
 

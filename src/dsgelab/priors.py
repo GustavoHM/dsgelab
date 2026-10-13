@@ -76,7 +76,8 @@ class Prior:
             return float(-math.log(self.upper - self.lower))
         raise ValueError(f"unknown prior shape {s!r}")
 
-    def sample(self, rng, size=None):
+    def sample(self, rng: np.random.Generator,
+               size: int | tuple[int, ...] | None = None) -> float | np.ndarray:
         s = self.shape
         if s == "normal":
             return rng.normal(self.mean, self.sd, size)

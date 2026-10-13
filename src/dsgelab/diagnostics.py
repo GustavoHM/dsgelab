@@ -8,19 +8,24 @@ being slack, and the comparison catches a port that drifted from its original.
 
 from __future__ import annotations
 
-from typing import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from .model import Model
+from .model import Model, Params, Point
 from .solution import FirstOrderSolution
+
+if TYPE_CHECKING:
+    from .steady import SteadyState
 
 __all__ = ["check_identity", "blanchard_kahn_report", "check_slack", "compare_irfs",
            "steady_state_invariance", "diagnose"]
 
 
-def check_identity(model: Model, fn: Callable, points, params, ctx=None,
-                   tol: float = 1e-8) -> dict:
+def check_identity(model: Model, fn: Callable,
+                   points: ArrayLike | Sequence[tuple[ArrayLike, ArrayLike]],
+                   params: Params, ctx: Any = None, tol: float = 1e-8) -> dict:
     """Evaluate an identity the model does NOT impose, as an independent check.
 
     The resource constraint of a closed model is the canonical case: it follows
@@ -99,7 +104,8 @@ def check_slack(solution: FirstOrderSolution, constraints: Mapping[str, Callable
 
 
 def compare_irfs(a: FirstOrderSolution, b: FirstOrderSolution, shock: str,
-                 periods: int = 40, size: float = 1.0, variables=None) -> dict:
+                 periods: int = 40, size: float = 1.0,
+                 variables: Sequence[str] | None = None) -> dict:
     """Largest discrepancy between two solutions' impulse responses, variable by variable.
 
     For checking a port -- a reimplementation in another language, a refactor of
@@ -168,7 +174,8 @@ def _nullspace(M: np.ndarray, tol: float) -> np.ndarray:
     return vt[rank:].T
 
 
-def diagnose(model: Model, params, point, *, ctx=None, tol: float = 1e-9) -> dict:
+def diagnose(model: Model, params: Params, point: SteadyState | Point, *, ctx: Any = None,
+             tol: float = 1e-9) -> dict:
     """What Dynare's ``model_diagnostics`` checks, at ``point`` (a steady state or a guess).
 
     * variables that do not appear in any equation at the current date (Dynare's

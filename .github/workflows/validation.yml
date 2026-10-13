@@ -1,0 +1,67 @@
+name: validation
+
+# The external validation (validation/run_all.sh): Dynare's own .mod files run
+# in Octave + Dynare, and a calibration equation in MacroModelling.jl, each
+# compared with dsgelab. It runs weekly and on demand, not on every push: it
+# takes the better part of an hour and depends on tools outside this package.
+#
+# Octave and Dynare come from Homebrew, as in the environment the published
+# comparison was produced in. Homebrew carries the current Dynare, so this run
+# is also the early warning the roadmap asks for: when a new Dynare changes
+# behaviour, the log names the version. The .mod files themselves come from
+# fixed Dynare tags (validation/fetch.sh), and the Octave packages and the
+# Julia environment are pinned.
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+    inputs:
+      skip_mh:
+        description: "Skip the Metropolis-Hastings comparison (several minutes)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  validation:
+    runs-on: macos-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install ".[symbolic]"
+
+      - name: Octave and Dynare
+        run: |
+          brew install octave dynare
+          brew list --versions octave dynare
+          echo "DYNARE_MATLAB=$(brew --prefix dynare)/lib/dynare/matlab" >> "$GITHUB_ENV"
+          echo "OCTAVE=$(brew --prefix)/bin/octave" >> "$GITHUB_ENV"
+      - run: bash validation/setup_octave_packages.sh
+
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1.12.7"
+      - uses: julia-actions/cache@v3
+      - name: Julia environment
+        run: julia --project=validation/macromodelling -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
+
+      - name: Validation
+        env:
+          PYTHON: python
+          SKIP_MH: ${{ inputs.skip_mh && '1' || '' }}
+        run: bash validation/run_all.sh
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-logs
+          path: |
+            validation/out*/**/*.log
+            validation/macromodelling/calibration.json
+          if-no-files-found: ignore

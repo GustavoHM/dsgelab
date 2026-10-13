@@ -1,6 +1,6 @@
 """compare_bgp.py — crescimento balanceado, contra o bgp.write do Dynare e os testes dele.
 
-Os três modelos são de tests/bgp do Dynare 7.1, lidos por `dsgelab.from_mod`: Solow com
+Os três modelos são de tests/bgp do Dynare 7.2, lidos por `dsgelab.from_mod`: Solow com
 progresso técnico e população crescendo (só defasagens), um Ramsey com tendência determinística
 (defasagens e avanços) e um novo-keynesiano em níveis (só avanços).
 

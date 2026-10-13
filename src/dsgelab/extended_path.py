@@ -31,14 +31,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import product
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
 
 from .foresight import _expost_states, perfect_foresight
-from .model import Model
+from .model import Model, Params
 from .steady import SteadyState
+
+if TYPE_CHECKING:
+    from .secondorder import SecondOrderSolution
 
 __all__ = ["ExtendedPath", "extended_path", "quadrature_nodes"]
 
@@ -55,11 +60,11 @@ class ExtendedPath:
     def __getitem__(self, name: str) -> np.ndarray:
         return self.levels[:, self.model.position(name)]
 
-    def values(self) -> dict:
+    def values(self) -> dict[str, np.ndarray]:
         return {n: self.levels[:, i] for i, n in enumerate(self.model.names)}
 
 
-def quadrature_nodes(cov: np.ndarray, n: int = 3):
+def quadrature_nodes(cov: ArrayLike, n: int = 3) -> tuple[np.ndarray, np.ndarray]:
     """Tensor Gauss--Hermite nodes and weights for the shocks with positive variance.
 
     Dynare's construction: the standard-normal nodes, scaled by the upper Cholesky
@@ -256,10 +261,13 @@ def _put_now(rows, cols, vals, r, block, c0, nk, n, root):
     rows.append(rr.ravel()); cols.append((c0 + cc).ravel()); vals.append(block.ravel())
 
 
-def extended_path(model: Model, steady: SteadyState, params, shocks=None, *,
-                  periods: int | None = None, cov=None, seed: int | None = None,
+def extended_path(model: Model, steady: SteadyState, params: Params,
+                  shocks: ArrayLike | None = None, *,
+                  periods: int | None = None, cov: ArrayLike | None = None,
+                  seed: int | None = None,
                   horizon: int = 200, order: int = 0, nodes: int = 3, tree: str = "sparse",
-                  hybrid=None, initial_states=None, ctx=None, tol: float = 1e-12,
+                  hybrid: SecondOrderSolution | bool | None = None,
+                  initial_states: ArrayLike | None = None, ctx: Any = None, tol: float = 1e-12,
                   maxiter: int = 50) -> ExtendedPath:
     """Simulate by extended path.
 

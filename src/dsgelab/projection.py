@@ -17,11 +17,15 @@ three states is not built. That is a different algorithm, not a larger ``order``
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import least_squares, root
 
+from .model import Covariance, Model, Params, Point
 from .solve import solve
+from .steady import SteadyState
 
 __all__ = ["Projection", "solve_projection"]
 
@@ -30,8 +34,8 @@ __all__ = ["Projection", "solve_projection"]
 class Projection:
     """A jump policy ``u(k)`` collocated on a box of the predetermined states."""
 
-    model: object
-    params: object
+    model: Model
+    params: Params
     bounds: np.ndarray          # (n_k, 2)
     order: int
     coefficients: np.ndarray    # (n_u, n_basis)
@@ -39,7 +43,7 @@ class Projection:
     residual: float
     success: bool
 
-    def jumps(self, k) -> np.ndarray:
+    def jumps(self, k: ArrayLike) -> np.ndarray:
         """Jump vector at one state or at a row-stacked array of states."""
         k = np.asarray(k, dtype=float)
         single = k.ndim == 1
@@ -50,8 +54,10 @@ class Projection:
         return out[0] if single else out
 
 
-def solve_projection(model, params, *, bounds, guess, order: int = 5, cov=None,
-                     n_quad: int = 7, positive=(), steady=None) -> Projection:
+def solve_projection(model: Model, params: Params, *, bounds: ArrayLike, guess: Point | None,
+                     order: int = 5, cov: Covariance = None, n_quad: int = 7,
+                     positive: Sequence[str] = (),
+                     steady: SteadyState | None = None) -> Projection:
     """Collocate the expectational residual on a Chebyshev tensor grid.
 
     Parameters

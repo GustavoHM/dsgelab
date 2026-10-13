@@ -22,13 +22,19 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 
 import numpy as np
+from numpy.typing import ArrayLike
 
-from .kalman import kalman_filter, kalman_smoother, state_space
-from .model import Model, set_params
+from .kalman import (Data, FilterResult, SmootherResult, StateSpace, kalman_filter,
+                     kalman_smoother, state_space)
+from .model import Covariance, Model, Params, Point, set_params
 from .priors import Prior, prior as make_prior
+
+if TYPE_CHECKING:
+    from .solution import FirstOrderSolution
+    from .steady import SteadyState
 
 __all__ = ["EstimationProblem", "ModeResult", "MCMCResult", "SMCResult",
            "posterior_mode", "maximum_likelihood", "metropolis_hastings", "smc",
@@ -64,24 +70,24 @@ class EstimationProblem:
     """
 
     model: Model
-    data: object
-    params: object
+    data: Data
+    params: Params
     observables: Sequence[str]
     priors: Mapping = field(default_factory=dict)
-    cov: object = None
-    measurement: object = None
-    transforms: object = None
+    cov: Covariance = None
+    measurement: Mapping[str, float] | float | None = None
+    transforms: str | Mapping[str, str] | None = None
     steady_fn: Callable | None = None
-    guess: object = None
+    guess: Point | None = None
     init: str = "auto"
     qz_criterium: float | None = None
     first_obs: int = 1
     presample: int = 0
     free: Sequence[str] | None = None
     bounds: Mapping | None = None
-    _last_ss: object = field(default=None, repr=False)
+    _last_ss: SteadyState | None = field(default=None, repr=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.observables = list(self.observables)
         pr = {}
         for k, v in dict(self.priors).items():
@@ -140,7 +146,7 @@ class EstimationProblem:
             return {k: float(v) for k, v in m.items()}
         return {n: float(m) for n in self.observables}
 
-    def unpack(self, theta) -> tuple:
+    def unpack(self, theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
         """``(params, shock covariance, measurement sds)`` at ``theta``."""
         from .solution import shock_covariance
         theta = np.asarray(theta, dtype=float)
@@ -170,7 +176,7 @@ class EstimationProblem:
         return p, S, meas
 
     # -- densities ---------------------------------------------------------
-    def log_prior(self, theta) -> float:
+    def log_prior(self, theta: ArrayLike) -> float:
         lp = 0.0
         for n, v in zip(self.names, np.asarray(theta, dtype=float)):
             if n in self.priors:
@@ -181,7 +187,7 @@ class EstimationProblem:
                     return -np.inf
         return float(lp)
 
-    def solve(self, theta):
+    def solve(self, theta: ArrayLike) -> tuple[FirstOrderSolution, StateSpace]:
         """``(solution, state space)`` at ``theta``; raises if there is none."""
         from .solve import solve
         from .steady import steady_state
@@ -197,7 +203,7 @@ class EstimationProblem:
                             measurement=meas or None, cov=S)
         return sol, space
 
-    def log_likelihood(self, theta) -> float:
+    def log_likelihood(self, theta: ArrayLike) -> float:
         try:
             _, space = self.solve(theta)
             fr = kalman_filter(space, self.Y, init=self.init)
@@ -206,19 +212,19 @@ class EstimationProblem:
         ll = fr.loglik_t[self.presample:].sum()
         return float(ll) if np.isfinite(ll) else -np.inf
 
-    def log_posterior(self, theta) -> float:
+    def log_posterior(self, theta: ArrayLike) -> float:
         lp = self.log_prior(theta)
         if not np.isfinite(lp):
             return -np.inf
         ll = self.log_likelihood(theta)
         return float(lp + ll) if np.isfinite(ll) else -np.inf
 
-    def smoother(self, theta):
+    def smoother(self, theta: ArrayLike) -> SmootherResult:
         """Smoothed states, shocks and measurement errors at ``theta``."""
         _, space = self.solve(theta)
         return kalman_smoother(space, self.Y, init=self.init)
 
-    def filter(self, theta):
+    def filter(self, theta: ArrayLike) -> FilterResult:
         _, space = self.solve(theta)
         return kalman_filter(space, self.Y, init=self.init)
 
@@ -285,7 +291,8 @@ def _from_unbounded(y, lo, hi):
     return x
 
 
-def hessian(f, x, steps=None) -> np.ndarray:
+def hessian(f: Callable[[np.ndarray], float], x: ArrayLike,
+            steps: ArrayLike | None = None) -> np.ndarray:
     """Central-difference Hessian of ``f`` at ``x``, steps relative to ``|x|``."""
     x = np.asarray(x, float)
     k = x.size
@@ -344,7 +351,8 @@ def _mode_result(problem, objective, x, res, n, with_prior):
                       success=bool(np.isfinite(val)), message=str(res.message), evaluations=n)
 
 
-def posterior_mode(problem: EstimationProblem, x0=None, *, method: str | None = None,
+def posterior_mode(problem: EstimationProblem, x0: ArrayLike | None = None, *,
+                   method: str | None = None,
                    options: Mapping | None = None) -> ModeResult:
     """Maximise the posterior; report the Hessian and the Laplace marginal density.
 
@@ -358,7 +366,8 @@ def posterior_mode(problem: EstimationProblem, x0=None, *, method: str | None = 
     return _mode_result(problem, problem.log_posterior, x, res, n, True)
 
 
-def maximum_likelihood(problem: EstimationProblem, x0=None, *, method: str | None = None,
+def maximum_likelihood(problem: EstimationProblem, x0: ArrayLike | None = None, *,
+                       method: str | None = None,
                        options: Mapping | None = None) -> ModeResult:
     """Maximise the likelihood. Standard errors from the inverse Hessian.
 
@@ -393,7 +402,7 @@ class MCMCResult:
     def mean(self) -> dict:
         return dict(zip(self.names, self.draws.mean(axis=0)))
 
-    def quantiles(self, q=(0.05, 0.5, 0.95)) -> dict:
+    def quantiles(self, q: float | Sequence[float] = (0.05, 0.5, 0.95)) -> dict[str, Any]:
         return {n: np.quantile(self.draws[:, i], q) for i, n in enumerate(self.names)}
 
     def hpd(self, mass: float = 0.9) -> dict:
@@ -651,7 +660,8 @@ def model_probabilities(log_marginals: Mapping[str, float],
 
 
 # ===================================================================== forecasts
-def posterior_forecast(problem: EstimationProblem, draws, horizon: int, *,
+def posterior_forecast(problem: EstimationProblem, draws: MCMCResult | SMCResult | ArrayLike,
+                       horizon: int, *,
                        variables: Sequence[str] | None = None, n_draws: int = 200,
                        shocks: bool = True, coverage: float = 0.9, logs: Sequence[str] = (),
                        seed: int = 0) -> dict:
