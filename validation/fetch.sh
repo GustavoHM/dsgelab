@@ -54,6 +54,11 @@ done
 # Nonstationary models: fs2000 written with trends (trend_var, var(deflator=)), which Dynare
 # detrends, and the bgp.write tests (balanced growth)
 get "$DY/7.2/tests/trend_var/fs2000_nonstationary.mod" examples/fs2000_nonstationary.mod
+# Local identification (tests/identification of Dynare 7.2): Kim (2003), with two parameters that
+# only enter together and one that does not enter at all, and An and Schorfheide (2007)
+mkdir -p identification
+get "$DY/7.2/tests/identification/kim/kim2.mod" identification/kim2.mod
+get "$DY/7.2/tests/identification/as2007/as2007.mod" identification/as2007.mod
 mkdir -p bgp
 for f in solow-1/solow.mod ramsey-1/ramsey.mod nk-1/nk.mod; do
   get "$DY/7.2/tests/bgp/$f" "bgp/$(dirname "$f").mod"

@@ -37,6 +37,8 @@ validation/out_ep/
 validation/work_ep/
 validation/out_bgp/
 validation/work_bgp/
+validation/out_identification/
+validation/work_identification/
 # the Python environment CondaPkg builds for validation/macromodelling
 validation/macromodelling/.CondaPkg/
 validation/macromodelling/Manifest.toml

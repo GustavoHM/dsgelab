@@ -232,8 +232,12 @@ warning that lasts at least one minor version. The public API is what is in `__a
 
 ### 0.6 — identification, moments and data
 
-- [ ] **Local identification** (Iskrev; Komunjer and Ng), to be validated against Dynare's
-  `+identification`.
+- [x] **Local identification** (Iskrev; Komunjer and Ng; also Qu and Tkachenko, and the
+  brute-force collinearity search), with `identification` and `ModFile.identification`.
+  Validated against Dynare's `+identification` on three models (`kim2`, `as2007`, `fs2000`):
+  the same verdicts in all three criteria and derivatives within 2e-8 (18 October 2026).
+  Dynare's repetition over draws from the prior (`prior_mc`), its identification strength
+  from the information matrix and its plots are left out.
 - [ ] **Global sensitivity**, covering the stability and determinacy region in the parameter space
   and Monte Carlo filtering. The reference is Dynare's `+gsa`.
 - [ ] **Method of moments** (GMM, SMM and IRF matching). Validation against Dynare's `+mom`.

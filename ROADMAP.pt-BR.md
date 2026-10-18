@@ -245,8 +245,12 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
 
 ### 0.6 — identificação, momentos e dados
 
-- [ ] **Identificação local** (Iskrev; Komunjer e Ng), a ser validada contra o `+identification`
-  do Dynare.
+- [x] **Identificação local** (Iskrev; Komunjer e Ng; também Qu e Tkachenko, e a busca de
+  colinearidade por força bruta), com `identification` e `ModFile.identification`. Validada
+  contra o `+identification` do Dynare em três modelos (`kim2`, `as2007`, `fs2000`), com os
+  mesmos vereditos nos três critérios e derivadas a menos de 2e-8 (18 de outubro de 2026).
+  Ficam de fora a repetição sobre sorteios da priori (`prior_mc`), a força da identificação
+  pela matriz de informação e os gráficos do Dynare.
 - [ ] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
   parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare.
 - [ ] **Método dos momentos** (GMM, SMM e ajuste de IRF). Validação contra o `+mom` do Dynare.

@@ -481,6 +481,28 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   are detrended as Dynare does it, and an equation that still depends on the level of the trend is
   refused. <code>balanced_growth</code> computes the growth factors and the ratios between variables
   that share the trend, which is the problem Dynare's <code>bgp.write</code> solves.</p>
+  <h3>19. Is the model identified before it is estimated?</h3>
+<pre><code>ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],
+                           observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+ident.identified                                    # True, by all three criteria
+
+ab = dsg.from_equations(["a(+1) = r1*r2*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["r1", "r2"])
+bad = dsg.identification(ab, dict(r1=1.6, r2=0.5), free=["r1", "r2", "stderr e"],
+                         observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+bad.identified                                      # False
+bad["moments"].rank, bad["moments"].required        # (2, 3)
+bad["moments"].dependent                            # [('r1', 'r2')]
+print(bad.summary())</code></pre>
+  <p><code>identification</code> checks, at one point, whether the distribution of the observed
+  series pins down the free parameters, with the three criteria of Dynare's
+  <code>identification</code> command: the derivatives of the moments (Iskrev), of the spectrum
+  (Qu and Tkachenko) and of a minimal state space (Komunjer and Ng). Each one reports its rank, the
+  parameters that do not move it, the sets of parameters that move it together and the weakly
+  identified ones, and a search finds for each parameter the group of others that best reproduces
+  its effect. In the second model only the product <code>r1*r2</code> matters, and every criterion
+  loses one rank. <code>ModFile.identification</code> does the same for the
+  <code>estimated_params</code> of a <code>.mod</code>, at the prior mean.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -501,6 +523,8 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
     announced parameter paths.</p></div>
     <div class="card"><h4>Calibration</h4><p>Targets solved jointly, with an identification
     diagnostic based on rank and null directions.</p></div>
+    <div class="card"><h4>Identification</h4><p>Dynare's three local criteria (moments, spectrum,
+    minimal system) and its collinearity search, with the same verdicts.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
@@ -672,6 +696,24 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   steady-state gain when the variance converges to 1e-6, which moves the number in the seventh
   decimal place. The Laplace approximation with dsgelab's own Hessian differs from Dynare's by 0.03,
   and that difference comes from the two numerical Hessians.</p>
+
+  <h3>Local identification against Dynare</h3>
+  <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
+  <code>tests/identification</code> and <code>fs2000</code> from its examples. In
+  <code>kim2</code> two parameters only enter together and a third does not enter at all.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>moments of the observables</td><td class="num">8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>their Jacobian (Iskrev); G of the spectrum (Qu and Tkachenko)</td><td class="num">2e-08; 2e-08</td><td class="ok">OK</td></tr>
+      <tr><td>rank, sensitive, dependent and weak parameters, three criteria, two tolerances</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>size of the minimal state (Komunjer and Ng)</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>collinearity search, cosines</td><td class="num">8e-09</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">Dynare differentiates analytically, and dsgelab by
+  differences with a Richardson step chosen for each parameter. The deviations are the largest over
+  the three models, relative to the largest entry of each column or matrix.</p>
 
   <h3>Nonlinearities and model declaration against Dynare</h3>
   <p>The files in <code>tests/occbin</code>, <code>tests/ep</code>, <code>tests/bgp</code> and

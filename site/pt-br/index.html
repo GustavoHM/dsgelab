@@ -490,6 +490,28 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   crescimento e as razões entre variáveis que compartilham a tendência, o mesmo problema que o
   <code>bgp.write</code> do Dynare resolve.</p>
 
+  <h3>19. O modelo está identificado antes de ser estimado?</h3>
+<pre><code>ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],
+                           observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+ident.identified                                    # True, pelos três critérios
+
+ab = dsg.from_equations(["a(+1) = r1*r2*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["r1", "r2"])
+bad = dsg.identification(ab, dict(r1=1.6, r2=0.5), free=["r1", "r2", "stderr e"],
+                         observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+bad.identified                                      # False
+bad["moments"].rank, bad["moments"].required        # (2, 3)
+bad["moments"].dependent                            # [('r1', 'r2')]
+print(bad.summary())</code></pre>
+  <p><code>identification</code> verifica, num ponto, se a distribuição das séries observadas
+  determina os parâmetros livres, com os três critérios do comando <code>identification</code> do
+  Dynare: as derivadas dos momentos (Iskrev), do espectro (Qu e Tkachenko) e de um espaço de
+  estados mínimo (Komunjer e Ng). Cada critério informa o seu posto, os parâmetros que não o
+  alteram, os conjuntos de parâmetros que o alteram juntos e os fracamente identificados, e uma
+  busca encontra, para cada parâmetro, o grupo de outros que melhor reproduz o seu efeito. No
+  segundo modelo só o produto <code>r1*r2</code> importa, e cada critério perde um posto.
+  <code>ModFile.identification</code> faz o mesmo com os <code>estimated_params</code> de um
+  <code>.mod</code>, na média da priori.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -511,6 +533,8 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
     jacobiana esparsa e trajetórias de parâmetros anunciadas.</p></div>
     <div class="card"><h4>Calibração</h4><p>Alvos resolvidos em conjunto, com diagnóstico de
     identificação por posto e direções nulas.</p></div>
+    <div class="card"><h4>Identificação</h4><p>Os três critérios locais do Dynare (momentos,
+    espectro, sistema mínimo) e a sua busca de colinearidade, com os mesmos vereditos.</p></div>
     <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
     restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
@@ -685,6 +709,24 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   passa a usar o ganho estacionário do filtro quando a variância converge a 1e-6, o que altera o número na sétima
   casa decimal. A aproximação de Laplace calculada com a hessiana do próprio dsgelab difere da do
   Dynare em 0,03, diferença que vem das duas hessianas numéricas.</p>
+
+  <h3>Identificação local comparada com o Dynare</h3>
+  <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de
+  <code>tests/identification</code> do Dynare, e <code>fs2000</code>, dos seus exemplos. Em
+  <code>kim2</code> dois parâmetros só entram juntos e um terceiro não entra.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>momentos dos observáveis</td><td class="num">8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>o seu jacobiano (Iskrev); G do espectro (Qu e Tkachenko)</td><td class="num">2e-08; 2e-08</td><td class="ok">OK</td></tr>
+      <tr><td>posto, parâmetros sensíveis, dependentes e fracos, três critérios, duas tolerâncias</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+      <tr><td>tamanho do estado mínimo (Komunjer e Ng)</td><td class="num">igual</td><td class="ok">OK</td></tr>
+      <tr><td>busca de colinearidade, cossenos</td><td class="num">8e-09</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">O Dynare deriva analiticamente, e o dsgelab por
+  diferenças com um passo de Richardson escolhido para cada parâmetro. Os desvios são os maiores dos
+  três modelos, relativos ao maior elemento de cada coluna ou matriz.</p>
 
   <h3>Não linearidades e declaração do modelo comparadas com o Dynare</h3>
   <p><code>from_mod</code> lê os arquivos de <code>tests/occbin</code>, <code>tests/ep</code>,

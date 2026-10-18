@@ -7,6 +7,30 @@ before 1.0, a minor version may add to the API and a patch version only fixes bu
 
 Work toward milestone 0.6 (identification, moments and data).
 
+### Added
+
+- `identification`: local identification of the free parameters at one point, from the
+  distribution of the observables, as Dynare's `identification` command computes it. Three
+  criteria: the derivatives of the moments (Iskrev 2010), the Gram matrix of the derivatives
+  of the spectrum (Qu and Tkachenko 2012) and the derivatives of a minimal state space
+  (Komunjer and Ng 2011). Each reports its rank, the parameters that do not move it, the
+  sets of linearly dependent parameters, the multicollinearity of each parameter and the
+  weakly identified parameters and pairs. A brute-force search finds, for each parameter,
+  the group of others whose effect on the moments best reproduces its own. The free
+  parameters can include shock and measurement-error standard deviations (`"stderr e"`).
+- `ModFile.identification`: the same for the `estimated_params` of a `.mod`, observing its
+  `varobs`, at the prior mean (Dynare's default), the calibration or a given point.
+- `tol_rank="auto"`, the default of `identification`: a singular value below ten times the
+  estimated error of the derivatives counts as zero. The derivatives are central
+  differences with a Richardson step, at a step chosen for each parameter, and two
+  Richardson estimates measure their error. With Dynare's `"robust"` tolerance, two
+  parameters that enter a model declared in Python only through their product came out
+  identified, because the numerical linearisation leaves a singular value near 1e-7.
+- `validation/compare_identification.py`: the three criteria against Dynare 7.2 on `kim2`
+  and `as2007` from its tests and on `fs2000`. Ranks, sensitive, dependent and weak
+  parameters are Dynare's under both tolerances, and the derivatives of the moments and the
+  spectrum agree within 2e-8.
+
 ## 0.5.0 — 2026-10-18
 
 The roadmap's milestone 0.5, the public release. No new solver features.

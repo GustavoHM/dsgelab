@@ -436,6 +436,54 @@ population or zero capital), which `balanced_growth` discards before restarting 
 point. The detrending of a `.mod` with `trend_var` and `var(deflator=)` is validated in
 `compare_import.py`, with `fs2000_nonstationary`.
 
+## Local identification
+
+```bash
+bash fetch.sh                     # mods/identification/, from Dynare 7.2's tests/identification
+bash run_identification.sh        # Dynare's identification at the prior mean, with advanced=1
+python compare_identification.py
+```
+
+Three models are compared, each at the prior mean of its `estimated_params`. `kim2` (Kim, 2003)
+comes from Dynare's tests: `phi` and `theta` only enter together and `dumpy` does not enter at all,
+so no criterion has full rank, and the test runs with `tol_rank=1e-8`. In `as2007` (An and
+Schorfheide, 2007), also from the tests, all 13 parameters are identified. `fs2000` comes from the
+examples and estimates two shock standard deviations, which Dynare places first among its columns.
+`run_identification.sh` cuts each file before its first `identification` or `estimation` command
+and appends one with `advanced=1`, which adds the brute-force collinearity search. The numbers
+below come from a run on 18 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+| | kim2 | as2007 | fs2000 |
+|---|---|---|---|
+| moments, largest relative difference | 1.2e-13 | 3.4e-14 | 7.7e-13 |
+| Jacobian of the moments, largest difference / column norm | 1.8e-08 | 2.7e-10 | 5.3e-09 |
+| G of the spectrum, largest difference / largest entry | 2.4e-08 | 1.6e-12 | 1.4e-10 |
+| size of Komunjer and Ng's matrix (minimal state) | 9 × 6 (1) | 45 × 31 (3) | 21 × 17 (2) |
+| rank, sensitive, dependent and weak parameters, three criteria, two tolerances | same | same | same |
+| multicollinearity, moments and spectrum, largest difference | not compared | 7.5e-12 | 5.5e-08 |
+| collinearity search, largest cosine difference | 7.8e-09 (groups of one) | 6.2e-11 | 1.4e-09 |
+
+Dynare differentiates analytically and `dsgelab` by central differences with a Richardson step,
+at a step chosen for each parameter. In `fs2000`, `bet = 0.993` lies 0.007 from 1, where the
+moments diverge, and a step of 0.1% of its value gave derivatives that were off by 1e-6; halving
+the step until two Richardson estimates agree brings the difference with Dynare to 5e-9.
+
+The verdicts are compared twice, with Dynare's tolerance (`"robust"`, or `1e-8` for kim2) and with
+`dsgelab`'s default, `"auto"`, which also counts as zero a singular value below ten times the
+estimated error of the derivatives. Both give Dynare's ranks and the same sets of sensitive,
+dependent and weak parameters on all three models. On a model declared in Python, linearised by
+finite differences, the derivatives carry an error near 1e-7. Two parameters that enter only
+through their product then leave a singular value of that size, which the robust tolerance counts
+as a rank, and `"auto"` exists for that case (`tests/test_identification.py`).
+
+Komunjer and Ng's matrix is compared by its size, which gives the size of the minimal state. Its
+entries, its condition number and the multicollinearity computed from it depend on the basis of
+the minimal system, which each package chooses in its own way. The multicollinearity of the other
+two criteria and the collinearity search for groups of more than one parameter are compared only
+when the moments have full rank. In kim2 the columns of `phi` and `theta` are collinear to rounding
+error, and a regression of `alph` on both measures that error: Dynare finds a cosine of 0.79 for
+the pair and `dsgelab` keeps `theta` alone, at 0.72, because the second regressor only adds noise.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

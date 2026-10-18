@@ -61,6 +61,8 @@ step "Dynare: extended path" bash run_ep.sh
 step "compare_ep.py"         "$PYTHON" compare_ep.py
 step "Dynare: balanced growth" bash run_bgp.sh
 step "compare_bgp.py"        "$PYTHON" compare_bgp.py
+step "Dynare: identification" bash run_identification.sh
+step "compare_identification.py" "$PYTHON" compare_identification.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

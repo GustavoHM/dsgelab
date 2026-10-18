@@ -448,6 +448,24 @@ that come out of it depend on where the solver stops. Run this whenever a
 calibration fails to converge, because tightening the solver tolerance does not
 identify an unidentified system.
 
+`target_jacobian` asks whether the steady-state targets pin down the parameters.
+Before an estimation the question is a different one: whether the distribution of
+the observed series does. `identification` answers it at one point, with the three
+criteria of Dynare's `identification` command. These are the derivatives of the
+moments (Iskrev), of the spectrum (Qu and Tkachenko) and of a minimal state space
+(Komunjer and Ng).
+
+```python
+ident = dsg.identification(model, params, free=["rho", "stderr eps_a"],
+                           observables=["c"], cov={"eps_a": 0.01}, guess=guess)
+ident.identified              # every criterion has full rank
+ident["moments"].dependent    # sets of parameters that move the moments together
+print(ident.summary())
+```
+
+`ModFile.identification()` does the same for the `estimated_params` of a `.mod`,
+observing its `varobs`, at the prior mean.
+
 ---
 
 ## 8. Diagnostics
