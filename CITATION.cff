@@ -12,10 +12,10 @@ authors:
 version: "0.5.0"
 date-released: "2026-10-18"
 license: MIT
-# The DOI is filled in with the first release archived on Zenodo, which makes the citation stable,
-# since a repository URL is not an archivable reference.
+# The concept DOI on Zenodo resolves to the latest archived release; each release also has a DOI
+# of its own (0.5.0: 10.5281/zenodo.23456475). A repository URL is not an archivable reference.
+doi: "10.5281/zenodo.23456474"
 repository-code: "https://github.com/GustavoHM/dsgelab"
-# doi: "10.5281/zenodo.XXXXXXX"
 keywords:
   - "DSGE"
   - "perturbation"

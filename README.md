@@ -2,6 +2,7 @@
 
 [![tests](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml/badge.svg)](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/GustavoHM/dsgelab/blob/main/LICENSE)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23456474.svg)](https://doi.org/10.5281/zenodo.23456474)
 
 A general toolkit for solving DSGE models in Python. A model is declared once, as lists of
 state, jump and shock names and one function that returns the equilibrium residuals. The
@@ -281,7 +282,7 @@ without knowing which. [`CITATION.cff`](https://github.com/GustavoHM/dsgelab/blo
 holds the same metadata in the format GitHub reads.
 
 Moreira, G. H. (2026). dsgelab: A general toolkit for solving DSGE models in Python (Version
-0.5.0) [Computer software]. https://github.com/GustavoHM/dsgelab
+0.5.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23456475
 
 ```bibtex
 @software{dsgelab_2026,
@@ -290,9 +291,12 @@ Moreira, G. H. (2026). dsgelab: A general toolkit for solving DSGE models in Pyt
   year    = {2026},
   version = {0.5.0},
   license = {MIT},
+  doi     = {10.5281/zenodo.23456475},
   url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Python package}
 }
 ```
 
-A DOI will be added with the first release archived on Zenodo.
+Each release is archived on Zenodo with a DOI of its own; the DOI above is that of version
+0.5.0. The concept DOI [10.5281/zenodo.23456474](https://doi.org/10.5281/zenodo.23456474)
+resolves to the latest release.
