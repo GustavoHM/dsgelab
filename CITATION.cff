@@ -10,7 +10,7 @@ authors:
     email: "gustavo@gakusai.net"
     orcid: "https://orcid.org/0000-0003-0827-2521"
 version: "0.5.0"
-date-released: "2026-10-16"   # set to the release day when tagging v0.5.0
+date-released: "2026-10-18"
 license: MIT
 # The DOI is filled in with the first release archived on Zenodo, which makes the citation stable,
 # since a repository URL is not an archivable reference.

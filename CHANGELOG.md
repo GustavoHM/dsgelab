@@ -3,7 +3,7 @@
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes bugs.
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-10-18
 
 The roadmap's milestone 0.5, the public release. No new solver features.
 
