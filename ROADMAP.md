@@ -19,7 +19,8 @@ The item-by-item comparison with the other tools is in [`docs/comparison.md`](do
 ## Where we stand
 
 Version 0.5.0, at `https://github.com/GustavoHM/dsgelab`, brings together milestones 0.2 to 0.4
-and the publication work of milestone 0.5, and is released when the tag `v0.5.0` is created.
+and the publication work of milestone 0.5. It was released on 18 October 2026, on PyPI and on
+Zenodo (DOI [10.5281/zenodo.23456475](https://doi.org/10.5281/zenodo.23456475)).
 The steady state is found with positivity and an outer anchor, accepted in closed form after a
 check, and computed with calibration equations and homotopy. The first-order solution is Klein/QZ
 with Blanchard–Kahn enforced and, optionally, Dynare's unit-root criterion, and it gives impulse
@@ -157,7 +158,7 @@ Completed in version 0.4.0, on 11 October 2026.
   *Declaring trends in `from_equations` is still missing, and for now the route is the `.mod`.*
 - [x] **Model diagnostics** (`diagnose`), Dynare's `model_diagnostics`, with the same report.
 
-### 0.5 — public release
+### 0.5 — public release (released on 18 October 2026)
 
 No new features. The items below are conditions for publishing.
 
@@ -185,11 +186,12 @@ No new features. The items below are conditions for publishing.
   author's unpublished applied model, a DSGE with 71 variables) was marked on the site as not
   reproducible from the repository. The README and `validation/README.md` mark it the same way.
 - [x] **Security review before the public release.**
-- [ ] **Author's review of every public text.** Nothing is published (the repository made public,
+- [x] **Author's review of every public text.** Nothing is published (the repository made public,
   the site, a GitHub release, PyPI, Zenodo) before the author has reviewed all the texts that go
   with it, namely the README, CHANGELOG, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the issue
   and pull-request templates, `CITATION.cff`, the description in `pyproject.toml`, the site in both
-  languages, `docs/` and `validation/README.md`.
+  languages, `docs/` and `validation/README.md`. All 25 texts were approved on 18 October 2026,
+  after a final review of their claims against the code.
 
 **Publication engineering**
 
@@ -208,19 +210,15 @@ No new features. The items below are conditions for publishing.
   triggered by hand on 16 October 2026, and its 25 steps passed in 28 minutes.
 - [x] Installation tested from the wheel, with 148 tests against the installed wheel on Python
   3.14 on macOS (`DSGELAB_TEST_INSTALLED=1`), and the sdist with the files its own tests read.
-- [ ] `python -m build`, `twine check`, publication by trusted publishing, TestPyPI first.
-  *Written* (`release.yml`, triggered by a `v*` tag): it checks the tag against the version,
-  publishes to TestPyPI, runs the suite against what TestPyPI serves, and only then publishes to
-  PyPI. `twine check --strict` passes. The version is already 0.5.0. The trusted publisher is
-  registered on both indexes and the `testpypi` and `pypi` environments exist in the repository
-  (16 October 2026), with the required reviewer of `pypi` to be set once the repository is public.
-  What remains, on release day, is to date the CHANGELOG and `CITATION.cff` and create the tag
-  `v0.5.0`.
-- [ ] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
-  change, with the links to `docs/` pointed at GitHub. It only runs once the repository is public.
-- [ ] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. The ORCID is already in
-  `CITATION.cff`. Connecting the repository to Zenodo, which requires the repository to be public,
-  and adding the DOI of the first release are still to be done.
+- [x] `python -m build`, `twine check`, publication by trusted publishing, TestPyPI first
+  (`release.yml`, triggered by a `v*` tag). The workflow checks the tag against the version,
+  publishes to TestPyPI, runs the suite against what TestPyPI serves, and publishes to PyPI only
+  after the required reviewer approves. Version 0.5.0 went out this way on 18 October 2026.
+- [x] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
+  change, with the links to `docs/` pointed at GitHub (`https://gustavohm.github.io/dsgelab/`).
+- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.5.0 is
+  10.5281/zenodo.23456475, and the concept DOI 10.5281/zenodo.23456474, which resolves to the
+  latest release, is in `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, code of conduct, issue and pull-request templates.
 - [x] `py.typed` and type annotations on the public API, with no public function or method left
   unannotated and no new error reported by `mypy`. The lazy-import wrappers in `__init__.py`
