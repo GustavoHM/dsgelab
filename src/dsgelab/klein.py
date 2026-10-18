@@ -15,10 +15,11 @@ the pencil ``(B, A)`` must equal ``n_k`` -- is enforced rather than reported, so
 an indeterminate or non-existent equilibrium raises instead of silently
 returning a matrix that means nothing.
 
-The decomposition is taken in COMPLEX Schur form. The real form produces 2x2
-diagonal blocks whenever generalised eigenvalues come close in modulus, which
-mixes the invariant subspaces; that case is not exotic, it is what several
-exogenous AR(1) processes with similar persistence look like.
+The decomposition is the real ordered generalised Schur form. A 2x2 diagonal
+block of the real form holds a complex conjugate pair, whose two roots share
+their modulus, so ordering by modulus never splits a block between the stable
+and the unstable subspaces. If the real reordering fails, the complex form is
+used instead.
 """
 
 from __future__ import annotations
@@ -118,7 +119,7 @@ def klein(A: ArrayLike, B: ArrayLike, n_k: int, C: ArrayLike | None = None, tol:
         cut = float(qz_criterium)
         sort = lambda a, b: np.abs(a) < cut * np.abs(b)   # noqa: E731
     # The REAL ordered QZ is the default: a complex pair stays in a 2x2 block, which is
-    # never read entry by entry -- only T11, S11 and Z11 are inverted. In SciPy 1.18's
+    # never read entry by entry: Z11 is inverted, T11 enters a linear solve and S11 a product. In SciPy 1.18's
     # LAPACK the complex reordering loses up to 1e-8 on a pencil with a zero root and
     # refuses outright one with several infinite roots, while the real one is exact on
     # both. The complex reordering remains as the fallback.

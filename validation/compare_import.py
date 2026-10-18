@@ -1,31 +1,31 @@
-"""compare_import.py — os exemplos do próprio Dynare, lidos por dsgelab.from_mod e resolvidos.
+"""compare_import.py: Dynare's own examples, read by dsgelab.from_mod and solved.
 
-compare.py confronta portes feitos À MÃO de três modelos. Aqui nenhum modelo é reescrito: o
-`.mod` do Dynare é lido como está por `dsgelab.dynare.from_mod`, e o que se compara é o que sai
-dos dois programas a partir do mesmo arquivo. São nove modelos: os três de compare.py, cinco da
-pasta examples/ do repositório do Dynare (tag 6.4), que exercitam o que um porte à mão não
-exercitaria — c(+2) e choques dentro da função de produção (fs2000), variáveis locais `#` e o
-operador steady_state() (Gali_2015), o macroprocessador (agtrend), choques correlacionados
-(example1, example3) e um modelo médio de 28 equações com indexação e rigidez de salários
-(NK_baseline) —, e o fs2000 escrito em níveis, com tendências declaradas (trend_var,
-var(deflator=)), de tests/trend_var do Dynare 7.2: o Dynare e o dsgelab o destendenciam cada um
-por si, e o que se compara é o modelo estacionário que sai.
+compare.py checks ports of three models written BY HAND. Here no model is rewritten. Dynare's
+`.mod` is read as it is by `dsgelab.dynare.from_mod`, and what is compared is what the two
+programs produce from the same file. There are nine models. Three are those of compare.py. Five
+come from the examples/ folder of Dynare's repository (tag 6.4) and exercise what a hand port
+would not: c(+2) and shocks inside the production function (fs2000), `#` local variables and the
+steady_state() operator (Gali_2015), the macro processor (agtrend), correlated shocks (example1,
+example3) and a medium-scale model of 28 equations with indexation and wage rigidity
+(NK_baseline). The last is fs2000 written in levels, with declared trends (trend_var,
+var(deflator=)), from tests/trend_var of Dynare 7.2. Dynare and dsgelab each detrend it on their
+own, and what is compared is the stationary model that results.
 
-O que vem do Dynare, e por quê:
-  * os parâmetros que o .mod NÃO define. O NK_baseline e o RBC_baseline calculam alguns num
-    arquivo MATLAB de estado estacionário, que um leitor de .mod não executa. Os que o .mod
-    define são lidos por from_mod e CONFERIDOS contra os do Dynare;
-  * o ponto de partida do estado estacionário, só para as variáveis cujo valor o .mod não dá em
-    forma avaliável (um auxiliar MATLAB, um steady_state_model ausente). O estado estacionário em
-    si é resolvido pelo dsgelab e comparado.
+What comes from Dynare, and why:
+  * the parameters that the .mod does NOT define. NK_baseline and RBC_baseline compute some of
+    them in a MATLAB steady-state file, which a .mod reader does not execute. The ones the .mod
+    defines are read by from_mod and CHECKED against Dynare's.
+  * the starting point of the steady state, only for the variables whose value the .mod does not
+    give in an evaluable form (a MATLAB helper, a missing steady_state_model). The steady state
+    itself is solved by dsgelab and compared.
 
-O que se compara, como em compare.py: estado estacionário, IRFs ortogonalizadas (Cholesky) de
-todas as variáveis a todos os choques com variância, 40 períodos, e desvios-padrão teóricos.
-Nenhuma série é deslocada: from_mod mantém a datação do Dynare.
+What is compared, as in compare.py: steady state, orthogonalised (Cholesky) IRFs of every
+variable to every shock with nonzero variance, 40 periods, and theoretical standard deviations.
+No series is shifted, because from_mod keeps Dynare's timing.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_examples.sh     # exporta out_import/<nome>.mat
+    bash run_examples.sh     # exports out_import/<name>.mat
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ from pathlib import Path
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.dynare import from_mod
 
 HERE = Path(__file__).resolve().parent
@@ -68,7 +68,7 @@ def compare(name: str, path: Path) -> dict:
     mf = from_mod(path)
     model = mf.model
 
-    # --- parâmetros: os do .mod conferidos; os que faltam, do Dynare
+    # --- parameters: the .mod's are checked, the missing ones come from Dynare
     dy_par = dict(zip(ex.param_names, np.atleast_1d(ex.params).astype(float)))
     params = dict(mf.params)
     d_par, from_dynare = 0.0, []
@@ -81,9 +81,9 @@ def compare(name: str, path: Path) -> dict:
         else:
             d_par = max(d_par, abs(params[p] - v) / max(abs(v), 1e-12))
 
-    # --- estado estacionário
+    # --- steady state
     ys = dict(zip(ex.endo_names, np.atleast_1d(ex.ys).astype(float)))
-    # um modelo linear sem initval parte de zero, como o próprio Dynare
+    # a linear model without initval starts from zero, as Dynare itself does
     start = {} if mf.linear else {v: ys[v] for v in mf.missing_guess}
     ss = mf.steady_state(guess=start, params=params)
     d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), 1e-8) for v in mf.endogenous)
@@ -92,8 +92,8 @@ def compare(name: str, path: Path) -> dict:
     r_dy = float(np.max(np.abs(model.residuals(x_dy, x_dy, zero, params))))
     r_dk = float(np.max(np.abs(model.residuals(ss.x, ss.x, zero, params))))
 
-    # --- IRFs ortogonalizadas e momentos
-    sol = dk.solve(model, params, steady=ss, qz_criterium=1 + 1e-6)   # a omissão do Dynare
+    # --- orthogonalised IRFs and moments
+    sol = dsg.solve(model, params, steady=ss, qz_criterium=1 + 1e-6)   # Dynare's default
     cov = np.atleast_2d(np.asarray(ex.sigma_e, float))
     live = [i for i in range(len(ex.exo_names)) if cov[i, i] > 0]
     L = np.zeros_like(cov)
@@ -133,7 +133,8 @@ def compare(name: str, path: Path) -> dict:
         d_mom = max(abs(mom["std_by_name"][v] * scale[model.position(v)] - dy_sd[v]) / dy_sd[v]
                     for v in target) if target else 0.0
 
-    # Quando o e.e. do Dynare deixa resíduo, o que dele decorre herda o erro; a tolerância acompanha.
+    # When Dynare's s.s. leaves a residual, what follows from it inherits the error, and the
+    # tolerance follows.
     floor = max(TOL, 30.0 * r_dy)
     ss_ok = d_ss < 1e-9 or r_dy > 1e3 * max(r_dk, 1e-16)
     ok = ss_ok and d_irf < floor and (d_mom is None or d_mom < floor) and d_par < 1e-12
@@ -145,26 +146,26 @@ def compare(name: str, path: Path) -> dict:
 
 def main() -> int:
     bad = 0
-    print(f"{'modelo':<14}{'vars':>5}{'aux':>5}  {'parâm.':>8} {'e.e.':>8} {'IRFs':>8} "
-          f"{'momentos':>9}")
+    print(f"{'model':<14}{'vars':>5}{'aux':>5}  {'params':>8} {'s.s.':>8} {'IRFs':>8} "
+          f"{'moments':>9}")
     for name, path in _mods().items():
         r = compare(name, path)
         if r.get("missing"):
-            print(f"{name:<14} sem out_import/{name}.mat — rode run_examples.sh")
+            print(f"{name:<14} no out_import/{name}.mat, run run_examples.sh")
             bad += 1
             continue
-        mom = f"{r['mom']:.1e}" if r["mom"] is not None else "n/d"
+        mom = f"{r['mom']:.1e}" if r["mom"] is not None else "n/a"
         note = ""
         if r["r_dy"] > 1e3 * max(r["r_dk"], 1e-16):
-            note = f"  (e.e. do Dynare com resíduo {r['r_dy']:.0e})"
+            note = f"  (Dynare's s.s. with residual {r['r_dy']:.0e})"
         print(f"{name:<14}{r['n']:>5}{r['aux']:>5}  {r['par']:>8.1e} {r['ss']:>8.1e} "
               f"{r['irf']:>8.1e} {mom:>9}  {'OK' if r['ok'] else 'DIVERGE ' + r['worst']}{note}")
         if r["from_dynare"]:
-            print(f"{'':<14}parâmetros que o .mod deixa ao MATLAB, tomados do Dynare: "
+            print(f"{'':<14}parameters the .mod leaves to MATLAB, taken from Dynare: "
                   f"{', '.join(r['from_dynare'])}")
         if r["guess_from_dynare"]:
-            print(f"{'':<14}ponto de partida do e.e. tomado do Dynare para "
-                  f"{r['guess_from_dynare']} variável(is)")
+            print(f"{'':<14}s.s. starting point taken from Dynare for "
+                  f"{r['guess_from_dynare']} variable(s)")
         bad += not r["ok"]
     return 1 if bad else 0
 

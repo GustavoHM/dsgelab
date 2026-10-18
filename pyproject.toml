@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsgelab"
-version = "0.4.0"
-description = "Solve, simulate and estimate DSGE models in Python: perturbation to third order, perfect foresight, OccBin, optimal policy, Bayesian estimation and Dynare .mod import, validated against Dynare."
+version = "0.5.0"
+description = "Solve, simulate and estimate DSGE models in Python: perturbation to second order (and a partial third order), perfect foresight, OccBin, optimal policy, Bayesian estimation and Dynare .mod import, validated against Dynare."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

@@ -122,9 +122,15 @@ class ThirdOrderSolution:
         quadratic one: this is not an artefact to calibrate, it is what to do with a polynomial of
         degree three in a loop.
         """
+        if cov is not None:
+            Sigma_new = shock_covariance(self.model.shocks, cov)
+            if not (Sigma_new.shape == self.Sigma.shape
+                    and np.allclose(Sigma_new, self.Sigma, rtol=1e-12, atol=0.0)):
+                # g_ss, h_ss, g_ssk and h_ssk all depend on the covariance: solve again at it
+                other = solve_third_order(self.second.at_covariance(Sigma_new), Sigma_new)
+                return other.simulate(periods, seed=seed, burn=burn, levels=levels)
         rng = np.random.default_rng(seed)
-        Sigma = shock_covariance(self.model.shocks,
-                                 cov if cov is not None else self.Sigma)
+        Sigma = self.Sigma
         vals, vecs = np.linalg.eigh(Sigma)
         L = vecs @ np.diag(np.sqrt(np.maximum(vals, 0.0)))
         total = periods + burn
@@ -264,6 +270,9 @@ def solve_third_order(second: SecondOrderSolution, cov: Covariance = None, *, h:
                                 + np.einsum("ea,aijl->eijl", Bbar, WPPP) + K3)))
 
     Sigma = shock_covariance(model.shocks, cov if cov is not None else second.Sigma)
+    # g_ss and h_ss in ``second`` must be those of this covariance, or the third-order rule would
+    # mix the risk terms of two economies
+    second = second.at_covariance(Sigma)
     g_ssk, h_ssk, slope_resid = _risk_slope(
         nk, nu, n, ne, f1, f2, H, T, P, F, Q, g_kk, g_kkk, Sigma)
     return ThirdOrderSolution(second=second, g_kkk=g_kkk, h_kkk=h_kkk,

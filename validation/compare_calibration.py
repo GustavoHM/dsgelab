@@ -1,13 +1,13 @@
-"""compare_calibration.py — equações de calibração contra o MacroModelling.jl.
+"""compare_calibration.py: calibration equations against MacroModelling.jl.
 
-O mesmo RBC nos dois pacotes, com beta fixado pela meta k/q = 2.5 no estado estacionário: no
-MacroModelling, `k[ss] / q[ss] = 2.5 | β` no bloco @parameters; no dsgelab,
-`calibration_equations={"beta": "k/q = 2.5"}`. Compara-se beta calibrado e o estado
-estacionário. A forma fechada (beta = 1/(alpha/2.5 + 1 - delta)) arbitra.
+The same RBC in both packages, with beta pinned down by the target k/q = 2.5 in the steady state.
+In MacroModelling this is `k[ss] / q[ss] = 2.5 | β` in the @parameters block, and in dsgelab
+`calibration_equations={"beta": "k/q = 2.5"}`. The calibrated beta and the steady state are
+compared. The closed form (beta = 1/(alpha/2.5 + 1 - delta)) arbitrates.
 
-Pré-requisito (uma vez, com o projeto Julia que tem MacroModelling e JSON3):
-    julia --project=<projeto> macromodelling/calibration.jl < /dev/null
-    # escreve macromodelling/calibration.json
+Prerequisite (once, with the Julia project that has MacroModelling and JSON3):
+    julia --project=<project> macromodelling/calibration.jl < /dev/null
+    # writes macromodelling/calibration.json
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-import dsgelab as dk
+import dsgelab as dsg
 
 HERE = Path(__file__).resolve().parent
 
@@ -27,18 +27,18 @@ RBC = ["1/c = beta/c(+1)*(alpha*exp(z(+1))*k(+1)**(alpha-1) + 1 - delta)",
 def main() -> int:
     f = HERE / "macromodelling" / "calibration.json"
     if not f.exists():
-        sys.exit(f"falta {f}: rode macromodelling/calibration.jl")
+        sys.exit(f"missing {f}: run macromodelling/calibration.jl")
     mm = json.loads(f.read_text())
-    m = dk.from_equations(RBC, states=["k", "z"], jumps=["c", "q"], shocks=["e"],
+    m = dsg.from_equations(RBC, states=["k", "z"], jumps=["c", "q"], shocks=["e"],
                           parameters=["alpha", "beta", "delta", "rho", "sigma"],
                           calibration_equations={"beta": "k/q = 2.5"})
     p = dict(alpha=0.5, beta=0.95, delta=0.02, rho=0.2, sigma=0.01)
-    ss = dk.steady_state(m, dict(k=5, z=0, c=2, q=2.2), p)
+    ss = dsg.steady_state(m, dict(k=5, z=0, c=2, q=2.2), p)
     exact = 1 / (0.5 / 2.5 + 1 - 0.02)
     beta_mm = mm["calibrated"]["β"]
     ok = True
     print(f"  beta    dsgelab {ss.calibrated['beta']:.15f}  MacroModelling {beta_mm:.15f}  "
-          f"forma fechada {exact:.15f}")
+          f"closed form {exact:.15f}")
     ok &= abs(ss.calibrated["beta"] - exact) < 1e-13 and abs(beta_mm - exact) < 1e-13
     for v in ("c", "k", "q", "z"):
         d = abs(ss.values[v] - mm["steady_state"][v])

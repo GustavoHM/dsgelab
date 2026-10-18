@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dsgelab — resolver modelos DSGE em Python</title>
-<meta name="description" content="Biblioteca geral para modelos DSGE: estado estacionário, Klein/QZ, segunda ordem, previsão perfeita e calibração por alvos. Validada contra o Dynare e o MacroModelling.jl.">
+<meta name="description" content="Biblioteca geral para modelos DSGE: estado estacionário, Klein/QZ, segunda ordem, previsão perfeita e calibração por alvos. Comparada com o Dynare e o MacroModelling.jl.">
 <link rel="alternate" hreflang="en" href="https://gustavohm.github.io/dsgelab/">
 <link rel="alternate" hreflang="pt-BR" href="https://gustavohm.github.io/dsgelab/pt-br/">
 <link rel="alternate" hreflang="x-default" href="https://gustavohm.github.io/dsgelab/">
@@ -14,29 +14,30 @@
 
 <header class="hero">
   <div class="wrap">
-    <p class="lang"><a href="../" hreflang="en" lang="en">English</a> · <strong>Português</strong></p>
+    <p class="lang"><a href="../" hreflang="en" lang="en"><span aria-hidden="true">🌐</span> English</a> · <strong><span aria-hidden="true">🇧🇷</span> Português</strong></p>
     <h1>dsgelab</h1>
-    <p class="tag">Declare o modelo uma vez, com os nomes dos estados, dos saltos e dos choques e
-    uma função de resíduos. Estado estacionário, solução de primeira ordem, respostas a impulso,
-    momentos, correções de risco de segunda ordem, transições de previsão perfeita e calibração por
-    alvos saem todos dessa declaração.</p>
+    <p class="tag">Declare o modelo uma vez, com uma função de resíduos e as listas de nomes das
+    variáveis de estado, das variáveis de salto e dos choques. Dessa declaração saem o estado
+    estacionário, a solução de primeira ordem, as funções de resposta a impulso, os momentos, as
+    correções de risco de segunda ordem, as trajetórias de transição sob previsão perfeita e a
+    calibração por alvos.</p>
     <div class="pills">
       <span class="pill">Python 3.11+</span>
       <span class="pill">só numpy e scipy</span>
-      <span class="pill">Blanchard-Kahn imposto</span>
+      <span class="pill">condição de Blanchard–Kahn exigida</span>
       <span class="pill">2ª ordem sem Dynare</span>
-      <span class="pill">validado a 1e-14</span>
+      <span class="pill">conferido com o Dynare</span>
     </div>
   </div>
 </header>
 
 <nav class="toc"><div class="wrap"><ul>
-  <li><a href="#porque">Por quê</a></li>
+  <li><a href="#porque">Motivação</a></li>
   <li><a href="#instalar">Instalar</a></li>
   <li><a href="#exemplos">Exemplos</a></li>
   <li><a href="replications.html">Replicações</a></li>
-  <li><a href="#caixa">O que tem na caixa</a></li>
-  <li><a href="#datacao">Datação</a></li>
+  <li><a href="#caixa">Recursos</a></li>
+  <li><a href="#datacao">Convenção temporal</a></li>
   <li><a href="#validacao">Validação</a></li>
   <li><a href="#comparacao">Comparação</a></li>
   <li><a href="#citar">Como citar</a></li>
@@ -46,25 +47,29 @@
 <main>
 
 <section id="porque"><div class="wrap">
-  <h2>Por que existe</h2>
+  <h2>Por que este pacote existe</h2>
   <p class="lede">O pacote foi projetado sob a restrição de que o bloco estocástico e a transição
   determinística sejam o <em>mesmo</em> modelo.</p>
-  <p>Um modo de falhar no trabalho aplicado é ter uma solução de perturbação montada sobre um
-  conjunto de equações e uma trajetória de transição resolvida por um ponto fixo escrito à mão sobre
+  <p>No trabalho aplicado, é comum que a solução por perturbação seja montada sobre um conjunto de
+  equações e que a trajetória de transição seja resolvida, por um ponto fixo programado à mão, sobre
   outro conjunto, parecido com o primeiro e escrito pela mesma pessoa, mas diferente dele. Aqui as
-  duas chamam a mesma função de resíduos, e por isso não podem divergir.</p>
-  <div class="note"><p><strong>A biblioteca faz as verificações que, de outro modo, dependeriam da
-  disciplina do usuário.</strong> A condição de determinação é imposta, e um modelo que não a
-  satisfaz é recusado. Uma identidade que o modelo não impõe, como a lei de Walras ou uma restrição
-  de recursos, entra sempre como verificação, fora do sistema de equações. A convergência é julgada
-  pelo resíduo das equações, qualquer que seja a bandeira de sucesso devolvida pelo solucionador, e a
-  ordem de acurácia da aproximação é medida.</p></div>
+  duas chamam a mesma função de resíduos e, por isso, não podem divergir.</p>
+  <div class="note"><p><strong>Duas verificações são feitas a cada solução, e outras três exigem uma
+  chamada cada.</strong> Se a condição de determinação falha, <code>solve</code> levanta
+  <code>BlanchardKahnError</code> em vez de devolver uma solução. A convergência do estado
+  estacionário é decidida pelo tamanho do resíduo, e o indicador de sucesso do solver não entra
+  nessa decisão. As outras três ficam a cargo do usuário. <code>check_identity</code> avalia uma
+  identidade que o modelo não impõe, como a lei de Walras, sem acrescentá-la às equações do modelo.
+  <code>.accuracy()</code> mede a ordem de acurácia da aproximação pela velocidade com que o resíduo
+  cai quando o deslocamento é dividido pela metade. Se uma calibração está identificada, quem
+  informa é <code>target_jacobian</code>, porque <code>calibrate</code> não faz essa
+  verificação.</p></div>
 </div></section>
 
 <section id="instalar"><div class="wrap">
   <h2>Instalar</h2>
-<pre><code class="plain">pip install "dsgelab @ git+https://github.com/GustavoHM/dsgelab"
-pip install "dsgelab[symbolic] @ git+https://github.com/GustavoHM/dsgelab"</code></pre>
+<pre><code class="plain">pip install dsgelab
+pip install "dsgelab[symbolic]"</code></pre>
   <p>O pacote depende só de numpy e scipy. O <code>sympy</code> é opcional e serve ao front end
   textual, que calcula as derivadas analiticamente.</p>
 <pre><code class="plain">dsgelab --example rbc        # resolve um modelo do pacote e imprime os diagnósticos</code></pre>
@@ -72,18 +77,18 @@ pip install "dsgelab[symbolic] @ git+https://github.com/GustavoHM/dsgelab"</code
 
 <section id="exemplos"><div class="wrap">
   <h2>Exemplos</h2>
-  <p class="lede">Os exemplos rodam como estão, na ordem em que aparecem, logo depois do
-  <code>pip install</code>. Um verificador extrai e executa cada bloco desta página
-  (<code>tools/check_site_examples.py</code>), para que nenhum exemplo publicado deixe de rodar.
-  Artigos refeitos, com o número que a página confere, estão em
+  <p class="lede">Os exemplos funcionam sem alteração, na ordem em que aparecem, logo depois do
+  <code>pip install</code>. Um verificador (<code>tools/check_site_examples.py</code>) extrai e
+  executa cada bloco desta página, de modo que um bloco que deixe de rodar faz a verificação falhar.
+  Artigos replicados no pacote, com o número que a página confere, estão em
   <a href="replications.html">Replicações</a>.</p>
 
   <h3>1. Resolver um modelo que já vem no pacote</h3>
-<pre><code>import dsgelab as dk
+<pre><code>import dsgelab as dsg
 from dsgelab.examples import rbc
 
 model, params, guess = rbc.build()
-sol = dk.solve(model, params, guess=guess)
+sol = dsg.solve(model, params, guess=guess)
 
 print(sol.summary())
 irf = sol.irf("eps_a", size=0.01, periods=40)     # desvios em %
@@ -91,7 +96,7 @@ mom = sol.moments(cov={"eps_a": 0.007})           # dp, correlações, autocorre
 dec = sol.variance_decomposition(cov={"eps_a": 0.007})</code></pre>
 
   <h3>2. Declarar o seu próprio modelo</h3>
-  <p>O modelo se declara com três listas de nomes e uma função, e as variáveis são acessadas por
+  <p>O modelo é declarado com três listas de nomes e uma função, e as variáveis são acessadas por
   <em>nome</em>, em <code>cur</code> para o período <em>t</em> e <code>nxt</code> para
   <em>t+1</em>.</p>
 <pre><code>import numpy as np
@@ -137,79 +142,100 @@ simbolico = from_equations(
     states=["k", "a"], jumps=["c"], shocks=["eps_a"],
     parameters=["alpha", "beta", "rho", "delta", "gamma"],
 )
-sol_sim = dk.solve(simbolico, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
+sol_sim = dsg.solve(simbolico, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
 
-dk.compare_irfs(sol_meu, sol_sim, "eps_a")["worst"]   # os dois são o mesmo modelo</code></pre>
+dsg.compare_irfs(sol_meu, sol_sim, "eps_a")["worst"]   # os dois são o mesmo modelo</code></pre>
   <p>A jacobiana e a hessiana do resíduo saem <em>exatas</em>, por diferenciação simbólica. A
   solução de segunda ordem é construída sobre a hessiana, e uma diferença finita de segunda ordem
   divide pelo quadrado do passo, de modo que uma hessiana numérica conserva cerca de metade dos
-  dígitos significativos do resíduo de que veio.</p>
+  dígitos significativos do resíduo a partir do qual foi calculada.</p>
 
   <h3>4. Segunda ordem e correções de risco</h3>
-<pre><code>so = dk.solve_second_order(sol, cov={"eps_a": 0.007})
+<pre><code>so = dsg.solve_second_order(sol, cov={"eps_a": 0.007})
 
 so.g_ss, so.h_ss          # o que a primeira ordem põe em zero
-so.mean_correction()      # média ergódica, em forma FECHADA
+so.mean_correction()      # média ergódica, em forma fechada
 so.ergodic_mean()         # a mesma coisa, em nível
 so.accuracy()             # a ordem implícita tem de dar ~3
 so.simulate(periods=5000, seed=1)   # podada, por padrão</code></pre>
   <p>Uma simulação de primeira ordem mantém, <em>por construção</em>, a média dos estados no estado
   estacionário. Quando o deslocamento das regras de decisão é grande, ela pode errar a magnitude e
-  também o <em>sinal</em> de um efeito de média, e o ordenamento de políticas pelo bem-estar depende
+  também o <em>sinal</em> de um efeito sobre a média, e o ordenamento de políticas pelo bem-estar depende
   desse sinal.</p>
 
-  <h3>5. Transição de previsão perfeita, com política anunciada</h3>
+  <h3>5. Transição sob previsão perfeita, com política anunciada</h3>
 <pre><code>from dataclasses import replace
 
 p_velho, p_novo = P(), replace(P(), beta=0.985)
-ss0 = dk.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, p_velho)
-ss1 = dk.steady_state(meu, ss0.values, p_novo)
+ss0 = dsg.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, p_velho)
+ss1 = dsg.steady_state(meu, ss0.values, p_novo)
 
 T = 80
-surpresa = dk.perfect_foresight(meu, ss0, ss1, params=p_novo, T=T)
+surpresa = dsg.perfect_foresight(meu, ss0, ss1, params=p_novo, T=T)
 
-cronograma = [p_velho] * 10 + [p_novo] * (T + 1 - 10)      # ANUNCIADO em t=0
-anunciada = dk.perfect_foresight(meu, ss0, ss1, params=cronograma, T=T)
+cronograma = [p_velho] * 10 + [p_novo] * (T + 1 - 10)      # anunciado em t=0
+anunciada = dsg.perfect_foresight(meu, ss0, ss1, params=cronograma, T=T)
 
 surpresa["k"], anunciada["k"]              # níveis, (T+1,)
 anunciada["c"][0] != surpresa["c"][0]      # o anúncio aparece no impacto</code></pre>
-  <p>A transição é resolvida por Newton de tempo empilhado sobre a mesma função de resíduos que a
-  perturbação lineariza. Uma surpresa entra como mudança em <code>terminal</code> com parâmetros
-  constantes, e um cronograma legal conhecido de antemão entra como sequência de parâmetros.</p>
+  <p>A transição é resolvida pelo método de Newton com os períodos empilhados (<em>stacked
+  time</em>), sobre a mesma função de resíduos que a perturbação lineariza. Uma surpresa entra como
+  mudança em <code>terminal</code> com parâmetros constantes, e um cronograma legal conhecido de
+  antemão entra como sequência de valores dos parâmetros, um por período.</p>
 
   <h3>6. Calibrar parâmetros por alvos e saber se estão identificados</h3>
 <pre><code>def observaveis(ss, p):
     y = ss["a"] * ss["k"] ** p.alpha
-    return {"ky": ss["k"] / y, "cy": ss["c"] / y}
+    return {"ky": ss["k"] / y, "iy": p.delta * ss["k"] / y}   # capital-produto, participação do investimento
 
-res = dk.calibrate(
+res = dsg.calibrate(
     meu, P(),
-    free={"beta": 0.95, "alpha": 0.30},
-    targets={"ky": 0.35, "cy": 0.65},
+    free={"beta": 0.95, "delta": 0.5},
+    targets={"ky": 10.0, "iy": 0.25},
     guess={"k": 0.2, "a": 1.0, "c": 0.36},
     observables=observaveis,
-    bounds={"alpha": (0.05, 0.9), "beta": (0.5, 0.999)},
+    bounds={"beta": (0.5, 0.999), "delta": (0.001, 1.0)},
 )
 print(res.report())
 
-ident = dk.target_jacobian(meu, P(), free=["beta", "alpha"], targets=["k"],
-                           guess={"k": 0.2, "a": 1.0, "c": 0.36})
-ident["identified"]        # False: dois parâmetros, um alvo
-ident["null_directions"]   # a direção que nenhum alvo enxerga</code></pre>
-  <p>Feita à mão, a calibração vira uma bisseção por parâmetro, aninhadas umas nas outras, e cada
-  bisseção trata o seu alvo como se dependesse só do seu parâmetro, embora os alvos sejam
-  determinados <em>conjuntamente</em>. Uma calibração cuja matriz de elasticidades é deficiente em
-  posto não está identificada, e nenhuma tolerância de solucionador corrige isso.</p>
+ident = dsg.target_jacobian(meu, replace(P(), **res.values), free=["beta", "delta"],
+                            targets=["ky", "iy"], guess={"k": 0.2, "a": 1.0, "c": 0.36},
+                            observables=observaveis)
+ident["identified"]        # True: dois alvos fixam os dois parâmetros
+
+um = dsg.target_jacobian(meu, P(), free=["beta", "alpha"], targets=["k"],
+                         guess={"k": 0.2, "a": 1.0, "c": 0.36})
+um["identified"]           # False: dois parâmetros, um alvo
+um["null_directions"]      # a direção que nenhum alvo enxerga</code></pre>
+  <p>A razão capital-produto e a participação do investimento determinam β e δ em conjunto. Em forma
+  fechada, δ = iy/ky = 0,025 e β = 1/(α/ky + 1 − δ) = 0,98912, que é o que <code>calibrate</code>
+  devolve. Avaliada nessa solução, <code>target_jacobian</code> informa que os dois alvos
+  identificam os dois parâmetros. Com β e α livres e o estoque de capital como único alvo, a matriz
+  de elasticidades tem posto um, e <code>null_directions</code> dá a combinação dos dois parâmetros
+  que deixa o alvo inalterado. Feita à mão, a calibração vira bisseções aninhadas, uma por
+  parâmetro, e cada uma trata o seu alvo como se dependesse só do seu parâmetro, embora os alvos
+  sejam determinados <em>conjuntamente</em>. Quando essa matriz não tem posto
+  completo, a calibração não está identificada, e apertar a tolerância do solver não muda isso.</p>
+
+  <h3>7. Verificações independentes</h3>
+<pre><code>dsg.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
+
+dsg.check_slack(sol, {"c_positivo": lambda v: v["c"]}, size=-0.5)   # ao longo das IRFs
+
+dsg.steady_state_invariance(                    # uma invariância que é teorema do modelo
+    lambda v: dsg.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
+    [0.5, 0.8, 0.95], ["k", "c"])["ok"]         # k não depende da persistência</code></pre>
 
 
-  <h3>8. Derivar as CPOs do problema declarado</h3>
-  <p>Você só declara o problema, e o pacote diferencia o lagrangiano. Como a diferenciação deixa de
-  ser feita à mão, não entram nas CPOs os sinais trocados e os termos esquecidos que nela se
-  cometem, erros que não alteram o estado estacionário e por isso escapam à conferência dele.</p>
+  <h3>8. Derivar as condições de primeira ordem (CPOs) do problema declarado</h3>
+  <p>Basta declarar o problema, e o pacote diferencia o lagrangiano. Como as derivadas são
+  calculadas simbolicamente, as condições ficam livres dos sinais trocados e dos termos esquecidos
+  da diferenciação à mão, erros que não alteram o estado estacionário e por isso passam despercebidos
+  quando só ele é conferido.</p>
 <pre><code>from dsgelab.blocks import Problem, optimality_conditions
 
 prob = Problem(
-    "log(c)",                                   # retorno do PERÍODO
+    "log(c)",                                   # retorno do período
     controls=["c", "i"], states=["k"], exogenous=["a"],
     constraints=["c + i = a*k**alpha",          # recursos
                  "k(+1) = (1-delta)*k + i"],    # acumulação
@@ -220,49 +246,52 @@ foc = optimality_conditions(prob)
 for eq in foc["equations"]:
     print(f"{eq:60s}  # {foc['detail'][eq]}")   # cada equação diz de onde veio
 
-derivado = dk.from_equations(
+derivado = dsg.from_equations(
     foc["equations"] + ["log(a(+1)) = rho*log(a) + eps_a"],
     states=["k", "a"], jumps=foc["jumps"], shocks=["eps_a"],
     parameters=["alpha", "beta", "delta", "rho"])</code></pre>
   <p>A equação de Euler de cada estado sai da derivada do lagrangiano do período seguinte em relação
   ao estado herdado. Condições de transversalidade, restrições de desigualdade e problemas cuja
-  condição intertemporal não tem essa forma ficam a cargo do modelador. O pacote deriva o problema que foi
-  declarado, e a escolha desse problema é a modelagem.</p>
+  condição intertemporal não tem essa forma ficam a cargo do modelador. O pacote deriva as condições
+  do problema declarado, de modo que um erro na declaração passa para as equações. Escolher o
+  problema continua sendo tarefa de quem modela.</p>
 
   <h3>9. Terceira ordem</h3>
-<pre><code>to = dk.solve_third_order(so, cov={"eps_a": 0.007})
+<pre><code>to = dsg.solve_third_order(so, cov={"eps_a": 0.007})
 
 to.g_kkk, to.h_kkk        # os termos cúbicos
 to.accuracy()             # a ordem implícita tem de dar ~4
 to.simulate(periods=5000, seed=1)    # podada em três camadas</code></pre>
-  <div class="note"><p><strong>O que a terceira ordem deste pacote faz, e o que não faz.</strong> O
-  bloco cúbico está implementado e verificado pela ordem de acurácia, e dividir o deslocamento pela
-  metade divide o resíduo por dezesseis. Os termos <code>sigma²·k</code>, pelos quais o risco entra na
-  INCLINAÇÃO das regras (<code>g_ssk</code> e <code>h_ssk</code>), também estão implementados, e no
-  AR(1) em logaritmo o teste exige <code>h_ssk[a, a] = ρσ²</code>, com sinal positivo. A inovação
-  continua a entrar em primeira ordem, de forma aditiva (<code>k' = h(k,σ) + Qε</code>), e por isso o
-  pacote não tem o tensor completo de terceira ordem do Dynare, em que a inovação é argumento de
-  todos os monômios. O estado estacionário estocástico também falta, e os dois itens estão previstos
-  para a versão 0.7. Para prêmios de risco variáveis no tempo que dependam desses termos, use o
-  Dynare, e o exemplo seguinte escreve o <code>.mod</code> para você.</p></div>
+  <div class="note"><p><strong>A terceira ordem deste pacote cobre o bloco cúbico e a inclinação
+  do risco.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são verificados pela
+  ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por dezesseis. Os
+  termos <code>sigma²·k</code>, pelos quais o risco entra na <em>inclinação</em> das regras e um
+  prêmio de risco varia com o estado, são <code>g_ssk</code> e <code>h_ssk</code>. No AR(1) em
+  logaritmo, o teste do pacote exige <code>h_ssk[a, a] = ρσ²</code>, com sinal positivo. A inovação
+  continua entrando de forma aditiva, como <code>k' = h(k,σ) + Qε</code>, e por isso as regras não
+  têm monômio em que ε multiplique a si mesma ou o estado. Esses monômios pertencem ao tensor
+  completo de terceira ordem do Dynare, que o pacote ainda não calcula. Esse tensor e o estado
+  estacionário estocástico estão previstos para a versão 0.7, e até lá os termos de risco nesse
+  sentido completo exigem o Dynare, para o qual o exemplo seguinte escreve o
+  <code>.mod</code>.</p></div>
 
   <h3>10. Exportar para o Dynare e para o MacroModelling.jl</h3>
-<pre><code>ss_sim = dk.steady_state(simbolico, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
+<pre><code>ss_sim = dsg.steady_state(simbolico, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
 
-texto = dk.to_dynare(simbolico, P(), steady=ss_sim, cov={"eps_a": 0.007},
+texto = dsg.to_dynare(simbolico, P(), steady=ss_sim, cov={"eps_a": 0.007},
                      path="modelo.mod", order=2)
-jl = dk.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl")
+jl = dsg.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl")
 
-"predetermined_variables k;" in texto     # a datação é traduzida sozinha</code></pre>
-  <p>No dsgelab o estado em <em>t</em> é o DISPONÍVEL em <em>t</em>, e no Dynare a variável
-  predeterminada é a DECIDIDA em <em>t</em>. O exportador traduz essa datação, que é onde um porte
-  manual erra, e escreve os processos exógenos um período atrás, para que a inovação apareça sem
-  defasagem. Na ida e volta, o pacote escreve o <code>.mod</code> e o Dynare o resolve, e as duas
-  soluções batem a <code>5e-14</code> em estado estacionário, IRFs e momentos, nos três modelos de
-  referência.</p>
+"predetermined_variables k;" in texto     # a convenção temporal é traduzida automaticamente</code></pre>
+  <p>No dsgelab o estado em <em>t</em> é o <em>disponível</em> em <em>t</em>. No Dynare a variável
+  predeterminada é a <em>decidida</em> em <em>t</em>. Uma conversão manual tem de traduzir uma
+  convenção na outra. O exportador faz essa tradução e também escreve os processos exógenos um
+  período atrás, para que a inovação apareça sem defasagem. Na ida e volta, o pacote escreve o
+  <code>.mod</code> e o Dynare o resolve. Nos três modelos de referência, as duas soluções diferem
+  em menos de <code>1e-13</code> no estado estacionário, nas IRFs e nos momentos.</p>
 
   <h3>11. Política ótima pelo planejador de Ramsey</h3>
-<pre><code>nk = dk.ramsey_model(
+<pre><code>nk = dsg.ramsey_model(
     ["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",      # IS
      "pi = beta*pi(+1) + kappa*x + u",              # Phillips
      "u(+1) = rho*u + e"],                          # choque de custo: processo exógeno
@@ -271,8 +300,8 @@ jl = dk.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl"
     instruments=["i"],                              # a variável sem equação própria
     objective="-(pi**2 + lam*x**2)/2", discount="beta")
 pn = dict(beta=0.99, sigma=1.0, kappa=0.1, lam=0.25, rho=0.5)
-ss_nk = dk.ramsey_steady_state(nk, dict(u=0, x=0, pi=0, i=0), pn)
-r = dk.solve(nk, pn, steady=ss_nk).irf("e", size=1.0, percent=False)
+ss_nk = dsg.ramsey_steady_state(nk, dict(u=0, x=0, pi=0, i=0), pn)
+r = dsg.solve(nk, pn, steady=ss_nk).irf("e", size=1.0, percent=False)
 
 x_lag = np.r_[0.0, r["x"][:-1]]
 abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() < 1e-12   # regra de metas</code></pre>
@@ -290,18 +319,18 @@ nk_kw = dict(states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
              parameters=["beta", "sigma", "kappa", "lam", "rho"], instruments=["i"],
              objective="-(pi**2 + lam*x**2)/2", discount="beta")
 
-disc = dk.discretionary_policy(nk_eq, params=pn, cov={"e": 0.01}, **nk_kw)
+disc = dsg.discretionary_policy(nk_eq, params=pn, cov={"e": 0.01}, **nk_kw)
 w_disc = disc.welfare()["unconditional"]                       # sem compromisso
-w_comp = dk.welfare(nk, pn, steady=ss_nk, cov={"e": 0.01}).unconditional
+w_comp = dsg.welfare(nk, pn, steady=ss_nk, cov={"e": 0.01}).unconditional
 w_disc < w_comp < 0                                            # o compromisso vale algo
 
-regra = dk.from_equations(["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",
+regra = dsg.from_equations(["x - x(+1) + (1/sigma)*(i - pi(+1)) = 0",
                            "pi = beta*pi(+1) + kappa*x + u",
                            "i = phi_pi*pi + phi_u*u",           # a regra simples
                            "u(+1) = rho*u + e"],
                           states=["u"], jumps=["x", "pi", "i"], shocks=["e"],
                           parameters=["beta", "sigma", "kappa", "rho", "phi_pi", "phi_u"])
-ot = dk.osr(regra, dict(pn, phi_pi=1.5, phi_u=0.0), rule_params=["phi_pi", "phi_u"],
+ot = dsg.osr(regra, dict(pn, phi_pi=1.5, phi_u=0.0), rule_params=["phi_pi", "phi_u"],
             weights={"pi": 1.0, "x": 0.25}, cov={"e": 0.01},
             guess=dict(u=0, x=0, pi=0, i=0))
 ot.loss < ot.initial_loss</code></pre>
@@ -312,7 +341,7 @@ ot.loss < ot.initial_loss</code></pre>
   segunda ordem, condicional e incondicional, é o do <code>evaluate_planner_objective</code>.</p>
 
   <h3>13. Choques antecipados e surpresas na previsão perfeita</h3>
-<pre><code>rbc_pf = dk.from_equations(
+<pre><code>rbc_pf = dsg.from_equations(
     ["1/c = beta/c(+1)*(alpha*a(+1)*k(+1)**(alpha-1) + 1 - delta)",
      "c + k(+1) = a*k**alpha + (1-delta)*k",
      "a(+1) = 1 - rho + rho*a + e"],
@@ -320,48 +349,50 @@ ot.loss < ot.initial_loss</code></pre>
     parameters=["alpha", "beta", "delta", "rho"])
 ppf = dict(alpha=0.33, beta=0.99, delta=0.025, rho=0.9)
 kss = ((1/0.99 - 1 + 0.025)/0.33)**(1/(0.33 - 1))
-ss_pf = dk.steady_state(rbc_pf, dict(k=kss, a=1.0, c=kss**0.33 - 0.025*kss), ppf)
+ss_pf = dsg.steady_state(rbc_pf, dict(k=kss, a=1.0, c=kss**0.33 - 0.025*kss), ppf)
 
 anunciado = np.zeros((80, 1)); anunciado[9, 0] = 0.02         # sabido desde o início
-antecipada = dk.perfect_foresight(rbc_pf, ss_pf, ss_pf, params=ppf, T=80, shocks=anunciado)
-surpresa = dk.perfect_foresight_with_expectation_errors(       # só se sabe em t = 10
+antecipada = dsg.perfect_foresight(rbc_pf, ss_pf, ss_pf, params=ppf, T=80, shocks=anunciado)
+surpresa = dsg.perfect_foresight_with_expectation_errors(       # só se sabe em t = 10
     rbc_pf, ss_pf, ss_pf, params=ppf, T=80,
-    news=[dk.News(period=10, shocks=anunciado)])
+    news=[dsg.News(period=10, shocks=anunciado)])
 
 antecipada["c"][0] != ss_pf.values["c"]      # o consumo reage ao anúncio
 abs(surpresa["c"][0] - ss_pf.values["c"]) < 1e-12   # e não reage ao que ninguém sabe</code></pre>
   <p>Um choque antecipado (um objeto <code>News</code>) é uma nova trajetória esperada de choques e
   parâmetros, com um novo estado estacionário terminal, e a cada um os agentes replanejam a partir
   dos estados já realizados. O método é o do
-  <code>perfect_foresight_with_expectation_errors_solver</code> do Dynare, e um <code>.mod</code> com a
-  tabela de informação em CSV vira a lista de choques antecipados (objetos <code>News</code>) por
-  <code>ModFile.news</code>.</p>
+  <code>perfect_foresight_with_expectation_errors_solver</code> do Dynare, e
+  <code>ModFile.news</code> converte um <code>.mod</code> com a tabela de informação em CSV na lista
+  de choques antecipados (objetos <code>News</code>).</p>
 
   <h3>14. Estimação bayesiana</h3>
-<pre><code>ar = dk.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+<pre><code>ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
                        shocks=["e"], parameters=["rho"])
-sol_ar = dk.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
+sol_ar = dsg.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
 serie = sol_ar.to_levels(sol_ar.simulate(periods=400, cov={"e": 0.1}, seed=1))["y"]
 
-pb = dk.EstimationProblem(
+pb = dsg.EstimationProblem(
     model=ar, data={"y": serie}, params=dict(rho=0.5), observables=["y"],
     priors={"rho": ("beta", 0.5, 0.2), "stderr e": ("inv_gamma", 0.1, float("inf"))},
     guess=dict(a=0, y=1))
-moda = dk.posterior_mode(pb)                       # moda, Hessiana, Laplace
-cadeia = dk.metropolis_hastings(pb, moda, draws=1500, chains=2, seed=1)
+moda = dsg.posterior_mode(pb)                       # moda, hessiana, Laplace
+cadeia = dsg.metropolis_hastings(pb, moda, draws=1500, chains=2, seed=1)
 
 abs(moda.values["rho"] - 0.8) < 0.1
 max(cadeia.rhat().values()) < 1.05
 abs(cadeia.log_marginal_mhm() - moda.laplace) < 0.5</code></pre>
-  <p>O <code>EstimationProblem</code> junta modelo, dados, priors (os do Dynare, por média e desvio)
-  e observáveis, em nível ou em log, com erro de medida e com dados faltantes. Dele saem a moda com a
-  aproximação de Laplace, a máxima verossimilhança, o Metropolis com R-hat e tamanho efetivo, o SMC,
-  a checagem preditiva a priori e a verossimilhança marginal. Um <code>.mod</code> com
-  <code>estimated_params</code> e <code>varobs</code> vira um <code>EstimationProblem</code> por
-  <code>ModFile.estimation_problem</code>.</p>
+  <p>O <code>EstimationProblem</code> junta o modelo, os dados, as distribuições a priori e os
+  observáveis. Essas distribuições seguem as do Dynare, definidas por média e desvio-padrão. Os
+  observáveis podem estar em nível ou em log, ter erro de medida e ter dados faltantes. A partir do
+  problema, o pacote calcula a moda a posteriori com a aproximação de Laplace, a máxima
+  verossimilhança, o Metropolis com R-hat e tamanho efetivo da amostra, o SMC, a verificação
+  preditiva a priori e a verossimilhança marginal. <code>ModFile.estimation_problem</code> constrói
+  um <code>EstimationProblem</code> a partir de um <code>.mod</code> com
+  <code>estimated_params</code> e <code>varobs</code>.</p>
 
   <h3>15. Restrições ocasionalmente ativas (OccBin)</h3>
-<pre><code>credito = dk.OccbinModel.from_equations(
+<pre><code>credito = dsg.OccbinModel.from_equations(
     ["c = y + b - R*LB",
      "LB(+1) = b",
      "[name='divida', relax='folga'] b = m*y",      # o limite vale ...
@@ -373,65 +404,67 @@ abs(cadeia.log_marginal_mhm() - moda.laplace) < 0.5</code></pre>
     parameters=["R", "beta", "m", "rho"])
 pc = dict(R=1.04, beta=0.95, m=0.8, rho=0.85)
 c0 = 1 + 0.8 - 1.04*0.8
-ob = dk.occbin_simulate(credito, pc, {"u": {2: 0.06}}, periods=40,
+ob = dsg.occbin_simulate(credito, pc, {"u": {2: 0.06}}, periods=40,
                         guess=dict(LB=0.8, y=1.0, b=0.8, c=c0, lam=(1 - 0.95*1.04)/c0))
 
 ob.binding["folga"].any()                                   # a renda alta afrouxa o limite
 max(abs(ob.piecewise["lam"][ob.binding["folga"]])) &lt; 1e-14  # e o multiplicador vai a zero</code></pre>
   <p>Cada regime é linearizado no estado estacionário de referência, com o seu resíduo como
   constante. Dadas as datas em que cada restrição vale, a trajetória segue regras que variam no
-  tempo, calculadas de trás para a frente, e o palpite sobre essas datas é revisto pela regra do
-  <code>+occbin</code> do Dynare, com <code>curb_retrench</code> se pedido. Um <code>.mod</code> com equações marcadas
+  tempo, calculadas de trás para a frente, e a conjectura inicial sobre essas datas é revista pela regra do
+  <code>+occbin</code> do Dynare, com <code>curb_retrench</code> se pedido.
+  <code>ModFile.occbin_simulate()</code> simula um <code>.mod</code> com equações marcadas
   (<code>bind=</code>, <code>relax=</code>), <code>occbin_constraints</code> e
-  <code>shocks(surprise)</code> roda por <code>ModFile.occbin_simulate()</code>.</p>
+  <code>shocks(surprise)</code>.</p>
 
   <h3>16. Trajetória estendida, determinística e estocástica</h3>
-<pre><code>arvore = dk.from_equations(                       # Burnside (1998): preço de uma árvore de Lucas
+<pre><code>arvore = dsg.from_equations(                       # Burnside (1998): preço de uma árvore de Lucas
     ["x(+1) = (1 - rho)*xbar + rho*x + e",
      "1 = beta*exp(theta*x(+1))*(1 + y(+1))/y"],
     states=["x"], jumps=["y"], shocks=["e"], parameters=["beta", "theta", "rho", "xbar"])
 pa = dict(beta=0.95, theta=-1.5, rho=-0.139, xbar=0.0179)
 g0 = 0.95*np.exp(-1.5*0.0179)
-ss_a = dk.steady_state(arvore, dict(x=0.0179, y=g0/(1 - g0)), pa)
+ss_a = dsg.steady_state(arvore, dict(x=0.0179, y=g0/(1 - g0)), pa)
 sorteio = 0.0348*np.random.default_rng(0).standard_normal((20, 1))
 
-ep = dk.extended_path(arvore, ss_a, pa, sorteio, horizon=60)                 # sem risco à frente
-sep = dk.extended_path(arvore, ss_a, pa, sorteio, horizon=60, order=1,       # risco do próximo período
+ep = dsg.extended_path(arvore, ss_a, pa, sorteio, horizon=60)                 # sem risco à frente
+sep = dsg.extended_path(arvore, ss_a, pa, sorteio, horizon=60, order=1,       # risco do próximo período
                        cov=[[0.0348**2]])
 bool((sep["y"][1:] &gt; ep["y"][1:]).all())       # com theta &lt; 0, o risco encarece a árvore</code></pre>
   <p>A cada período chega o choque, calculam-se os estados a que ele leva e os agentes resolvem um
   problema não linear que alcança o estado estacionário <code>horizon</code> períodos depois. Com
-  <code>order</code> &gt; 0 os choques dos próximos períodos são integrados por Gauss–Hermite numa
-  árvore de planos, esparsa ou cheia, com a correção de risco de segunda ordem opcional
-  (<code>hybrid</code>), como no <code>extended_path</code> do Dynare e nas suas opções.</p>
+  <code>order</code> &gt; 0 os choques dos próximos períodos são integrados por quadratura de
+  Gauss–Hermite numa árvore de planos, esparsa ou cheia, com a correção de risco de segunda ordem
+  opcional (<code>hybrid</code>). O algoritmo e essas opções são os do <code>extended_path</code> do
+  Dynare.</p>
 
-  <h3>17. Defasagens, calibração no modelo, homotopia e diagnóstico na declaração do modelo</h3>
-<pre><code>rbc_cal = dk.from_equations(
+  <h3>17. Declaração do modelo: defasagens, calibração no modelo, homotopia, diagnóstico</h3>
+<pre><code>rbc_cal = dsg.from_equations(
     ["1/c = beta/c(+1)*(alpha*k(+1)**(alpha-1) + 1 - delta)",
      "c + k(+1) = k**alpha + (1-delta)*k",
      "q = k**alpha",
      "dq = q - q(-1)"],                         # a defasagem de um salto vira um estado auxiliar
     states=["k"], jumps=["c", "q", "dq"], shocks=[], parameters=["alpha", "beta", "delta"],
     calibration_equations={"beta": "k/q = 10"})  # beta é o que põe k/q em 10
-ss_cal = dk.steady_state(rbc_cal, dict(k=10, c=1, q=1.5, dq=0),
+ss_cal = dsg.steady_state(rbc_cal, dict(k=10, c=1, q=1.5, dq=0),
                          dict(alpha=0.33, beta=0.99, delta=0.025))
 rbc_cal.auxiliary                               # {'LAG1_q': ('lag', 'q')}
 abs(ss_cal.calibrated["beta"] - 1/(0.33/10 + 1 - 0.025)) &lt; 1e-12
-dk.diagnose(rbc_cal, ss_cal.params, ss_cal.values)["ok"]
+dsg.diagnose(rbc_cal, ss_cal.params, ss_cal.values)["ok"]
 
-rbc_h = dk.from_equations(
+rbc_h = dsg.from_equations(
     ["1/c = beta/c(+1)*(alpha*k(+1)**(alpha-1) + 1 - delta)",
      "c + k(+1) = k**alpha + (1-delta)*k"],
     states=["k"], jumps=["c"], shocks=[], parameters=["alpha", "beta", "delta"])
-ss_h = dk.steady_state(rbc_h, dict(k=30, c=2), dict(alpha=0.33, beta=0.99, delta=0.9),
-                       homotopy={"delta": (0.02, 0.9)})   # o chute é bom para delta = 0,02</code></pre>
+ss_h = dsg.steady_state(rbc_h, dict(k=30, c=2), dict(alpha=0.33, beta=0.99, delta=0.9),
+                       homotopy={"delta": (0.02, 0.9)})   # a conjectura inicial serve para delta = 0,02</code></pre>
   <p>Um estado estacionário em forma fechada (<code>steady_state_model</code>, aqui ou num
-  <code>.mod</code>) só é usado depois de conferido contra as equações, e é recusado, como no
-  Dynare, se não as zera. <code>dk.assemble</code> junta os problemas de vários agentes e as condições de
+  <code>.mod</code>) só é usado depois de conferido com as equações, e é recusado, como no
+  Dynare, se não as zera. <code>dsg.assemble</code> junta os problemas de vários agentes e as condições de
   mercado num só modelo.</p>
 
   <h3>18. Tendências e crescimento balanceado</h3>
-<pre><code>tendencia = dk.from_mod("""
+<pre><code>tendencia = dsg.from_mod("""
 trend_var(growth_factor = g) A;
 var(deflator = A) c k y;
 parameters alpha beta delta g;
@@ -445,47 +478,41 @@ initval; c = 0.8; k = 10; y = 1; end;
 """)
 ss_t = tendencia.steady_state()                  # o modelo já sai destendenciado
 
-solow = dk.from_equations(
+solow = dsg.from_equations(
     ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
     states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
-bgp = dk.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
+bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   <p>Num <code>.mod</code> escrito em níveis, as variáveis declaradas com <code>trend_var</code> e
-  <code>var(deflator=)</code> são destendenciadas como no Dynare, e uma equação que continue a
-  depender do nível da tendência é recusada. <code>balanced_growth</code> calcula os fatores de
-  crescimento e as razões entre variáveis que partilham a tendência, o mesmo problema que o
+  <code>var(deflator=)</code> são destendenciadas como no Dynare, e uma equação que continue
+  dependendo do nível da tendência é recusada. <code>balanced_growth</code> calcula os fatores de
+  crescimento e as razões entre variáveis que compartilham a tendência, o mesmo problema que o
   <code>bgp.write</code> do Dynare resolve.</p>
 
-  <h3>7. Verificações independentes</h3>
-<pre><code>dk.blanchard_kahn_report(sol)["margin"]        # a folga, não só o "passou"
-
-dk.check_slack(sol, {"c_positivo": lambda v: v["c"]}, size=-0.5)   # ao longo das IRFs
-
-dk.steady_state_invariance(                    # uma invariância que é TEOREMA do modelo
-    lambda v: dk.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
-    [0.5, 0.8, 0.95], ["k", "c"])["ok"]         # k não depende da persistência</code></pre>
 </div></section>
 
 <section id="caixa"><div class="wrap">
-  <h2>O que tem na caixa</h2>
+  <h2>O que o pacote oferece</h2>
   <div class="cards">
-    <div class="card"><h4>Estado estacionário</h4><p>Positividade resolvida em logs e âncoras por
-    laço externo, para termos que dependem do próprio estado estacionário.</p></div>
-    <div class="card"><h4>Primeira ordem</h4><p>Klein/QZ ordenado em forma real, com Blanchard-Kahn
-    imposto e a margem de determinação relatada.</p></div>
+    <div class="card"><h4>Estado estacionário</h4><p>Positividade garantida pela resolução em
+    logaritmos, e âncoras resolvidas num laço externo, para termos que dependem do próprio estado
+    estacionário.</p></div>
+    <div class="card"><h4>Primeira ordem</h4><p>Klein/QZ ordenado em forma real, com a condição de
+    Blanchard–Kahn exigida e a margem de determinação relatada.</p></div>
     <div class="card"><h4>Segunda ordem</h4><p>Equação de Sylvester generalizada, correções de risco,
     simulação podada e média ergódica em forma fechada.</p></div>
-    <div class="card"><h4>Terceira ordem</h4><p>Bloco cúbico verificado à ordem 4 e termos de risco
-    na inclinação. O tensor completo do Dynare ainda falta, pelo motivo dado no exemplo 9.</p></div>
+    <div class="card"><h4>Terceira ordem</h4><p>Bloco cúbico verificado na ordem 4 e termos de risco
+    na inclinação (<code>g_ssk</code>, <code>h_ssk</code>). O tensor completo do Dynare e o estado
+    estacionário estocástico estão previstos para a versão 0.7, como explica o exemplo 9.</p></div>
     <div class="card"><h4>Das CPOs ao <code>.mod</code></h4><p>Declare o lagrangiano, derive as
     condições, resolva, exporte para Dynare ou MacroModelling.jl.</p></div>
-    <div class="card"><h4>Previsão perfeita</h4><p>Newton de tempo empilhado com jacobiana esparsa e
-    trajetórias de parâmetros anunciadas.</p></div>
+    <div class="card"><h4>Previsão perfeita</h4><p>Método de Newton com os períodos empilhados,
+    jacobiana esparsa e trajetórias de parâmetros anunciadas.</p></div>
     <div class="card"><h4>Calibração</h4><p>Alvos resolvidos em conjunto, com diagnóstico de
     identificação por posto e direções nulas.</p></div>
-    <div class="card"><h4>Restrições ocasionais</h4><p>OccBin com qualquer número de restrições,
-    regras que variam no tempo e choques-surpresa, como o <code>+occbin</code> do Dynare.</p></div>
+    <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
+    restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
     ou cheia, com a correção de risco híbrida.</p></div>
     <div class="card"><h4>Modelos em níveis</h4><p>Tendências declaradas, verificação do crescimento
@@ -498,80 +525,98 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
 <section id="datacao"><div class="wrap">
   <h2>A única convenção que você precisa acertar</h2>
   <p><code>eps</code> é a inovação datada em <em>t+1</em>, desconhecida em <em>t</em>, com
-  <code>E_t eps = 0</code>. Um AR(1) escreve-se assim:</p>
+  <code>E_t eps = 0</code>. Um AR(1) se escreve assim</p>
 <pre><code class="plain">nxt.a - p.rho * cur.a - eps.eps_a</code></pre>
-  <div class="note"><p><strong>Escrever ao contrário não dá erro.</strong> Tratar a inovação como
-  conhecida em <em>t</em> torna o modelo determinístico dentro do período, e por isso a solução de
-  primeira ordem não muda e <em>toda</em> correção de risco de segunda ordem sai zero, sem aviso. A
-  biblioteca não consegue verificar essa convenção por você, e é a única nessa situação. O teste que
-  a confere está no pacote e exige que, sobre <code>log a' = rho log a + eps</code>, a correção dê
-  <code>sigma²</code>.</p></div>
+  <div class="note"><p><strong>Datar a inovação em <em>t</em> não gera erro.</strong> Tratar a
+  inovação como conhecida em <em>t</em> torna o modelo determinístico dentro do período, e por isso
+  a solução de primeira ordem não muda e <em>toda</em> correção de risco de segunda ordem é nula,
+  sem aviso. A biblioteca não consegue detectar esse erro num modelo que você declara. O próprio
+  conjunto de testes do pacote confere a convenção sobre <code>log a' = rho log a + eps</code>, em
+  que o coeficiente de segunda ordem <code>h_ss</code> tem de dar <code>sigma²</code>, de modo que
+  a correção na regra é <code>sigma²/2</code>, o termo de Jensen.</p></div>
 </div></section>
 
 <section id="validacao"><div class="wrap">
   <h2>Validação</h2>
-  <p class="lede">A validação tem três camadas, e nas duas últimas o pacote é comparado com programas
-  de outros autores.</p>
+  <p class="lede">A validação tem três camadas. O conjunto de testes compara o pacote com soluções
+  fechadas e respostas conhecidas analiticamente. Os scripts de <code>validation/</code> o comparam
+  com o Dynare nos exemplos e arquivos de teste do próprio Dynare, com o MacroModelling.jl numa
+  equação de calibração e com o código MATLAB original de Heutel (2012), apresentado em
+  <a href="replications.html#heutel">Replicações</a>. Uma última comparação, num modelo aplicado de
+  um artigo não publicado do autor, não pode ser refeita a partir do repositório.</p>
+  <p>Na segunda camada, tanto os modelos quanto os programas de referência são de outros autores. A
+  terceira usa os mesmos programas de referência num modelo do próprio autor. Cada recurso é
+  validado com uma referência independente quando ela existe (outra implementação, uma solução
+  fechada ou um resultado publicado). Alguns se apoiam só em testes internos, a saber as
+  autocorrelações, a decomposição da variância, a poda (<em>pruning</em>), a IRF generalizada de
+  segunda ordem, as trajetórias de parâmetros anunciadas e a verificação de Blanchard–Kahn, e a
+  exportação para o MacroModelling.jl não tem teste de ida e volta.</p>
 
-  <h3>Contra respostas conhecidas no papel</h3>
-  <p>Os 146 testes do pacote conferem respostas conhecidas analiticamente. A solução do RBC com
-  utilidade logarítmica e depreciação total tem de ser <code>P = [[α, 1], [0, ρ]]</code>, e a
-  transição de previsão perfeita é comparada com o caminho fechado <code>k' = αβk^α</code>. O
-  princípio de Taylor tem de dar determinação acima de um e um contínuo de equilíbrios abaixo. Sobre
-  um AR(1) lognormal, a correção de risco deve sair igual a <code>sigma²</code>. A própria ordem de
-  acurácia também é testada, e dividir o deslocamento pela metade tem de dividir o resíduo de
-  primeira ordem por quatro e o de segunda por oito.</p>
+  <h3>Comparação com soluções analíticas</h3>
+  <p>Dos 148 testes do pacote, os desta camada comparam o resultado com respostas que podem ser
+  deduzidas no papel. Com utilidade logarítmica e depreciação total, a solução do RBC tem de ser
+  igual a <code>P = [[α, 1], [0, ρ]]</code>. No modelo novo-keynesiano de três equações com
+  <code>φx = 0,125</code>, a regra de Taylor tem de dar equilíbrio determinado com
+  <code>φπ = 1,5</code> e indeterminado com <code>φπ = 0,8</code>. Num AR(1) lognormal, o
+  coeficiente de segunda ordem <code>h_ss</code> tem de valer <code>sigma²</code>, de modo que a
+  regra de decisão se desloca em <code>sigma²/2</code>, o termo de Jensen. A transição sob previsão perfeita é
+  comparada com o caminho fechado <code>k' = αβk^α</code>. O teste da ordem de acurácia exige que
+  dividir o deslocamento pela metade divida o resíduo de primeira ordem por quatro e o de segunda
+  por oito.</p>
 
-  <h3>Contra os modelos de referência do Dynare</h3>
-  <p>Os exemplos de <a href="https://www.dynare.org/resources/">dynare.org/resources</a> foram rodados
-  no Dynare e confrontados variável a variável.</p>
+  <h3>Comparação com os modelos de referência do Dynare</h3>
+  <p>Os exemplos de <a href="https://www.dynare.org/resources/">dynare.org/resources</a> foram
+  executados no Dynare e comparados com o dsgelab variável a variável.</p>
   <table>
     <thead><tr><th>Modelo</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos teóricos</th><th></th></tr></thead>
     <tbody>
       <tr><td>example1 <span style="color:var(--muted)">(Collard, choques correlacionados)</span></td>
-          <td class="num">1,2e-14</td><td class="num">3,2e-14</td><td class="num">2,5e-14</td><td class="ok">OK</td></tr>
+          <td class="num">1,2e-14</td><td class="num">2,9e-14</td><td class="num">2,6e-14</td><td class="ok">OK</td></tr>
       <tr><td>example2 <span style="color:var(--muted)">(o mesmo em logaritmos)</span></td>
           <td class="num">2,1e-05</td><td class="num">4,3e-06</td><td class="num">3,3e-06</td><td class="ok">OK*</td></tr>
       <tr><td>RBC_baseline <span style="color:var(--muted)">(Pfeifer, 15 variáveis)</span></td>
-          <td class="num">0,0e+00</td><td class="num">3,8e-14</td><td class="num">3,5e-14</td><td class="ok">OK</td></tr>
+          <td class="num">0,0e+00</td><td class="num">2,3e-14</td><td class="num">3,5e-14</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
-  <p style="font-size:.9rem;color:var(--muted)">* No <code>example2</code> o <code>steady</code> do
-  Dynare para com um estado estacionário que deixa resíduo de <code>1,1e-06</code> nas equações do
-  modelo, contra <code>1,0e-44</code> do dsgelab, e toda a discrepância decorre disso. Há uma
-  confirmação independente, porque <code>example1</code> e <code>example2</code> são a mesma economia
-  em coordenadas diferentes, e <code>exp(e.e. do example2)</code> bate com o <code>example1</code> em
-  nível a <code>1e-15</code>.</p>
+  <p style="font-size:.9rem;color:var(--muted)">* No <code>example2</code>, o <code>steady</code> do
+  Dynare encerra a busca cedo, num ponto que deixa resíduo de <code>1,05e-06</code> nas equações do
+  modelo, contra <code>1,03e-44</code> do dsgelab, e toda a discrepância decorre desse resíduo. Como
+  <code>example1</code> e <code>example2</code> são a mesma economia em coordenadas diferentes, eles
+  permitem uma verificação independente, e <code>exp(e.e. do example2)</code> coincide com o
+  <code>example1</code> em nível até <code>1e-15</code>.</p>
 
-  <h3>Os exemplos do Dynare, lidos sem porte</h3>
-  <p><code>dk.from_mod</code> lê o <code>.mod</code> como está, com macros, variáveis locais, avanços e
+  <h3>Os exemplos do Dynare, lidos diretamente, sem conversão manual</h3>
+  <p><code>dsg.from_mod</code> lê o <code>.mod</code> como está, com macros, variáveis locais, avanços e
   defasagens de qualquer ordem e choques dentro de qualquer equação. O estado estacionário, as IRFs e
   os desvios-padrão teóricos que saem dele são comparados com os que o Dynare calcula a partir do
   mesmo arquivo.</p>
   <table>
     <thead><tr><th>Modelo</th><th>Variáveis</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos</th><th></th></tr></thead>
     <tbody>
-      <tr><td>fs2000 <span style="color:var(--muted)">(Schorfheide 2000)</span></td><td class="num">14</td><td class="num">9,2e-15</td><td class="num">2,6e-13</td><td class="num">2,5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>fs2000 <span style="color:var(--muted)">(Schorfheide 2000)</span></td><td class="num">14</td><td class="num">9,2e-15</td><td class="num">3,4e-13</td><td class="num">3,4e-13</td><td class="ok">OK</td></tr>
       <tr><td>NK_baseline <span style="color:var(--muted)">(Fernández-Villaverde e Rubio-Ramírez)</span></td><td class="num">28</td><td class="num">9,3e-14</td><td class="num">5,9e-11</td><td class="num">2,2e-11</td><td class="ok">OK</td></tr>
-      <tr><td>Gali_2015 <span style="color:var(--muted)">(cap. 3, raiz unitária)</span></td><td class="num">14</td><td class="num">0</td><td class="num">4,9e-15</td><td class="num">2,2e-15</td><td class="ok">OK</td></tr>
-      <tr><td>example3 <span style="color:var(--muted)">(Collard)</span></td><td class="num">6</td><td class="num">8,3e-15</td><td class="num">1,7e-14</td><td class="num">9,2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>Gali_2015 <span style="color:var(--muted)">(cap. 3, raiz unitária)</span></td><td class="num">14</td><td class="num">0,0e+00</td><td class="num">1,6e-14</td><td class="num">7,5e-15</td><td class="ok">OK</td></tr>
+      <tr><td>example3 <span style="color:var(--muted)">(Collard)</span></td><td class="num">6</td><td class="num">8,3e-15</td><td class="num">1,4e-14</td><td class="num">2,2e-14</td><td class="ok">OK</td></tr>
       <tr><td>agtrend <span style="color:var(--muted)">(Aguiar–Gopinath, macros)</span></td><td class="num">15</td><td class="num">3,9e-08</td><td class="num">2,1e-07</td><td class="num">2,3e-07</td><td class="ok">OK*</td></tr>
       <tr><td>fs2000_nonstationary <span style="color:var(--muted)">(em níveis, <code>trend_var</code> e <code>deflator</code>)</span></td><td class="num">11</td><td class="num">1,4e-08</td><td class="num">1,5e-08</td><td class="num">2,2e-08</td><td class="ok">OK*</td></tr>
     </tbody>
   </table>
-  <p style="font-size:.9rem;color:var(--muted)">* A concordância é limitada pelo estado estacionário do
-  Dynare, que deixa resíduo de <code>4e-07</code> nas equações (<code>7e-08</code> no
+  <p style="font-size:.9rem;color:var(--muted)">* A concordância é limitada pelo resíduo de
+  <code>4e-07</code> que o estado estacionário do Dynare deixa nas equações (<code>7e-08</code> no
   <code>fs2000_nonstationary</code>, que cada um dos dois programas destendencia por si). Os três
-  modelos da tabela anterior também passam por este caminho, com os mesmos números.</p>
+  modelos da tabela anterior também passam por este caminho. No <code>example1</code> e no
+  <code>RBC_baseline</code> os desvios ficam abaixo de <code>1,2e-13</code>, e o maior é o do estado
+  estacionário do <code>RBC_baseline</code>, <code>1,1e-13</code>. O <code>example2</code> dá os
+  números daquela tabela.</p>
 
-  <h3>Política ótima contra o <code>ramsey_model</code> do Dynare</h3>
+  <h3>Política ótima comparada com o <code>ramsey_model</code> do Dynare</h3>
   <p>A comparação cobre o estado estacionário e as IRFs das variáveis privadas e dos multiplicadores,
-  que o Dynare e o dsgelab numeram pela mesma equação e com o mesmo sinal.</p>
+  que os dois programas numeram pela mesma equação e com o mesmo sinal.</p>
   <table>
     <thead><tr><th>Modelo</th><th>Estado estacionário</th><th>IRFs</th><th></th></tr></thead>
     <tbody>
       <tr><td>nk_linear <span style="color:var(--muted)">(Galí, cap. 5)</span></td>
-          <td class="num">0,0e+00</td><td class="num">1,4e-15</td><td class="ok">OK</td></tr>
+          <td class="num">0,0e+00</td><td class="num">5,3e-15</td><td class="ok">OK</td></tr>
       <tr><td>rbc_labortax <span style="color:var(--muted)">(capital como estoque escolhido)</span></td>
           <td class="num">5,0e-11</td><td class="num">4,9e-13</td><td class="ok">OK</td></tr>
       <tr><td>nk_ramsey_model <span style="color:var(--muted)">(testes do Dynare, não linear)</span></td>
@@ -579,99 +624,106 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
     </tbody>
   </table>
 
-  <h3>Política discricionária, regras simples e bem-estar contra o Dynare</h3>
-  <p>Os arquivos de teste do próprio Dynare são lidos por <code>from_mod</code> sem alteração.</p>
+  <h3>Política discricionária, regras simples e bem-estar comparados com o Dynare</h3>
+  <p><code>from_mod</code> lê cada arquivo sem alteração. Três vêm dos testes do Dynare, e
+  <code>nk_osr_planner.mod</code> e <code>rbc_labortax.mod</code> foram escritos neste
+  repositório.</p>
   <table>
     <thead><tr><th>Teste</th><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
-      <tr><td>osr_example.mod</td><td>perda no ótimo do Dynare</td><td class="num">2,5e-15</td><td class="ok">OK*</td></tr>
-      <tr><td>nk_osr_planner.mod</td><td>regra simples ótima sobre o bem-estar</td><td class="num">2,5e-15</td><td class="ok">OK</td></tr>
-      <tr><td>dennis_1.mod</td><td>IRFs sob política discricionária; bem-estar</td><td class="num">4,3e-08; 6,1e-10</td><td class="ok">OK</td></tr>
+      <tr><td>osr_example.mod</td><td>perda no ótimo do Dynare</td><td class="num">2,6e-16</td><td class="ok">OK*</td></tr>
+      <tr><td>nk_osr_planner.mod</td><td>regra simples ótima sobre o bem-estar</td><td class="num">1,5e-16</td><td class="ok">OK</td></tr>
+      <tr><td>dennis_1.mod</td><td>IRFs sob política discricionária; bem-estar incondicional e condicional</td><td class="num">4,3e-08; 5,3e-10, 6,1e-10</td><td class="ok">OK</td></tr>
       <tr><td>nk_ramsey_model.mod</td><td>Ramsey lido do .mod; bem-estar de 2ª ordem</td><td class="num">2,6e-14; 1,4e-12</td><td class="ok">OK</td></tr>
-      <tr><td>rbc_labortax.mod</td><td>bem-estar de 2ª ordem com capital</td><td class="num">3,4e-13</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_labortax.mod</td><td>bem-estar de 2ª ordem com capital</td><td class="num">3,5e-13</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
   <p style="font-size:.9rem;color:var(--muted)">* O ótimo do dsgelab tem perda de 0,4266626,
   <em>menor</em> que os 0,4268336 do Dynare. Avaliada pelo próprio Dynare no ponto do dsgelab, a
-  perda é a mesma a 5e-15, e portanto a diferença vem do otimizador do Dynare, que para antes numa
-  superfície plana. No ótimo, a regra neutraliza o choque de demanda,
+  perda difere da do dsgelab em 4,3e-15, e portanto a diferença vem do otimizador do Dynare, que
+  encerra a busca cedo numa superfície plana. No ótimo, a regra neutraliza o choque de demanda,
   <code>gamma_y_ = 1/|σ| = 16,667</code>. O piso de 4e-08 nas IRFs sob política discricionária é a
   tolerância do Dynare, <code>sqrt(eps)</code>.</p>
 
-  <h3>Previsão perfeita contra o Dynare</h3>
+  <h3>Previsão perfeita comparada com o Dynare</h3>
   <p>Os arquivos de <code>tests/deterministic_simulations</code> do Dynare são lidos por
   <code>from_mod</code>, e a comparação cobre toda variável em todo período.</p>
   <table>
-    <thead><tr><th>Teste</th><th>O que exercita</th><th>Desvio</th><th></th></tr></thead>
+    <thead><tr><th>Teste</th><th>O que testa</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
-      <tr><td>rbc_det1.mod</td><td>condição inicial (<code>histval</code>)</td><td class="num">6,6e-15</td><td class="ok">OK</td></tr>
+      <tr><td>rbc_det1.mod</td><td>condição inicial (<code>histval</code>)</td><td class="num">1,1e-14</td><td class="ok">OK</td></tr>
       <tr><td>rbc_det2.mod</td><td>choque no primeiro período</td><td class="num">6,6e-15</td><td class="ok">OK</td></tr>
       <tr><td>rbc_det3.mod</td><td>choques antecipados, períodos 4 a 8</td><td class="num">8,0e-14</td><td class="ok">OK</td></tr>
       <tr><td>pfwee.mod</td><td>erros de expectativa, choques transitórios e permanentes</td><td class="num">2,8e-12</td><td class="ok">OK</td></tr>
       <tr><td>pfwee_constant_sim_length.mod</td><td>idem, horizonte constante</td><td class="num">3,0e-12</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
-  <p style="font-size:.9rem;color:var(--muted)">O Dynare para por omissão em resíduo 1e-5 e recalcula
-  o estado estacionário terminal com tolerância <code>eps^(1/3)</code>, e com essas tolerâncias o
-  <code>k</code> terminal do <code>pfwee</code> erra a solução fechada em 4e-5. Por isso a validação
-  roda o Dynare com 1e-12.</p>
+  <p style="font-size:.9rem;color:var(--muted)">Por padrão, o Dynare interrompe a busca quando o
+  resíduo chega a 1e-5 e recalcula o estado estacionário terminal com tolerância
+  <code>eps^(1/3)</code>. Com esses valores padrão, o <code>k</code> terminal do <code>pfwee</code>
+  difere da solução fechada em 4e-5. A validação executa o Dynare com 1e-12.</p>
 
-  <h3>Estimação contra o Dynare</h3>
+  <h3>Estimação comparada com o Dynare</h3>
   <p>O <code>fs2000.mod</code> (Schorfheide, 2000) da pasta <code>examples/</code> do Dynare é lido por
-  <code>from_mod</code> com os seus priors e dados.</p>
+  <code>from_mod</code> com as suas distribuições a priori e os seus dados.</p>
   <table>
     <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
       <tr><td>verossimilhança e densidade a priori, no ponto inicial</td><td class="num">6e-12; 4e-13</td><td class="ok">OK</td></tr>
-      <tr><td>variáveis e choques suavizados</td><td class="num">9e-15</td><td class="ok">OK</td></tr>
+      <tr><td>variáveis suavizadas; choques suavizados</td><td class="num">8,4e-15; 1,1e-15</td><td class="ok">OK</td></tr>
       <tr><td><code>shock_decomposition</code> e <code>realtime_shock_decomposition</code></td><td class="num">5e-15</td><td class="ok">OK</td></tr>
       <tr><td>previsão de 8 períodos; bandas de 90%</td><td class="num">2e-15; 6e-09</td><td class="ok">OK</td></tr>
-      <tr><td>moda da posterior (núcleo do dsgelab ≥ o do Dynare)</td><td class="num">+6e-06</td><td class="ok">OK</td></tr>
+      <tr><td>moda a posteriori (núcleo do dsgelab ≥ o do Dynare)</td><td class="num">+6e-06</td><td class="ok">OK</td></tr>
       <tr><td>Laplace com a covariância do Dynare</td><td class="num">2e-13</td><td class="ok">OK</td></tr>
-      <tr><td>médias do Metropolis, em erros de Monte Carlo</td><td class="num">&lt; 2,5</td><td class="ok">OK</td></tr>
-      <tr><td>filtro difuso (nível de preços observado), em dois pontos</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
-      <tr><td>previsão condicional (<code>tests/conditional_forecasts</code>)</td><td class="num">1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>médias do Metropolis, em erros de Monte Carlo (o maior é 2,89)</td><td class="num">&lt; 3</td><td class="ok">OK</td></tr>
+      <tr><td>filtro difuso (nível de preços observado), em dois pontos</td><td class="num">2,5e-12</td><td class="ok">OK</td></tr>
+      <tr><td>previsão condicional (<code>tests/conditional_forecasts</code>)</td><td class="num">1,6e-13</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
-  <p style="font-size:.9rem;color:var(--muted)">Por omissão o Dynare troca para o ganho estacionário
-  do filtro quando a variância converge a 1e-6 (<code>riccati_tol</code>), o que move a
-  verossimilhança na sétima casa, e ela só bate na última casa com essa opção desligada. O Laplace
-  calculado com a Hessiana do próprio dsgelab difere do Dynare em 0,03, efeito da diferença entre as
-  duas Hessianas numéricas. A do dsgelab é estável a 5e-4 quando o passo varia numa faixa de dez
-  vezes.</p>
+  <p style="font-size:.9rem;color:var(--muted)">As verossimilhanças coincidem até a última casa
+  decimal só com o <code>riccati_tol</code> do Dynare desligado. Na configuração padrão, o Dynare
+  passa a usar o ganho estacionário do filtro quando a variância converge a 1e-6, o que altera o número na sétima
+  casa decimal. A aproximação de Laplace calculada com a hessiana do próprio dsgelab difere da do
+  Dynare em 0,03, diferença que vem das duas hessianas numéricas.</p>
 
-  <h3>Não linearidades e declaração do modelo contra o Dynare</h3>
-  <p>Aqui os arquivos vêm de <code>tests/occbin</code>, <code>tests/ep</code>, <code>tests/bgp</code> e
-  <code>tests/trend_var</code> do Dynare 7.2, também lidos por <code>from_mod</code> e comparados em
-  toda variável e todo período.</p>
+  <h3>Não linearidades e declaração do modelo comparadas com o Dynare</h3>
+  <p><code>from_mod</code> lê os arquivos de <code>tests/occbin</code>, <code>tests/ep</code>,
+  <code>tests/bgp</code> e <code>tests/trend_var</code> do Dynare 7.2, e cada variável é conferida
+  em cada período.</p>
   <table>
     <thead><tr><th>Teste</th><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
       <tr><td>borrcon.mod</td><td>OccBin, uma restrição, <code>curb_retrench</code>: trajetórias por partes e linear; regimes</td><td class="num">2,2e-16; 30/30</td><td class="ok">OK</td></tr>
-      <tr><td>dynrbc.mod</td><td>OccBin, duas restrições e quatro regimes, 52 choques-surpresa</td><td class="num">1,6e-15; 169/169</td><td class="ok">OK</td></tr>
-      <tr><td>burnside.mod</td><td>trajetória estendida; estocástica de ordem 1 e 2, árvores esparsa e cheia, híbrida</td><td class="num">1,0e-11</td><td class="ok">OK*</td></tr>
-      <tr><td>linearmodel0.mod</td><td>trajetória estendida num modelo linear, e a solução linear do Dynare</td><td class="num">2,6e-13</td><td class="ok">OK</td></tr>
-      <tr><td>solow, ramsey, nk</td><td>o problema do <code>bgp.write</code>: resíduos em cinco pontos; asserções dos testes</td><td class="num">2,2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>dynrbc.mod</td><td>OccBin, duas restrições e quatro regimes, 52 choques não antecipados</td><td class="num">1,6e-15; 169/169</td><td class="ok">OK</td></tr>
+      <tr><td>burnside.mod</td><td>trajetória estendida; estocástica de ordem 1 e 2, árvores esparsa e cheia, híbrida</td><td class="num">1,1e-11</td><td class="ok">OK*</td></tr>
+      <tr><td>linearmodel0.mod</td><td>trajetória estendida num modelo linear; solução de primeira ordem do Dynare</td><td class="num">2,0e-15; 3,1e-14</td><td class="ok">OK</td></tr>
+      <tr><td>solow, ramsey, nk</td><td>o problema do <code>bgp.write</code>: resíduos em cinco pontos; asserções dos testes</td><td class="num">2,2e-16; 2,8e-12</td><td class="ok">OK</td></tr>
       <tr><td>walras.mod, bad_steady.mod, homotopy.mod</td><td><code>model_diagnostics</code>; <code>steady_state_model</code> recusado; homotopia</td><td class="num">mesmo relatório</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
-  <p style="font-size:.9rem;color:var(--muted)">* No <code>burnside.mod</code>, o que limita a
-  concordância é a tolerância do solver do Dynare, que a validação fixa em 1e-12 (a de omissão é
-  1e-5). O resultado das equações de calibração concorda a <code>4e-15</code> com o do
-  MacroModelling.jl.</p>
+  <p style="font-size:.9rem;color:var(--muted)">* Aqui o Dynare roda com tolerância do solver de
+  1e-12, contra o valor padrão de 1e-5, e é essa tolerância que limita a
+  concordância.</p>
 
-  <h3>Contra o Dynare e o MacroModelling.jl, num modelo aplicado</h3>
+  <h3>Uma equação de calibração comparada com o MacroModelling.jl</h3>
+  <p>Num pequeno modelo RBC, a meta de estado estacionário <code>k/q = 2.5</code> determina β, e o
+  modelo foi resolvido pelo dsgelab e pelo MacroModelling.jl. Os dois devolvem β = 0,847457627118644, o valor da solução fechada, e os
+  valores de estado estacionário diferem em no máximo <code>4,4e-15</code>.</p>
+
+  <h3>Um modelo aplicado do autor, comparado com o Dynare e o MacroModelling.jl</h3>
   <p>Num DSGE de 71 variáveis, três grupos de renda e cinco choques, as correções de média de
-  segunda ordem do dsgelab batem com o Dynare a <code>1,1e-05</code> pontos percentuais e com o
-  MacroModelling.jl a <code>1,2e-05</code>, na calibração de outubro de 2026. O Dynare usa segunda
+  segunda ordem do dsgelab diferem das do Dynare em até <code>1,1e-05</code> ponto percentual e das
+  do MacroModelling.jl em até <code>1,2e-05</code>, na calibração de outubro de 2026. O Dynare usa segunda
   ordem não podada e o MacroModelling, podada, enquanto o dsgelab resolve a equação de Sylvester e
-  devolve a média em forma fechada, sem simular.</p>
+  devolve a média em forma fechada, sem simular. O modelo é de um artigo não publicado e não está
+  neste repositório, de modo que esta comparação, ao contrário das anteriores, não pode ser
+  refeita a partir daqui.</p>
 </div></section>
 
 <section id="comparacao"><div class="wrap">
-  <h2>Como se compara ao que já existe</h2>
-  <p class="lede">Há outros pacotes de DSGE em Python, e a tabela abaixo mostra o que cada um faz e
-  onde este pacote fica entre eles.</p>
+  <h2>Comparação com outros pacotes</h2>
+  <p class="lede">Outros pacotes em Python resolvem modelos DSGE, e a tabela põe as capacidades de
+  cada um ao lado das do dsgelab.</p>
   <table>
     <thead><tr><th>Capacidade</th><th>dsgelab</th><th>gEconpy</th><th>dolo</th><th>PyMacLab</th><th>econpizza</th></tr></thead>
     <tbody>
@@ -679,40 +731,50 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
       <tr><td>Perturbação de 1ª ordem</td><td>sim</td><td>sim</td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
-      <tr><td>3ª ordem com risco na inclinação</td><td>sim (<code>g_σσk</code>), sem o tensor completo do Dynare</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
+      <tr><td>3ª ordem com risco na inclinação</td><td>sim (<code>g_ssk</code>, <code>h_ssk</code>), sem o tensor completo do Dynare</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
       <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, até três estados)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
       <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
       <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
-      <tr><td>Estimação bayesiana</td><td>sim, com filtro de Kalman sobre a solução de primeira ordem (moda, Metropolis–Hastings, SMC)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings e SMC, com o filtro de Kalman sobre a solução de primeira ordem)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>Calibração por alvos + identificação</td><td>sim</td><td>parcial</td><td>?</td><td>?</td><td>?</td></tr>
-      <tr><td>Exportar para Dynare e MacroModelling.jl</td><td class="ok">sim</td><td>parcial</td><td>sim</td><td>—</td><td>—</td></tr>
+      <tr><td>Exportar para Dynare e MacroModelling.jl</td><td class="ok">sim</td><td>só Dynare</td><td>só Dynare</td><td>—</td><td>—</td></tr>
       <tr><td>Ordem de acurácia autoverificada</td><td>sim (ordens 2, 3, 4)</td><td>?</td><td>?</td><td>?</td><td>?</td></tr>
-      <tr><td>Dependências</td><td class="num">numpy, scipy</td><td class="num">sympy, PyMC</td><td class="num">pandas (pin antigo)</td><td class="num">numpy, scipy</td><td class="num">JAX</td></tr>
-      <tr><td>Instala em Python 3.14</td><td class="ok">sim</td><td class="ok">sim</td><td>não</td><td>não</td><td>?</td></tr>
+      <tr><td>Dependências</td><td class="num">numpy, scipy</td><td class="num">sympy, PyMC</td><td class="num">pandas (versão antiga fixada)</td><td class="num">numpy, scipy</td><td class="num">JAX</td></tr>
+      <tr><td>Instala no Python 3.14</td><td class="ok">sim</td><td class="ok">sim</td><td>não</td><td>não</td><td>?</td></tr>
     </tbody>
   </table>
-  <div class="note"><p><strong>O vizinho mais próximo é o
-  <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>, que não resolve em segunda
-  ordem.</strong> Ele declara o modelo por blocos, deriva automaticamente as condições de primeira
-  ordem, aceita estado estacionário analítico, faz estimação bayesiana pelo PyMC e exporta para o
-  Dynare. Na versão 0.4 o dsgelab também deriva as CPOs de um problema declarado, confere e usa um
-  estado estacionário em forma fechada fornecido pelo usuário, estima com amostradores próprios e
-  escreve o <code>.mod</code>, além de resolver em segunda ordem. Para métodos globais além da
-  colocação de Chebyshev, como a iteração de tempo e de função-valor, há o
-  <a href="https://github.com/EconForge/dolo.py">dolo</a>. Para agentes heterogêneos, as
-  alternativas são o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>
-  e o <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
-  <p>No <code>dsgelab</code>, a mesma função de resíduos serve à perturbação e à transição
-  determinística, e a segunda ordem é resolvida no próprio processo, sem sair para o Octave. As
-  verificações ficam a cargo da biblioteca, e as dependências se limitam a numpy e scipy. A tabela
-  completa, com o que verifiquei instalando e o que só li na documentação, está em
+  <p style="font-size:.9rem;color:var(--muted)">Levantamento de 9 de setembro de 2026, revisado em 11
+  e 12 de outubro de 2026, com o gEconpy 2.2. Versões posteriores desses pacotes podem mudar algumas
+  células, e o
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/docs/comparison.md">docs/comparison.md</a>
+  indica a fonte de cada uma.</p>
+  <div class="note"><p><strong>Para quem precisa só de primeira ordem com estimação bayesiana, o
+  pacote indicado é o <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> Ele
+  deriva as condições de primeira ordem de blocos declarados, aceita um
+  estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
+  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
+  colocação de Chebyshev, como a iteração temporal e a iteração da função valor, o
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Agentes
+  heterogêneos ficam fora do dsgelab, e o
+  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> e o
+  <a href="https://github.com/gboehl/econpizza">econpizza</a> resolvem esses modelos.</p></div>
+  <p>No <code>dsgelab</code>, um problema declarado vai das condições de primeira ordem derivadas a
+  uma solução e a uma exportação para o Dynare ou o MacroModelling.jl, com a convenção temporal
+  traduzida automaticamente. A mesma função de resíduos serve à perturbação e à transição
+  determinística. A solução de segunda ordem é calculada dentro do próprio Python, sem chamar o
+  Dynare pelo Octave. A condição de Blanchard–Kahn e a convergência do estado estacionário são
+  verificadas a cada solução, a ordem de acurácia e a identificação de uma calibração exigem uma
+  chamada cada, e as únicas dependências são numpy e scipy. Nos três usos citados na nota acima (estimação
+  com o PyMC, métodos globais e agentes heterogêneos), os pacotes ali indicados oferecem
+  mais que o dsgelab. A tabela completa, que separa as células verificadas com a
+  instalação de um pacote das que foram lidas só na documentação, está em
   <a href="https://github.com/GustavoHM/dsgelab/blob/main/docs/comparison.md">docs/comparison.md</a>.</p>
 </div></section>
 
 <section id="citar"><div class="wrap">
   <h2>Como citar</h2>
-  <p class="lede">Se o pacote entrou num resultado publicado, ele entra nas referências, como
-  qualquer outro insumo metodológico, e com a versão, porque um número que só se reproduz numa
+  <p class="lede">Se o pacote contribuiu para um resultado publicado, cite-o nas referências como
+  qualquer outro insumo metodológico, e informe a versão, porque um número que só se reproduz numa
   versão específica não é reproduzível sem ela.</p>
 
   <h3>BibTeX</h3>
@@ -720,7 +782,7 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
   author  = {Moreira, Gustavo Hoffmann},
   title   = {{dsgelab}: a general toolkit for solving DSGE models in Python},
   year    = {2026},
-  version = {0.4.0},
+  version = {0.5.0},
   license = {MIT},
   url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Pacote em Python}
@@ -728,44 +790,46 @@ dk.steady_state_invariance(                    # uma invariância que é TEOREMA
 
   <h3>ABNT</h3>
 <pre><code class="plain">MOREIRA, Gustavo Hoffmann. dsgelab: a general toolkit for solving DSGE models in Python.
-Versão 0.4.0. 2026. Software em Python. Disponível em:
+Versão 0.5.0. 2026. Software em Python. Disponível em:
 https://github.com/GustavoHM/dsgelab. Acesso em: [data].</code></pre>
 
   <h3>No corpo do texto</h3>
   <p>Cite o nome e a versão junto do resultado, como no exemplo abaixo.</p>
   <blockquote style="border-left:3px solid var(--rule); margin:1rem 0; padding:.2rem 0 .2rem 1.1rem;
-     color:var(--muted)">O modelo foi resolvido com o <code>dsgelab</code> 0.4.0
+     color:var(--muted)">O modelo foi resolvido com o <code>dsgelab</code> 0.5.0
      (Moreira, 2026), em perturbação de segunda ordem.</blockquote>
 
-  <div class="note"><p><strong>Antes de citar, arquive.</strong> O conteúdo de um repositório muda e o
-  endereço pode deixar de existir, e por isso a URL não serve de referência arquivável. Ligue o
-  repositório ao <a href="https://zenodo.org/">Zenodo</a>, crie um <em>release</em> e cite o DOI que
-  o Zenodo atribui a ele. O arquivo <code>CITATION.cff</code> na raiz do pacote já está no formato
-  que o GitHub lê, e, preenchidos ali o DOI e o ORCID, o botão "Cite this repository" passa a
-  fornecer a entrada pronta.</p></div>
+  <div class="note"><p><strong>Cite uma versão arquivada, quando houver.</strong> O conteúdo por
+  trás da URL de um repositório muda e o endereço pode deixar de existir, e por isso a URL sozinha
+  não identifica a versão usada. Cada versão do dsgelab será arquivada no
+  <a href="https://zenodo.org/">Zenodo</a>, a partir da primeira, e o DOI que o Zenodo atribui a ela
+  é a referência permanente a citar. O arquivo <code>CITATION.cff</code> na raiz do pacote, que já
+  traz o ORCID do autor, está no formato que o GitHub lê, e o botão “Cite this repository” fornece a
+  entrada a partir dele. O DOI será acrescentado a esse arquivo com a primeira versão
+  arquivada.</p></div>
 
-  <h3>E as ferramentas que este pacote usa</h3>
-  <p>Se o seu resultado passou por elas, elas também entram nas referências. O
-  <a href="https://www.dynare.org/">Dynare</a> entra quando o modelo foi exportado para ele ou
-  conferido nele, e o <a href="https://github.com/thorek1/MacroModelling.jl">MacroModelling.jl</a>, na
-  mesma situação. <a href="https://numpy.org/citing-numpy/">NumPy</a> e
-  <a href="https://scipy.org/citing-scipy/">SciPy</a> pedem citação explicitamente e são as duas
-  dependências do dsgelab.</p>
+  <h3>Como citar as ferramentas usadas pelo pacote</h3>
+  <p>Se o seu resultado dependeu delas, cite-as também. Cite o
+  <a href="https://www.dynare.org/">Dynare</a> quando o modelo foi exportado para ele ou conferido
+  nele, e o <a href="https://github.com/thorek1/MacroModelling.jl">MacroModelling.jl</a> na mesma
+  situação. <a href="https://numpy.org/citing-numpy/">NumPy</a> e
+  <a href="https://scipy.org/citing-scipy/">SciPy</a> pedem citação explicitamente, e todo cálculo
+  do dsgelab roda sobre elas.</p>
 </div></section>
 
 <section id="docs"><div class="wrap">
   <h2>Documentação</h2>
   <div class="cards">
     <div class="card"><h4><a href="replications.html">Replicações</a></h4><p>Heutel (2012), o
-    crescimento estocástico com solução fechada e o princípio de Taylor. O código da página é
-    executado.</p></div>
+    crescimento estocástico com solução fechada e o princípio de Taylor. O verificador executa o
+    código dessa página.</p></div>
     <div class="card"><h4><a href="../../docs/guide.md">Guia de uso</a></h4><p>Da declaração à segunda
     ordem, com as armadilhas de cada etapa.</p></div>
-    <div class="card"><h4><a href="../../docs/api.md">Referência da API</a></h4><p>Toda função, todo
-    argumento, todo campo devolvido.</p></div>
+    <div class="card"><h4><a href="../../docs/api.md">Referência da API</a></h4><p>A assinatura,
+    os argumentos e os campos devolvidos de cada função pública.</p></div>
     <div class="card"><h4><a href="../../docs/design-notes.md">Notas de projeto</a></h4><p>Cada decisão
     numérica e a falha específica que ela evita.</p></div>
-    <div class="card"><h4><a href="../../docs/from-scripts.md">Portar um script</a></h4><p>De laços de
+    <div class="card"><h4><a href="../../docs/from-scripts.md">Converter um script</a></h4><p>De laços de
     ponto fixo a equações declarativas, passo a passo.</p></div>
   </div>
 </div></section>
@@ -773,9 +837,13 @@ https://github.com/GustavoHM/dsgelab. Acesso em: [data].</code></pre>
 </main>
 
 <footer><div class="wrap">
-  <p>dsgelab, licença MIT. Feito para o programa de pesquisa sobre geração distribuída e utilizável
-  fora dele. <br>Os links da documentação apontam para os arquivos do repositório. Para publicar o
-  site, veja <code>site/README.md</code>.</p>
+  <p>dsgelab, licença MIT. Desenvolvido para um programa de pesquisa sobre geração distribuída, pode
+  ser usado fora dele. Código, documentação e issues em
+  <a href="https://github.com/GustavoHM/dsgelab">github.com/GustavoHM/dsgelab</a>.</p>
+  <p>O <a href="https://gustavohm.github.io/cgelab/pt-br/">cgelab</a>, do mesmo autor, resolve modelos
+  de equilíbrio geral computável (EGC) calibrados numa matriz de contabilidade social. O módulo
+  <code>cgelab.bridge</code> usa o dsgelab na parte intertemporal de um modelo, um EGC de Ramsey em que
+  o investimento segue uma equação de Euler, e os dois pacotes são desenvolvidos em conjunto.</p>
 </div></footer>
 
 <script src="../highlight.js"></script>

@@ -1,24 +1,25 @@
-"""compare_foresight.py — previsão perfeita, com e sem erros de expectativa, contra o Dynare.
+"""compare_foresight.py: perfect foresight, with and without expectation errors, against Dynare.
 
-Os cinco arquivos são de tests/deterministic_simulations do Dynare 7.2, lidos por
-`dsgelab.from_mod`:
+The five files come from tests/deterministic_simulations of Dynare 7.2, read by
+`dsgelab.from_mod`.
 
-  rbc_det1.mod   condição inicial fora do estado estacionário (histval)
-  rbc_det2.mod   um choque no primeiro período
-  rbc_det3.mod   choques ANTECIPADOS nos períodos 4 a 8 — `perfect_foresight(..., shocks=)`
-  pfwee.mod                      erros de expectativa: notícias nos períodos 1, 2, 3, 6 e 7,
-                                 choques transitórios e permanentes (pfwee.csv)
-  pfwee_constant_sim_length.mod  o mesmo, com cada plano de horizonte constante
+  rbc_det1.mod   initial condition away from the steady state (histval)
+  rbc_det2.mod   a shock in the first period
+  rbc_det3.mod   ANTICIPATED shocks in periods 4 to 8, `perfect_foresight(..., shocks=)`
+  pfwee.mod                      expectation errors: news in periods 1, 2, 3, 6 and 7,
+                                 transitory and permanent shocks (pfwee.csv)
+  pfwee_constant_sim_length.mod  the same, with every plan on a constant horizon
 
-Datação: a data t da trajetória do dsgelab é o período t+1 do Dynare, e a data T é o período
-terminal T+1. Compara-se toda variável endógena do Dynare em todos os períodos de 1 a T+1.
+Timing. Date t of the dsgelab path is Dynare's period t+1, and date T is the terminal period
+T+1. Every Dynare endogenous variable is compared in every period from 1 to T+1.
 
-O rbc_det1 calcula a condição inicial num trecho de MATLAB (`CapitalSS/2`, com CapitalSS lido de
-oo_.steady_state); from_mod não executa MATLAB, e a condição é escrita aqui com o mesmo significado.
+rbc_det1 computes the initial condition in a piece of MATLAB (`CapitalSS/2`, with CapitalSS read
+from oo_.steady_state). from_mod does not execute MATLAB, and the condition is written here with
+the same meaning.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_foresight.sh     # exporta out_foresight/<nome>.mat
+    bash run_foresight.sh     # exports out_foresight/<name>.mat
 """
 from __future__ import annotations
 
@@ -27,7 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.dynare import from_mod, read_expectation_errors_csv
 from dsgelab.foresight import perfect_foresight_with_expectation_errors
 
@@ -72,7 +73,7 @@ def deterministic(name: str, T: int, histval=None):
         k0 = mf.initial_states(ss, histval=histval(ss),
                                exo_first={e: k0[mf.model.states.index(f"SHK_{e}")]
                                           for e in mf.exogenous})
-    path = dk.perfect_foresight(mf.model, ss, ss, params=mf.params, T=T, shocks=shocks,
+    path = dsg.perfect_foresight(mf.model, ss, ss, params=mf.params, T=T, shocks=shocks,
                                 initial_states=k0, tol=1e-12)
     return _compare(path, ex, mf, T)
 
@@ -89,30 +90,30 @@ def expectation_errors(name: str, T: int, constant: bool):
         initial_states=mf.initial_states(start), constant_simulation_length=constant, tol=1e-12)
     TT = path.levels.shape[0] - 1
     if ex.endo_simul.shape[1] != TT + 2:
-        return float("inf"), f"comprimentos diferentes: Dynare {ex.endo_simul.shape[1] - 2}, dsgelab {TT}"
+        return float("inf"), f"different lengths: Dynare {ex.endo_simul.shape[1] - 2}, dsgelab {TT}"
     return _compare(path, ex, mf, TT)
 
 
 def main() -> int:
     cases = [
-        ("rbc_det1", "condição inicial (histval)",
+        ("rbc_det1", "initial condition (histval)",
          lambda: deterministic("rbc_det1", 20, histval=lambda ss: {("Capital", 0): ss.values["Capital"] / 2})),
-        ("rbc_det2", "choque no período 1", lambda: deterministic("rbc_det2", 300)),
-        ("rbc_det3", "choques antecipados, períodos 4 a 8", lambda: deterministic("rbc_det3", 300)),
-        ("pfwee", "erros de expectativa", lambda: expectation_errors("pfwee", 7, False)),
-        ("pfwee_constant_sim_length", "idem, horizonte constante",
+        ("rbc_det2", "shock in period 1", lambda: deterministic("rbc_det2", 300)),
+        ("rbc_det3", "anticipated shocks, periods 4 to 8", lambda: deterministic("rbc_det3", 300)),
+        ("pfwee", "expectation errors", lambda: expectation_errors("pfwee", 7, False)),
+        ("pfwee_constant_sim_length", "idem, constant horizon",
          lambda: expectation_errors("pfwee_constant_sim_length", 7, True)),
     ]
     bad = 0
     for name, what, run in cases:
         r = run()
         if r is None:
-            print(f"{name:<27} sem out_foresight/{name}.mat — rode run_foresight.sh")
+            print(f"{name:<27} no out_foresight/{name}.mat, run run_foresight.sh")
             bad += 1
             continue
         d, where = r
         ok = d < 1e-8
-        print(f"{name:<27} {what:<38} desvio relativo máx {d:.1e} ({where})  "
+        print(f"{name:<27} {what:<38} max relative deviation {d:.1e} ({where})  "
               f"{'OK' if ok else 'DIVERGE'}")
         bad += not ok
     return 1 if bad else 0

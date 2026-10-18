@@ -2,15 +2,15 @@
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import rbc
 
 
 def test_chebyshev_projection_recovers_the_closed_form_policy():
     model, params, guess = rbc.build()
-    sol = dk.solve(model, params, guess=guess)
+    sol = dsg.solve(model, params, guess=guess)
     k_ss = sol.steady.values["k"]
-    proj = dk.solve_projection(
+    proj = dsg.solve_projection(
         model, params, bounds=[(0.7 * k_ss, 1.4 * k_ss), (0.92, 1.08)],
         guess=guess, order=4, cov={"eps_a": 0.007}, n_quad=5, steady=sol.steady,
     )

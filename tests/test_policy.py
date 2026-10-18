@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.dynare import from_mod  # noqa: E402
 from dsgelab.optimal import DiscretionError, discretionary_policy, osr  # noqa: E402
 from dsgelab.welfare import consumption_equivalent, welfare  # noqa: E402
@@ -39,8 +39,8 @@ def test_discretion_matches_gali_closed_form():
 
 def test_discretion_is_worse_than_commitment():
     ds = discretionary_policy(NK, params=NK_PARAMS, cov={"e": 0.01}, **NK_KW)
-    m = dk.ramsey_model(NK, **NK_KW)
-    ss = dk.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), NK_PARAMS)
+    m = dsg.ramsey_model(NK, **NK_KW)
+    ss = dsg.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), NK_PARAMS)
     w_commit = welfare(m, NK_PARAMS, steady=ss, cov={"e": 0.01})
     w_disc = ds.welfare()
     assert w_disc["unconditional"] < w_commit.unconditional < 0
@@ -56,7 +56,7 @@ def test_discretion_refuses_what_it_cannot_do():
         discretionary_policy(NK, params=NK_PARAMS, **{**NK_KW, "objective": "-(pi**2) + x"})
 
 
-RULE = dk.from_equations(["y = z - r", "r = theta*z", "z(+1) = rho*z + e"],
+RULE = dsg.from_equations(["y = z - r", "r = theta*z", "z(+1) = rho*z + e"],
                          states=["z"], jumps=["y", "r"], shocks=["e"],
                          parameters=["theta", "rho"], derivatives="jacobian")
 
@@ -80,7 +80,7 @@ def test_osr_finds_the_closed_form_coefficient(w, c):
     assert res.loss < res.initial_loss
 
 
-LOGNORMAL = dk.from_equations(["c = exp(z)", "z(+1) = rho*z + e"], states=["z"], jumps=["c"],
+LOGNORMAL = dsg.from_equations(["c = exp(z)", "z(+1) = rho*z + e"], states=["z"], jumps=["c"],
                               shocks=["e"], parameters=["rho", "beta"])
 
 
@@ -90,7 +90,7 @@ def test_welfare_of_a_lognormal_endowment():
     # s2 (1 - rho^(2t)), so W = 1/(1-beta) + s2/2 [1/(1-beta) - 1/(1-beta rho^2)].
     p = dict(rho=0.9, beta=0.96)
     sigma = 0.02
-    ss = dk.steady_state(LOGNORMAL, dict(c=1.0, z=0.0), p)
+    ss = dsg.steady_state(LOGNORMAL, dict(c=1.0, z=0.0), p)
     w = welfare(LOGNORMAL, p, steady=ss, cov={"e": sigma}, objective="c", discount="beta")
     s2 = sigma ** 2 / (1 - p["rho"] ** 2)
     b, r = p["beta"], p["rho"]
@@ -104,7 +104,7 @@ def test_welfare_of_a_lognormal_endowment():
 def test_consumption_equivalent_in_logs():
     # U = log(c): scaling c by (1 + lambda) adds log(1 + lambda)/(1 - beta) to welfare.
     p = dict(rho=0.9, beta=0.96)
-    ss = dk.steady_state(LOGNORMAL, dict(c=1.0, z=0.0), p)
+    ss = dsg.steady_state(LOGNORMAL, dict(c=1.0, z=0.0), p)
     ref = welfare(LOGNORMAL, p, steady=ss, cov={"e": 0.02}, objective="log(c)",
                   discount="beta").unconditional
     lam = consumption_equivalent("log(c)", "c", target=ref + 0.5, reference=ref,

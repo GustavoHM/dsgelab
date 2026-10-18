@@ -1,31 +1,39 @@
 # Porting an existing research script
 
-Applied DSGE code tends to grow in a recognisable shape: a fixed-point loop for
-the steady state, a second loop for a policy variable, a block of aggregates
-frozen at a reference point, and — bolted on later — a separate linearised system
-for the stochastic exercises. This note is about moving that to `dsgelab`, and
-about what the move buys.
+This note describes how to move a research script to `dsgelab` when the script
+has a fixed-point loop for the steady state, a second loop for a policy variable,
+a block of aggregates frozen at a reference point and, added later, a separate
+linearised system for the stochastic exercises. It also lists what the move
+provides.
 
-## What the move buys
+The code blocks are sketches for the script's own model. Names such as
+`statics`, `solve_ss`, `phi_grid`, `ctx0`, `renew_share` and the variables `QF`,
+`QG`, `QR`, `D` and `base` stand for objects of that script, and `dsg` is
+`import dsgelab as dsg`. For blocks that run as written, see the
+[user guide](guide.md).
 
-**One model instead of two.** The most common structural problem in this kind of
-code is that the perturbation solution and the deterministic transition rest on
-different equations: similar, written by the same person, and not identical.
-Once the equilibrium conditions are a single residual function, the transition
-and the stochastic block cannot diverge, because both call it.
+## What the move provides
 
-**Objects that do not exist otherwise.** A fixed point gives you a steady state
-and nothing else. The same equations written declaratively give you generalised
-eigenvalues, a determinacy verdict, impulse responses, moments, a
-variance decomposition, second-order risk corrections and a nonlinear transition
-— for the *same* model that produced the steady state.
+**One model instead of two.** In this kind of code, the perturbation solution and
+the deterministic transition can rest on different equations, similar, written by
+the same person, and not identical. Once the equilibrium conditions are a single
+residual function, the transition and the stochastic block cannot diverge,
+because both call it.
 
-**Checks you can quote.** The order-of-accuracy test, the Blanchard–Kahn margin,
-the Walras identity, the slackness of every smoothed corner.
+**Objects that a fixed point does not give.** A fixed-point loop returns a steady
+state. The same equations written declaratively also give generalised
+eigenvalues, a determinacy verdict, impulse responses, moments, a variance
+decomposition, second-order risk corrections and a nonlinear transition, all for
+the model that produced the steady state.
+
+**Checks with a reported number.** The order-of-accuracy test, the Blanchard–Kahn
+margin, the Walras identity and the slackness of each smoothed corner each return
+a number that can be reported. The Blanchard–Kahn condition runs on every solve,
+and the other checks are one call each.
 
 ---
 
-## Step 1 — fixed-point loops become equations
+## Step 1. Fixed-point loops become equations
 
 A loop like
 
@@ -39,140 +47,164 @@ for _ in range(6000):
 ```
 
 is a *variable* with an *equilibrium condition*. Declare it as a jump and write
-the condition as a residual:
+the condition as a residual.
 
 ```python
 jumps = [..., "piB"]
 
-def equations(nxt, cur, eps, p, cb):
-    s = statics(cur, p, cb)
+def equations(nxt, cur, eps, p, ctx):
+    s = statics(cur, p, ctx)
     ...
     r[b] = s["piB"] * s["base"] - (s["RN0"] + s["Gamma"])
 ```
 
-The static block that the loop recomputed each pass becomes an ordinary helper
-function of the current variables. Keep it: it is how the derived objects —
-prices, shares, flows — are recovered along a path via `TransitionPath.derived`,
-and how `check_slack` reads the corner quantities.
+The static block that the loop recomputed on each pass becomes an ordinary helper
+function of the current variables. Keep it, since `TransitionPath.derived` uses
+it to recover the derived objects (prices, shares, flows) along a path, and the
+constraints passed to `check_slack` read the corner quantities from it.
 
-A quantity that was simultaneous with the loop but not itself iterated — because
-under the old functional form it happened to be exogenous — must become a
-variable too. Demand that was `D = ν Y` is one equation; demand from a CES
+A quantity that was simultaneous with the loop but not itself iterated, because
+under the old functional form it happened to be exogenous, must become a
+variable too. Demand that was `D = ν Y` is one equation. Demand from a CES
 aggregator is simultaneous with the price and needs the price to be endogenous.
 
-## Step 2 — frozen reference blocks become live equations
+## Step 2. Frozen reference blocks become live equations
 
-Scripts often freeze a block at the reference steady state: output, capital, the
-interest rate and the wage held at `_reference` while the policy variable moves.
-That is defensible when an invariance makes it exact, and it is worth *proving*
-rather than assuming:
+Scripts often freeze a block at the reference steady state, holding output,
+capital, the interest rate and the wage at `_reference` while the policy variable
+moves. That is defensible when an invariance makes it exact, and the invariance
+can be tested. Here `solve_ss(phi)` returns the `SteadyState` at the policy
+`phi`.
 
 ```python
-dk.steady_state_invariance(lambda phi: solve_ss(phi), phi_grid, ["Y", "K", "r", "w"])
+dsg.steady_state_invariance(lambda phi: solve_ss(phi), phi_grid, ["Y", "K", "r", "w"])
 ```
 
 If the invariance holds, activating the block costs nothing and the test
 documents why. If it does not, the frozen version was wrong and the test says so.
-Either way the answer is evidence rather than a comment.
+In both cases the result is recorded by a test instead of a comment in the code.
 
-## Step 3 — corners become smooth branches plus a check
+## Step 3. Corners become smooth branches plus a check
 
 `max(D - QR - QG, 0)` and `max(base, 1e-9)` cannot be perturbed. Replace them
-with the interior branch and verify slackness where it must hold:
+with the interior branch and verify slackness where it must hold.
 
 ```python
-dk.check_slack(sol, {
+dsg.check_slack(sol, {
     "QF_positive": lambda v: v["QF"],
     "base_positive": lambda v: v["base"],
 }, size=3.0, periods=80)
 ```
 
-At the steady state *and along the impulse responses*. Slack at a point is not
-slack on a path, and that is the whole content of the check.
+The check runs along the impulse responses, which return to the steady state,
+because a constraint slack at a point can bind along a path. `size` is the
+innovation in the units it has in the equations.
 
-## Step 4 — anchors go in `ctx`
+## Step 4. Anchors go in `ctx`
 
 A portfolio adjustment cost centred on steady-state wealth, or an exogenous level
-pinned to equilibrium demand, must not be substituted with the solution itself:
-the term would vanish and the margin it pins would go indeterminate. Carry it in
-`ctx` and let the outer loop settle it:
+pinned to equilibrium demand, must not be replaced by the solution itself,
+because the term would then vanish and the margin it pins would become
+indeterminate. Carry it in `ctx` and let the outer loop settle it.
 
 ```python
 def ctx_update(values, ctx):
     return {**ctx, "K_anchor": [values[f"K{j}"] for j in range(N)],
                    "QR": renew_share * statics(values, p, ctx)["D"]}
 
-ss = dk.steady_state(model, guess, params, ctx=ctx0, ctx_update=ctx_update,
-                     positive=[f"K{j}" for j in range(N)] + ["QR"])
+ss = dsg.steady_state(model, guess, params, ctx=ctx0, ctx_update=ctx_update,
+                      positive=[f"K{j}" for j in range(N)])
 ```
 
-## Step 5 — the calibration loops become one solve
+`positive` takes model variables only. `QR` lives in `ctx`, so its sign is up to
+`ctx_update`.
+
+## Step 5. The calibration loops become one solve
 
 Several nested bisections, one per parameter, each pinned on one target, hide the
-fact that the targets are jointly determined. Replace them:
+fact that the targets are jointly determined. One call replaces them.
 
 ```python
-res = dk.calibrate(model, params,
-                   free={"kappaG": 8.0, "renew": 0.6, "d1": 0.01},
-                   targets={"mu": 0.056, "elec_elasticity": 3.62, "damage": 0.003},
-                   guess=guess,
-                   observables=lambda ss, p: {"mu": ss["QG"] / ss["D"], ...})
+def observables(ss, p):
+    return {"mu": ss["QG"] / ss["D"],
+            "elec_elasticity": elec_elasticity(ss, p),
+            "damage": damage_share(ss, p)}
+
+res = dsg.calibrate(model, params,
+                    free={"kappaG": 8.0, "renew": 0.6, "d1": 0.01},
+                    targets={"mu": 0.056, "elec_elasticity": 3.62, "damage": 0.003},
+                    guess=guess,
+                    observables=observables)
 print(res.report())
 ```
 
-and check identification once:
+`calibrate` does not check identification, so check it once with
+`target_jacobian`.
 
 ```python
-dk.target_jacobian(model, params, free=[...], targets=[...], guess=guess)["identified"]
+dsg.target_jacobian(model, params, free=["kappaG", "renew", "d1"],
+                    targets=["mu", "elec_elasticity", "damage"], guess=guess,
+                    observables=observables)["identified"]
 ```
 
-## Step 6 — the transition script disappears
+## Step 6. The transition script disappears
 
 A hand-written transition that solves one state's path with everything else
 frozen is replaced by
 
 ```python
-path = dk.perfect_foresight(model, ss_old, ss_new, params=p_new, T=120)
+path = dsg.perfect_foresight(model, ss_old, ss_new, params=p_new, T=120)
 ```
 
-in which **every** equilibrium condition holds in every period. If the policy
-follows a statutory calendar known to agents, pass the schedule instead of a
-constant and the announcement effect appears on impact:
+in which every equilibrium condition holds in every period. If the policy
+follows a statutory calendar known to agents, pass the schedule in place of a
+constant, and the agents respond from date 0 to the announced path.
 
 ```python
+from dataclasses import replace
+
 schedule = [replace(p, phi=x) for x in phi_path]      # length T+1
-path = dk.perfect_foresight(model, ss_old, ss_new, params=schedule, T=T)
+path = dsg.perfect_foresight(model, ss_old, ss_new, params=schedule, T=T)
 ```
 
-The last element of the schedule must be the terminal steady state's policy: the
-terminal boundary condition points there, and a schedule ending elsewhere makes
-the system inconsistent. Assert it rather than trusting it.
+Element `t` of the schedule enters the equations that link date `t` to `t+1`, so
+the solver reads elements 0 to `T-1`, and element `T` serves only `path.derived`
+at the last date. The end of the path is tied to `ss_new`, whose jumps fix those
+of date `T`, so `ss_new` should be the steady state under the policy that the
+schedule has reached by then. An assertion that the last elements of `phi_path`
+equal the policy behind `ss_new` keeps the two consistent.
 
-## Step 7 — second order stops being an external dependency
+## Step 7. Second order stops being an external dependency
 
 If the mean effects were being produced by a port to another language or another
 package, `solve_second_order` computes them in the same process, on the same
-equations, with `mean_correction()` in closed form. Keep the external port if you
-have one: `compare_irfs` and a comparison of `h_ss`/`g_ss` make it an independent
-check rather than a dependency.
+equations, with `mean_correction()` in closed form. An external port, if one
+exists, can then serve as an independent check, by comparing its impulse
+responses and its risk coefficients with the `h_ss` and `g_ss` that
+`solve_second_order` produces.
 
 ---
 
 ## Order of work, and how to know each step is right
 
-1. **Static block first.** Write `statics(values, params, ctx)` and check it
+1. **Static block first.** Write `statics(values, params, ctx)` and check that it
    reproduces the script's reference numbers at the reference point.
-2. **Residuals second.** Write `equations` and verify
-   `steady_state(...).residual` is at machine zero when handed the script's own
-   steady state as a guess. If the equations are the same equations, the residual
-   at the old solution is zero — this is the central regression test, and it is
-   a stronger statement than any comparison of outputs.
+2. **Residuals second.** Write `equations` and evaluate them at the script's own
+   steady state. With `old` the script's solution as a mapping of names to
+   values, `dsg.diagnose(model, params, old)["residual"]`, the largest absolute
+   residual at that point, must be at machine zero. If the two codes encode the
+   same equations, that residual is zero. The test evaluates every equation at
+   the old point, so it covers equations whose effect a comparison of a few
+   outputs could miss. (`steady_state(...).residual` does not serve here, since
+   it is the residual at the point where the solver converged, wherever it
+   started.)
 3. **Solve.** `sol.accuracy()` must give an implied order near 2, and
-   `blanchard_kahn_report` must pass with a margin you are willing to defend.
-4. **Identity.** `check_identity` on the resource constraint, along the impulse
-   responses, not only at the steady state.
+   `blanchard_kahn_report` must show the condition satisfied, with its margin as
+   the number to report.
+4. **Identity.** `check_identity` on the resource constraint, along a transition
+   (`path.levels`) as well as at the steady state.
 5. **Invariances.** `steady_state_invariance` on whatever the old code froze.
 6. **Then** the new objects: moments, transitions, second order.
 
-Do not skip 2 to get to 6. The residual-at-the-old-solution test is what
-distinguishes a port from a rewrite.
+Step 2 comes before step 6 because the residual at the old solution is what shows
+that the new code encodes the same model as the script.

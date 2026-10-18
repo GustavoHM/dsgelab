@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# run_policy.sh — referências do Dynare para regras simples ótimas, discrição e bem-estar.
+# run_policy.sh: Dynare's references for optimal simple rules, discretion and welfare.
 #
-# Uso:  bash run_policy.sh
+# Usage:  bash run_policy.sh
 #
-#   mods/ramsey/osr_example.mod      tests/optimal_policy/OSR do Dynare, sem a 3ª chamada de osr
-#   ramsey/nk_osr_planner.mod       osr com planner_objective (perda = menos o bem-estar), escrito aqui
-#   mods/ramsey/dennis_1.mod         tests/discretionary_policy do Dynare, sem alteração
-#   mods/ramsey/nk_ramsey_model.mod  bem-estar do Ramsey em 2ª ordem (a ordem por omissão do .mod)
-#   ramsey/rbc_labortax.mod          idem, com um estoque de capital; aqui com order=2
+#   mods/ramsey/osr_example.mod      Dynare's tests/optimal_policy/OSR, without the 3rd osr call
+#   ramsey/nk_osr_planner.mod        osr with planner_objective (loss = minus welfare), written here
+#   mods/ramsey/dennis_1.mod         Dynare's tests/discretionary_policy, unchanged
+#   mods/ramsey/nk_ramsey_model.mod  Ramsey welfare at 2nd order (the .mod's default order)
+#   ramsey/rbc_labortax.mod          idem, with a capital stock, here with order=2
 #
-# Exporta para out_policy/<nome>.mat a regra de decisão (ghx, ghu, order_var, state_var), o
-# estado estacionário, os parâmetros, a covariância, o resultado do osr e o
+# Exports to out_policy/<name>.mat the decision rule (ghx, ghu, order_var, state_var), the
+# steady state, the parameters, the covariance, the osr result and
 # evaluate_planner_objective.
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -23,10 +23,10 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 mkdir -p out_policy work
-run() {   # run <origem.mod> <comando extra antes da exportação>
+run() {   # run <source.mod> <extra command before the export>
   src="$1"; extra="$2"; m="$(basename "$src")"; base="${m%.mod}"
   echo ">>> $m"
   rm -rf work/*; cp "$src" work/
@@ -46,13 +46,14 @@ run() {   # run <origem.mod> <comando extra antes da exportação>
     if isfield(oo_, 'planner_objective_value'), ex.welfare = oo_.planner_objective_value; end
     if ~isempty(oo_.exo_simul), ex.exo_simul_first = oo_.exo_simul(1,:); end
     save('-mat7-binary', '../out_policy/${base}.mat', 'ex');
-    printf('gravado out_policy/${base}.mat\n');
-  " > "../out_policy/${base}.log" 2>&1 ) || { echo "FALHOU $m — ver out_policy/${base}.log"; tail -25 "out_policy/${base}.log"; return 0; }
+    printf('saved out_policy/${base}.mat\n');
+  " > "../out_policy/${base}.log" 2>&1 ) || { echo "FAILED $m, see out_policy/${base}.log"; tail -25 "out_policy/${base}.log"; return 0; }
   tail -1 "out_policy/${base}.log"
 }
 
-# A terceira chamada de osr no arquivo usa opt_algo=1 (fminunc), que no Octave exige o pacote
-# optim. A cópia a remove; as duas primeiras — csminwel, com e sem derivada analítica — ficam.
+# The third osr call in the file uses opt_algo=1 (fminunc), which in Octave requires the optim
+# package. The copy removes it and keeps the first two (csminwel, with and without the analytical
+# derivative).
 mkdir -p tmp_osr && grep -v "opt_algo=1" mods/ramsey/osr_example.mod > tmp_osr/osr_example.mod
 run tmp_osr/osr_example.mod ""
 rm -rf tmp_osr
@@ -64,4 +65,4 @@ sed 's/stoch_simul(order=1, irf=40, nograph);/stoch_simul(order=2, irf=40, nogra
 mkdir -p tmp_o2 && mv work_rbc_labortax_o2.mod tmp_o2/rbc_labortax_o2.mod
 run tmp_o2/rbc_labortax_o2.mod ""
 rm -rf tmp_o2 work
-echo "pronto."
+echo "done."

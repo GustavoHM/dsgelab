@@ -148,6 +148,21 @@ class SecondOrderSolution:
         paths.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
         return paths
 
+    def at_covariance(self, cov: Covariance) -> SecondOrderSolution:
+        """This solution if ``cov`` is the covariance it was computed at, else one solved at ``cov``.
+
+        ``g_ss`` and ``h_ss`` depend on the shock covariance. Combining them with draws or a
+        state covariance taken at another covariance would mix two economies, so every method
+        that accepts ``cov`` goes through here. The new solution uses the default step and
+        solver options of :func:`solve_second_order`.
+        """
+        if cov is None:
+            return self
+        Sigma = shock_covariance(self.model.shocks, cov)
+        if Sigma.shape == self.Sigma.shape and np.allclose(Sigma, self.Sigma, rtol=1e-12, atol=0.0):
+            return self
+        return solve_second_order(self.first, Sigma)
+
     # -- simulation ------------------------------------------------------
     def simulate(self, periods: int = 1000, cov: Covariance = None, *,
                  seed: int | None = None, burn: int = 200, pruning: bool = True,
@@ -161,8 +176,11 @@ class SecondOrderSolution:
         and the reason an unpruned second-order simulation cannot be trusted at
         any horizon that makes moments meaningful.
         """
+        other = self.at_covariance(cov)
+        if other is not self:
+            return other.simulate(periods, seed=seed, burn=burn, pruning=pruning, levels=levels)
         rng = np.random.default_rng(seed)
-        Sigma = shock_covariance(self.model.shocks, cov if cov is not None else self.Sigma)
+        Sigma = self.Sigma
         vals, vecs = np.linalg.eigh(Sigma)
         L = vecs @ np.diag(np.sqrt(np.maximum(vals, 0.0)))
         total = periods + burn
@@ -210,7 +228,10 @@ class SecondOrderSolution:
         expectations gives ``E k^s = (I - P)^{-1} (1/2 h_kk : V_f + 1/2 h_ss)``
         with ``V_f`` the first-order state covariance.
         """
-        Sigma = shock_covariance(self.model.shocks, cov if cov is not None else self.Sigma)
+        other = self.at_covariance(cov)
+        if other is not self:
+            return other.mean_correction()
+        Sigma = self.Sigma
         Q = self.Q if self.Q is not None else np.zeros((self.P.shape[0], self.model.n_shocks))
         Vf = solve_discrete_lyapunov(self.P, Q @ Sigma @ Q.T)
         nk = self.P.shape[0]
@@ -269,16 +290,17 @@ def solve_second_order(first: FirstOrderSolution, cov: Covariance = None, *, h: 
     first : FirstOrderSolution
         Output of :func:`dsgelab.solve`.
     cov : mapping, array or None
-        Shock covariance. It enters ONLY the risk corrections ``g_ss`` and
-        ``h_ss``; the quadratic terms are independent of it, which is why a
-        covariance sweep does not need the Sylvester equation solved again.
+        Shock covariance. It enters only the risk corrections ``g_ss`` and
+        ``h_ss``, and the quadratic terms are independent of it. Methods of the
+        solution that accept another covariance solve again at it
+        (:meth:`SecondOrderSolution.at_covariance`).
     h : float
         Step for the second differences.
     direct_limit : int
         Above this many unknowns (``n_vars * n_states**2``) the Sylvester
         equation is solved iteratively rather than by forming the dense matrix.
     hessian : array, optional
-        Precomputed second-derivative tensor, to reuse across a covariance sweep.
+        Precomputed second-derivative tensor, which a covariance sweep can pass to every call.
     """
     model = first.model
     sys_ = first.system

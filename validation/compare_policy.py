@@ -1,23 +1,24 @@
-"""compare_policy.py — regras simples ótimas, discrição e bem-estar, contra o Dynare.
+"""compare_policy.py: optimal simple rules, discretion and welfare, against Dynare.
 
-Todos os modelos são lidos por `dsgelab.from_mod` a partir dos arquivos do próprio Dynare, menos o
-RBC com imposto, escrito nesta pasta. O que se compara:
+Every model is read by `dsgelab.from_mod` from Dynare's own files, except the RBC with a tax,
+written in this folder. What is compared:
 
-  nk_osr_planner.mod   (escrito aqui)  osr com planner_objective: a perda é menos o bem-estar
-                       incondicional de 2ª ordem. Mesma conferência: a perda no ótimo do Dynare.
-  osr_example.mod      (tests/optimal_policy/OSR)  a função de perda do dsgelab no ótimo do Dynare,
-                       contra o valor que o Dynare reporta; e o ótimo do dsgelab, que tem de ter
-                       perda menor ou igual. Com Octave e Dynare à mão, a perda do PRÓPRIO Dynare
-                       no ponto do dsgelab também é calculada.
-  dennis_1.mod         (tests/discretionary_policy)  a regra de decisão sob discrição, como IRFs a
-                       cada choque, e o bem-estar incondicional e condicional.
-  nk_ramsey_model.mod  (tests/optimal_policy)  Ramsey lido do .mod, sem tradução à mão: estado
-                       estacionário com os multiplicadores, IRFs de 1ª ordem e bem-estar de 2ª.
-  rbc_labortax.mod     (escrito aqui)  bem-estar de 2ª ordem com um estoque de capital.
+  nk_osr_planner.mod   (written here)  osr with planner_objective, where the loss is minus
+                       second-order unconditional welfare. Same check: the loss at Dynare's optimum.
+  osr_example.mod      (tests/optimal_policy/OSR)  dsgelab's loss function at Dynare's optimum,
+                       against the value Dynare reports, and dsgelab's optimum, which has to have
+                       a smaller or equal loss. With Octave and Dynare at hand, Dynare's OWN loss
+                       at dsgelab's point is also computed.
+  dennis_1.mod         (tests/discretionary_policy)  the decision rule under discretion, as IRFs
+                       to each shock, and unconditional and conditional welfare.
+  nk_ramsey_model.mod  (tests/optimal_policy)  Ramsey read from the .mod, with no hand
+                       translation: steady state with the multipliers, first-order IRFs and
+                       second-order welfare.
+  rbc_labortax.mod     (written here)  second-order welfare with a capital stock.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_policy.sh      # exporta out_policy/<nome>.mat
+    bash run_policy.sh      # exports out_policy/<name>.mat
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.dynare import from_mod
 from dsgelab.model import set_params
 from dsgelab.optimal import discretionary_policy, osr, ramsey_model, ramsey_steady_state
@@ -118,7 +119,7 @@ def _dynare_loss_at(params: dict) -> float | None:
 def check_osr(with_dynare: bool) -> bool:
     ex = _load("osr_example")
     if ex is None:
-        print("osr_example: sem out_policy/osr_example.mat — rode run_policy.sh")
+        print("osr_example: no out_policy/osr_example.mat, run run_policy.sh")
         return False
     mf = from_mod(HERE / "mods" / "ramsey" / "osr_example.mod")
     dy_par = {k: float(getattr(ex.osr.optim_params, k)) for k in ex.osr.optim_params._fieldnames}
@@ -127,7 +128,7 @@ def check_osr(with_dynare: bool) -> bool:
 
     # 1. the loss function itself, at Dynare's point
     p = set_params(mf.params, dy_par)
-    sol = dk.solve(mf.model, p, steady=sf(p))
+    sol = dsg.solve(mf.model, p, steady=sf(p))
     V = sol.covariance(mf.cov) * np.outer(sol.coords.scale, sol.coords.scale)
     from dsgelab.optimal import _weight_matrix
     ours_at_dy = float(np.sum(_weight_matrix(mf.model.names, mf.optim_weights) * V))
@@ -138,20 +139,20 @@ def check_osr(with_dynare: bool) -> bool:
             cov=mf.cov, steady_fn=sf)
     better = r.loss <= dy_loss * (1 + 1e-12)
     print("OSR — osr_example.mod")
-    print(f"  perda do dsgelab no ótimo do Dynare   {ours_at_dy:.16f}")
-    print(f"  perda reportada pelo Dynare           {dy_loss:.16f}   desvio relativo {d_fun:.1e}")
-    print(f"  ótimo do dsgelab                      {r.loss:.16f}   "
-          f"{'menor ou igual' if better else 'MAIOR'} que o do Dynare")
+    print(f"  dsgelab loss at Dynare's optimum     {ours_at_dy:.16f}")
+    print(f"  loss reported by Dynare              {dy_loss:.16f}   relative deviation {d_fun:.1e}")
+    print(f"  dsgelab optimum                      {r.loss:.16f}   "
+          f"{'smaller or equal' if better else 'GREATER'} than Dynare's")
     for k in mf.osr_params:
         print(f"     {k:<11} dsgelab {r.params[k]:>12.6f}   Dynare {dy_par[k]:>12.6f}")
     ok = d_fun < 1e-10 and better
     if with_dynare:
         dl = _dynare_loss_at(r.params)
         if dl is None:
-            print("  (Octave/Dynare indisponíveis: a perda do Dynare no ponto do dsgelab não foi calculada)")
+            print("  (Octave/Dynare unavailable: Dynare's loss at dsgelab's point was not computed)")
         else:
             d2 = _rel(r.loss, dl)
-            print(f"  perda do PRÓPRIO Dynare no ótimo do dsgelab {dl:.16f}   desvio {d2:.1e}")
+            print(f"  Dynare's OWN loss at dsgelab's optimum {dl:.16f}   deviation {d2:.1e}")
             ok = ok and d2 < 1e-10
     return ok
 
@@ -159,7 +160,7 @@ def check_osr(with_dynare: bool) -> bool:
 def check_osr_welfare() -> bool:
     ex = _load("nk_osr_planner")
     if ex is None:
-        print("nk_osr_planner: sem out_policy/nk_osr_planner.mat — rode run_policy.sh")
+        print("nk_osr_planner: no out_policy/nk_osr_planner.mat, run run_policy.sh")
         return False
     mf = from_mod(HERE / "ramsey" / "nk_osr_planner.mod")
     dy_par = {k: float(getattr(ex.osr.optim_params, k)) for k in ex.osr.optim_params._fieldnames}
@@ -173,11 +174,11 @@ def check_osr_welfare() -> bool:
             cov=mf.cov, steady_fn=sf)
     d_fun = _rel(ours_at_dy, dy_loss)
     better = r.loss <= dy_loss * (1 + 1e-12)
-    print("\nOSR sobre o bem-estar — nk_osr_planner.mod (planner_objective, ordem 2)")
-    print(f"  perda do dsgelab no ótimo do Dynare   {ours_at_dy:.16f}")
-    print(f"  perda reportada pelo Dynare           {dy_loss:.16f}   desvio relativo {d_fun:.1e}")
-    print(f"  ótimo do dsgelab                      {r.loss:.16f}   "
-          f"{'menor ou igual' if better else 'MAIOR'} que o do Dynare")
+    print("\nOSR on welfare — nk_osr_planner.mod (planner_objective, order 2)")
+    print(f"  dsgelab loss at Dynare's optimum     {ours_at_dy:.16f}")
+    print(f"  loss reported by Dynare              {dy_loss:.16f}   relative deviation {d_fun:.1e}")
+    print(f"  dsgelab optimum                      {r.loss:.16f}   "
+          f"{'smaller or equal' if better else 'GREATER'} than Dynare's")
     for k in mf.osr_params:
         print(f"     {k:<11} dsgelab {r.params[k]:>12.6f}   Dynare {dy_par[k]:>12.6f}")
     return d_fun < 1e-10 and better
@@ -187,7 +188,7 @@ def check_osr_welfare() -> bool:
 def check_discretion() -> bool:
     ex = _load("dennis_1")
     if ex is None:
-        print("dennis_1: sem out_policy/dennis_1.mat — rode run_policy.sh")
+        print("dennis_1: no out_policy/dennis_1.mat, run run_policy.sh")
         return False
     mf = from_mod(HERE / "mods" / "ramsey" / "dennis_1.mod")
     ds = discretionary_policy(mf, params=mf.params, cov=mf.cov)
@@ -211,16 +212,16 @@ def check_discretion() -> bool:
     w_draw = ds.welfare(shock=u0)
     d_un = _rel(-w["unconditional"], un_dy)
     d_cond = _rel(-w_draw["conditional"], cond_dy)
-    print("\nDiscrição — dennis_1.mod")
-    print(f"  IRFs ({len(ex.endo_names)} variáveis x {len(ex.exo_names)} choques x {H})   "
-          f"desvio relativo máx {d_irf:.1e}")
-    print(f"  bem-estar incondicional  dsgelab {-w['unconditional']:.10f}   Dynare {un_dy:.10f}   "
+    print("\nDiscretion — dennis_1.mod")
+    print(f"  IRFs ({len(ex.endo_names)} variables x {len(ex.exo_names)} shocks x {H})   "
+          f"max relative deviation {d_irf:.1e}")
+    print(f"  unconditional welfare    dsgelab {-w['unconditional']:.10f}   Dynare {un_dy:.10f}   "
           f"{d_un:.1e}")
-    print(f"  bem-estar condicional    dsgelab {-w_draw['conditional']:.10f}   Dynare {cond_dy:.10f}   "
+    print(f"  conditional welfare      dsgelab {-w_draw['conditional']:.10f}   Dynare {cond_dy:.10f}   "
           f"{d_cond:.1e}")
-    print(f"     (com a primeira inovação da simulação do Dynare, que é o que ele usa; "
-          f"sem choque: {-w['conditional']:.10f})")
-    print(f"  iterações de Dennis: {ds.iterations}")
+    print(f"     (with the first innovation of Dynare's simulation, which is what it uses; "
+          f"without a shock: {-w['conditional']:.10f})")
+    print(f"  Dennis iterations: {ds.iterations}")
     # Dynare stops the Dennis iteration at sqrt(eps); that is the floor here.
     return d_irf < 1e-6 and d_un < 1e-8 and d_cond < 1e-8
 
@@ -229,7 +230,7 @@ def check_discretion() -> bool:
 def check_ramsey_mod() -> bool:
     ex = _load("nk_ramsey_model")
     if ex is None:
-        print("nk_ramsey_model: sem out_policy — rode run_policy.sh")
+        print("nk_ramsey_model: no out_policy, run run_policy.sh")
         return False
     mf = from_mod(HERE / "mods" / "ramsey" / "nk_ramsey_model.mod")
     m = ramsey_model(mf)
@@ -237,7 +238,7 @@ def check_ramsey_mod() -> bool:
     ys = dict(zip(ex.endo_names, np.atleast_1d(ex.ys).astype(float)))
     names = [v for v in ex.endo_names if v in m.names]
     d_ss = max(abs(ss.values[v] - ys[v]) for v in names)
-    sol = dk.solve(m, mf.params, steady=ss)
+    sol = dsg.solve(m, mf.params, steady=ss)
     sd = np.sqrt(np.diag(np.atleast_2d(ex.sigma_e)))
     d_irf = 0.0
     for j, e in enumerate(ex.exo_names):
@@ -251,20 +252,20 @@ def check_ramsey_mod() -> bool:
     un, c_ss, c_0 = _welfare_of(ex)
     d_w = max(_rel(w.unconditional, un), _rel(w.conditional, c_ss),
               _rel(w.conditional_zero_multipliers, c_0))
-    print("\nRamsey lido do .mod — nk_ramsey_model.mod")
-    print(f"  {len(names)} séries comparadas, multiplicadores incluídos (mesma numeração do Dynare)")
-    print(f"  estado estacionário  {d_ss:.1e}     IRFs de 1ª ordem  {d_irf:.1e}")
-    print(f"  bem-estar  incondicional {w.unconditional:.12f}  Dynare {un:.12f}")
-    print(f"             condicional   {w.conditional:.12f}  Dynare {c_ss:.12f}")
-    print(f"             multiplicadores zerados {w.conditional_zero_multipliers:.12f}  "
-          f"Dynare {c_0:.12f}   desvio relativo máx {d_w:.1e}")
+    print("\nRamsey read from the .mod — nk_ramsey_model.mod")
+    print(f"  {len(names)} series compared, multipliers included (same numbering as Dynare)")
+    print(f"  steady state  {d_ss:.1e}     first-order IRFs  {d_irf:.1e}")
+    print(f"  welfare    unconditional {w.unconditional:.12f}  Dynare {un:.12f}")
+    print(f"             conditional   {w.conditional:.12f}  Dynare {c_ss:.12f}")
+    print(f"             zero multipliers {w.conditional_zero_multipliers:.12f}  "
+          f"Dynare {c_0:.12f}   max relative deviation {d_w:.1e}")
     return d_ss < 1e-9 and d_irf < 1e-10 and d_w < 1e-10
 
 
 def check_welfare_capital() -> bool:
     ex = _load("rbc_labortax_o2")
     if ex is None:
-        print("rbc_labortax_o2: sem out_policy — rode run_policy.sh")
+        print("rbc_labortax_o2: no out_policy, run run_policy.sh")
         return False
     sys.path.insert(0, str(HERE))
     import compare_ramsey
@@ -274,18 +275,19 @@ def check_welfare_capital() -> bool:
     un, c_ss, c_0 = _welfare_of(ex)
     d_w = max(_rel(w.unconditional, un), _rel(w.conditional, c_ss),
               _rel(w.conditional_zero_multipliers, c_0))
-    print("\nBem-estar com capital — rbc_labortax.mod, ordem 2")
-    print(f"  incondicional {w.unconditional:.12f}  Dynare {un:.12f}")
-    print(f"  condicional   {w.conditional:.12f}  Dynare {c_ss:.12f}   desvio relativo máx {d_w:.1e}")
+    print("\nWelfare with capital — rbc_labortax.mod, order 2")
+    print(f"  unconditional {w.unconditional:.12f}  Dynare {un:.12f}")
+    print(f"  conditional   {w.conditional:.12f}  Dynare {c_ss:.12f}   max relative deviation {d_w:.1e}")
     return d_w < 1e-10
 
 
 def main() -> int:
-    with_dynare = "--sem-dynare" not in sys.argv
-    res = {"OSR": check_osr(with_dynare), "OSR sobre o bem-estar": check_osr_welfare(),
-           "discrição": check_discretion(),
-           "Ramsey do .mod": check_ramsey_mod(), "bem-estar com capital": check_welfare_capital()}
-    print("\n" + "  ".join(f"{k}: {'OK' if v else 'FALHOU'}" for k, v in res.items()))
+    # --no-dynare skips the Octave call; --sem-dynare is kept as an alias
+    with_dynare = not {"--no-dynare", "--sem-dynare"} & set(sys.argv)
+    res = {"OSR": check_osr(with_dynare), "OSR on welfare": check_osr_welfare(),
+           "discretion": check_discretion(),
+           "Ramsey from the .mod": check_ramsey_mod(), "welfare with capital": check_welfare_capital()}
+    print("\n" + "  ".join(f"{k}: {'OK' if v else 'FAILED'}" for k, v in res.items()))
     return 0 if all(res.values()) else 1
 
 

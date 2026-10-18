@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# run_examples.sh — roda no Dynare cada .mod de mods/ e mods/examples/ e exporta o que
-# compare_import.py precisa: estado estacionário (oo_.dr.ys), parâmetros, covariância dos choques,
-# IRFs e momentos teóricos.
+# run_examples.sh: runs in Dynare each .mod of mods/ and mods/examples/ and exports what
+# compare_import.py needs: steady state (oo_.dr.ys), parameters, shock covariance, IRFs and
+# theoretical moments.
 #
-# Uso:  bash run_examples.sh [nome ...]      (sem argumentos: todos)
+# Usage:  bash run_examples.sh [name ...]      (no arguments: all)
 #
-# Cada .mod é reduzido por strip_mod.py ao que declara o modelo, e recebe o mesmo
-# stoch_simul(order=1, irf=40, periods=0). Os arquivos auxiliares em MATLAB que alguns exemplos
-# chamam (o estado estacionário do NK_baseline, o auxiliar do example3) vão junto.
+# Each .mod is cut down by strip_mod.py to what declares the model, and receives the same
+# stoch_simul(order=1, irf=40, periods=0). The MATLAB helper files that some examples call
+# (NK_baseline's steady state, example3's helper) are copied along.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -20,7 +20,7 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 FILES=()
 if [ $# -eq 0 ]; then
@@ -50,9 +50,9 @@ for src in "${FILES[@]}"; do
     ex.irfs        = oo_.irfs;
     if isfield(oo_, 'var'), ex.variance = oo_.var; end
     save('-mat7-binary', '../out_import/${base}.mat', 'ex');
-    printf('gravado out_import/${base}.mat\n');
-  " > "../out_import/${base}.log" 2>&1 ) || { echo "FALHOU $m — ver out_import/${base}.log"; tail -20 "out_import/${base}.log"; continue; }
+    printf('saved out_import/${base}.mat\n');
+  " > "../out_import/${base}.log" 2>&1 ) || { echo "FAILED $m, see out_import/${base}.log"; tail -20 "out_import/${base}.log"; continue; }
   tail -1 "out_import/${base}.log"
 done
 rm -rf work
-echo "pronto."
+echo "done."

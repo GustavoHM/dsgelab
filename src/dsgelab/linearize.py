@@ -180,8 +180,8 @@ def second_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: An
     n_eq = f0.size
 
     # Cache the 2m single-coordinate displacements: every mixed partial reuses
-    # them, and without the cache the routine costs 4 m^2 evaluations instead of
-    # 2 m^2 + 2 m.
+    # them, and without the cache the routine costs 3 m^2 - m + 1 evaluations instead
+    # of m^2 + m + 1.
     plus = np.empty((m, n_eq))
     minus = np.empty((m, n_eq))
     for i in range(m):
@@ -221,7 +221,8 @@ def third_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any
     evaluations and divides by the CUBE of the step: for a model with 19 variables and 5 shocks
     that is eighty thousand evaluations, and less than half of the digits survive. Differentiating
     the Hessian costs ``2m`` evaluations of it, and when the Hessian is analytic, as the symbolic
-    front end supplies it, the result inherits that exactness in a single central difference.
+    front end supplies it, a single central difference of it leaves only the O(h^2) truncation
+    error of that difference.
 
     The outer step ``h`` is larger than the inner ``h_hess`` on purpose: differentiating an object
     that was itself obtained by differences needs a step that dominates that object's noise, not a

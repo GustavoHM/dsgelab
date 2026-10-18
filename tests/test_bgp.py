@@ -10,7 +10,7 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.dynare import DynareImportError, from_mod  # noqa: E402
 
 # An RBC with labour-augmenting technology growing at the factor g, written in levels.
@@ -86,13 +86,13 @@ def test_an_unbalanced_trend_is_refused():
 
 
 def test_the_growth_path_of_a_solow_model_in_levels():
-    m = dk.from_equations(
+    m = dsg.from_equations(
         ["E(+1) = gE*E", "N(+1) = gN*N", "y = k**alpha*(E*N)**(1-alpha)",
          "k(+1) = (1-delta)*k + s*y"],
         states=["E", "N", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s",
                                                                      "gE", "gN"])
     p = dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01, gN=1.005)
-    r = dk.balanced_growth(m, p, seed=3)
+    r = dsg.balanced_growth(m, p, seed=3)
     assert r.success and not r.degenerate
     G = p["gE"] * p["gN"]
     assert r.growth["y"] == pytest.approx(G, rel=1e-12)

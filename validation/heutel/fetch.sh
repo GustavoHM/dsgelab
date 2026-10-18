@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# fetch.sh — baixa os arquivos MATLAB de Heutel (2012) para original/.
+# fetch.sh: downloads Heutel's (2012) MATLAB files to original/.
 #
-# A cópia pública está no repositório institucional da Georgia State University
-# (scholarworks.gsu.edu, item 9a01aa68-89c0-4e66-b7bd-9f09606d259c). Os arquivos continuam
-# atribuídos a Garth Heutel e não são versionados aqui. Os seis .m são idênticos, byte a byte, aos
-# que a validação usou (source-sha256.json); o ReadMe.txt público é uma versão anterior, de março
-# de 2011, que descreve só os arquivos MATLAB.
+# The public copy is in Georgia State University's institutional repository
+# (scholarworks.gsu.edu, item 9a01aa68-89c0-4e66-b7bd-9f09606d259c). The files remain attributed
+# to Garth Heutel and are not under version control here. The six .m files are identical, byte for
+# byte, to the ones the validation used (source-sha256.json). The public ReadMe.txt is an earlier
+# version, from March 2011, that describes only the MATLAB files.
 set -euo pipefail
 cd "$(dirname "$0")"
 

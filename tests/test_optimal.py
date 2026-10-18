@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.optimal import (RamseyError, ramsey_model, ramsey_multipliers,
                              ramsey_steady_state)
 
@@ -29,7 +29,7 @@ def _nk(**kw):
 def _nk_irf(periods=30):
     m = _nk()
     ss = ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), NK_PARAMS)
-    return dk.solve(m, NK_PARAMS, steady=ss).irf("e", size=1.0, periods=periods,
+    return dsg.solve(m, NK_PARAMS, steady=ss).irf("e", size=1.0, periods=periods,
                                                   percent=False)
 
 
@@ -85,7 +85,7 @@ def test_efficient_economy_keeps_the_tax_at_zero():
     ss = ramsey_steady_state(m, RBC_GUESS, RBC_PARAMS, positive=["c", "n", "k"])
     assert abs(ss.values["tau"]) < 1e-12
     assert abs(ss.values["MULT_1"]) < 1e-12 and abs(ss.values["MULT_2"]) < 1e-12
-    irf = dk.solve(m, RBC_PARAMS, steady=ss).irf("e", size=0.01, periods=30, levels=True)
+    irf = dsg.solve(m, RBC_PARAMS, steady=ss).irf("e", size=0.01, periods=30, levels=True)
     assert np.max(np.abs(irf["tau"])) < 1e-12
     assert np.max(np.abs(irf["MULT_1"])) < 1e-12
 
@@ -97,7 +97,7 @@ def test_auxiliary_formulation_has_the_same_solution():
     for aux in ("auto", "always"):
         m = _rbc(auxiliary=aux)
         ss = ramsey_steady_state(m, RBC_GUESS, RBC_PARAMS, positive=["c", "n", "k"])
-        irf = dk.solve(m, RBC_PARAMS, steady=ss).irf("e", size=0.01, periods=30, levels=True)
+        irf = dsg.solve(m, RBC_PARAMS, steady=ss).irf("e", size=0.01, periods=30, levels=True)
         out.append((m, irf))
     assert out[0][0].ramsey["auxiliary"] == []
     assert out[1][0].ramsey["auxiliary"] == ["FOC_k"]

@@ -1,25 +1,25 @@
-"""compare_estimation.py — estimação, suavização, decomposição e previsão, contra o Dynare.
+"""compare_estimation.py: estimation, smoothing, decomposition and forecasting, against Dynare.
 
-O caso central é o fs2000.mod da pasta examples/ do Dynare (Schorfheide, 2000): modelo, priors e
-dados como estão, lidos por `from_mod` (o `estimated_params`, o `varobs` e as opções `loglinear`
-e `logdata` viram um `EstimationProblem`). Os dados são os que o Dynare montou a partir do
-fs2000_data.m, exportados por run_estimation.sh.
+The central case is fs2000.mod from Dynare's examples/ folder (Schorfheide, 2000), with model,
+priors and data as they are, read by `from_mod` (the `estimated_params`, the `varobs` and the
+`loglinear` and `logdata` options become an `EstimationProblem`). The data are the ones Dynare
+assembled from fs2000_data.m, exported by run_estimation.sh.
 
-  1. No ponto inicial (as médias a priori, como o Dynare o define): verossimilhança, densidade a
-     priori, núcleo da posterior; variáveis e choques suavizados; a previsão de 8 períodos com
-     bandas de 90%; shock_decomposition e realtime_shock_decomposition.
-  2. A moda da posterior: o valor do núcleo (o do dsgelab tem de ser maior ou igual), os
-     parâmetros, e a aproximação de Laplace — com a covariância que o PRÓPRIO Dynare reporta, a
-     fórmula tem de dar o número do Dynare; com a Hessiana do dsgelab, a diferença é a das duas
-     Hessianas numéricas.
-  3. Metropolis-Hastings, 2 cadeias de 10 000 e mh_jscale 0,8, como no Dynare: as médias a
-     posteriori, em unidades do erro de Monte Carlo conjunto das duas cadeias, e a média
-     harmônica modificada. (--sem-mh pula esta parte, que leva alguns minutos.)
-  4. O filtro difuso: estimation/unitroot.mod, escrito aqui, um nível de preços observado.
-     Verossimilhança em dois pontos e o suavizador.
-  5. A previsão condicional: tests/conditional_forecasts/1/fs2000_cal.mod do Dynare.
+  1. At the initial point (the prior means, as Dynare defines it): likelihood, prior density,
+     posterior kernel, smoothed variables and shocks, the 8-period forecast with 90% bands,
+     shock_decomposition and realtime_shock_decomposition.
+  2. The posterior mode: the value of the kernel (dsgelab's has to be greater or equal), the
+     parameters, and the Laplace approximation. With the covariance that Dynare ITSELF reports,
+     the formula has to give Dynare's number. With dsgelab's Hessian, the difference is that
+     between the two numerical Hessians.
+  3. Metropolis-Hastings, 2 chains of 10,000 and mh_jscale 0.8, as in Dynare: the posterior
+     means, in units of the joint Monte Carlo error of the two chains, and the modified harmonic
+     mean. (--no-mh, or its alias --sem-mh, skips this part, which takes a few minutes.)
+  4. The diffuse filter: estimation/unitroot.mod, written here, with an observed price level.
+     Likelihood at two points, and the smoother.
+  5. The conditional forecast: Dynare's tests/conditional_forecasts/1/fs2000_cal.mod.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
     bash run_estimation.sh
 """
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.dynare import from_mod
 from dsgelab.estimation import metropolis_hastings, posterior_mode
 from dsgelab.kalman import forecast, realtime_shock_decomposition, shock_decomposition
@@ -64,7 +64,7 @@ def _ok(flag):
 def check_point() -> bool:
     ex = _load("fs2000_calib")
     if ex is None:
-        print("fs2000_calib: rode run_estimation.sh")
+        print("fs2000_calib: run run_estimation.sh")
         return False
     mf, pb = _fs2000(ex)
     names = _names(ex.estim_names)
@@ -112,12 +112,12 @@ def check_point() -> bool:
                     float(np.max(np.abs(dec["total"][v] - z[i, ne + 1]))))
         d_rt = max(d_rt, float(np.max(np.abs(rt["initial"][v] - pool[i, ne]))),
                    float(np.max(np.abs(rt["total"][v] - pool[i, ne + 1]))))
-    print("fs2000 — no ponto inicial (médias a priori)")
-    print(f"  ponto inicial igual ao do Dynare              {same_start}")
-    print(f"  verossimilhança  {ll:.10f}   Dynare {float(ex.loglik):.10f}   {d_ll:.1e}")
-    print(f"  log do prior     {lp:.10f}   Dynare {float(ex.logpost) - float(ex.loglik):.10f}   {d_lp:.1e}")
-    print(f"  variáveis suavizadas {d_sv:.1e}   choques suavizados {d_sh:.1e}")
-    print(f"  previsão: média {d_fm:.1e}, bandas de 90% {d_fb:.1e}")
+    print("fs2000 — at the initial point (prior means)")
+    print(f"  initial point equal to Dynare's              {same_start}")
+    print(f"  likelihood       {ll:.10f}   Dynare {float(ex.loglik):.10f}   {d_ll:.1e}")
+    print(f"  log prior        {lp:.10f}   Dynare {float(ex.logpost) - float(ex.loglik):.10f}   {d_lp:.1e}")
+    print(f"  smoothed variables {d_sv:.1e}   smoothed shocks {d_sh:.1e}")
+    print(f"  forecast: mean {d_fm:.1e}, 90% bands {d_fb:.1e}")
     print(f"  shock_decomposition {d_dec:.1e}   realtime_shock_decomposition {d_rt:.1e}")
     return (same_start and d_ll < 1e-8 and d_lp < 1e-10 and d_sv < 1e-12 and d_sh < 1e-12
             and d_fm < 1e-12 and d_fb < 1e-7 and d_dec < 1e-12 and d_rt < 1e-12)
@@ -126,7 +126,7 @@ def check_point() -> bool:
 def check_mode():
     ex = _load("fs2000_mode")
     if ex is None:
-        print("fs2000_mode: rode run_estimation.sh")
+        print("fs2000_mode: run run_estimation.sh")
         return False, None, None
     exc = _load("fs2000_calib")
     mf, pb = _fs2000(exc)
@@ -138,16 +138,16 @@ def check_mode():
     lap_formula = float(ex.log_density) + 0.5 * k * math.log(2 * math.pi) \
         + 0.5 * np.linalg.slogdet(V)[1]
     lap_dy = float(ex.marginal.LaplaceApproximation)
-    print("\nfs2000 — moda da posterior")
-    print(f"  núcleo da posterior  dsgelab {m.log_posterior:.8f}   Dynare {float(ex.log_density):.8f}"
-          f"   ({'maior ou igual' if m.log_posterior >= float(ex.log_density) - 1e-9 else 'MENOR'})")
+    print("\nfs2000 — posterior mode")
+    print(f"  posterior kernel     dsgelab {m.log_posterior:.8f}   Dynare {float(ex.log_density):.8f}"
+          f"   ({'greater or equal' if m.log_posterior >= float(ex.log_density) - 1e-9 else 'SMALLER'})")
     for n in pb.names:
         print(f"     {n:<11} dsgelab {m.values[n]:>10.6f} ± {m.std[n]:.6f}   "
               f"Dynare {dmode[n]:>10.6f}")
-    print(f"  Laplace com a covariância do Dynare  {lap_formula:.8f}   Dynare {lap_dy:.8f}"
+    print(f"  Laplace with Dynare's covariance    {lap_formula:.8f}   Dynare {lap_dy:.8f}"
           f"   {abs(lap_formula - lap_dy):.1e}")
-    print(f"  Laplace com a Hessiana do dsgelab    {m.laplace:.6f}   (diferença {m.laplace - lap_dy:+.3f}:"
-          f" as duas Hessianas numéricas)")
+    print(f"  Laplace with dsgelab's Hessian      {m.laplace:.6f}   (difference {m.laplace - lap_dy:+.3f}:"
+          f" the two numerical Hessians)")
     rel = max(abs(m.values[n] - dmode[n]) / m.std[n] for n in pb.names)
     ok = (m.log_posterior >= float(ex.log_density) - 1e-9 and abs(lap_formula - lap_dy) < 1e-8
           and rel < 0.05 and abs(m.laplace - lap_dy) < 0.1)
@@ -157,7 +157,7 @@ def check_mode():
 def check_mh(pb, mode) -> bool:
     ex = _load("fs2000_mh")
     if ex is None:
-        print("fs2000_mh: rode run_estimation.sh")
+        print("fs2000_mh: run run_estimation.sh")
         return False
     mh = metropolis_hastings(pb, mode, draws=10000, chains=2, scale=0.8, seed=1)
     pm = ex.posterior_mean
@@ -170,8 +170,8 @@ def check_mh(pb, mode) -> bool:
     ess = mh.ess()
     X = mh.draws
     ours = mh.mean()
-    print("\nfs2000 — Metropolis-Hastings, 2 x 10 000, mh_jscale 0,8")
-    print(f"  aceitação {np.round(mh.acceptance, 3)}   R-hat máx {max(mh.rhat().values()):.4f}")
+    print("\nfs2000 — Metropolis-Hastings, 2 x 10,000, mh_jscale 0.8")
+    print(f"  acceptance {np.round(mh.acceptance, 3)}   max R-hat {max(mh.rhat().values()):.4f}")
     worst = 0.0
     for i, n in enumerate(mh.names):
         key = ("shocks_std", n[7:]) if n.startswith("stderr ") else ("parameters", n)
@@ -181,14 +181,14 @@ def check_mh(pb, mode) -> bool:
         print(f"     {n:<11} dsgelab {ours[n]:>10.6f}   Dynare {dyn[key]:>10.6f}   z {zval:+.2f}")
     mhm = mh.log_marginal_mhm()
     mhm_dy = float(ex.marginal.ModifiedHarmonicMean)
-    print(f"  média harmônica modificada  dsgelab {mhm:.4f}   Dynare {mhm_dy:.4f}")
+    print(f"  modified harmonic mean  dsgelab {mhm:.4f}   Dynare {mhm_dy:.4f}")
     return worst < 4.0 and abs(mhm - mhm_dy) < 0.3
 
 
 def check_unitroot() -> bool:
     ex = _load("unitroot")
     if ex is None:
-        print("unitroot: rode run_estimation.sh")
+        print("unitroot: run run_estimation.sh")
         return False
     D = np.asarray(ex.data)
     varobs = _names(ex.varobs)
@@ -210,20 +210,20 @@ def check_unitroot() -> bool:
         j = sol.model.position(v)
         d_s = max(d_s, float(np.max(np.abs(sol.coords.center[j] + sol.coords.scale[j] * hat[v]
                                              - np.asarray(getattr(ex.sv, v))))))
-    print("\nFiltro difuso — estimation/unitroot.mod")
-    print(f"  verossimilhança em dois pontos  {d:.1e}   suavizador {d_s:.1e}   "
-          f"(períodos difusos: {pb.filter(th).diffuse_periods})")
+    print("\nDiffuse filter — estimation/unitroot.mod")
+    print(f"  likelihood at two points  {d:.1e}   smoother {d_s:.1e}   "
+          f"(diffuse periods: {pb.filter(th).diffuse_periods})")
     return d < 1e-8 and d_s < 1e-12
 
 
 def check_conditional_forecast() -> bool:
     ex = _load("condfc")
     if ex is None:
-        print("condfc: rode run_estimation.sh")
+        print("condfc: run run_estimation.sh")
         return False
     mf = from_mod(HERE / "mods" / "forecast" / "fs2000_cal.mod")
     ss = mf.steady_state()
-    sol = dk.solve(mf.model, mf.params, steady=ss)
+    sol = dsg.solve(mf.model, mf.params, steady=ss)
     H, nan = 40, np.nan
     cf = sol.conditional_forecast(
         {"gy_obs": np.r_[[0.01, -0.02, 0, 0, 0], [nan] * (H - 5)],
@@ -234,19 +234,20 @@ def check_conditional_forecast() -> bool:
         if v in mf.endogenous:
             dy = np.asarray(getattr(ex.cond, v), float)
             d = max(d, float(np.max(np.abs(cf[v] - dy))) / max(1.0, float(np.max(np.abs(dy)))))
-    print("\nPrevisão condicional — tests/conditional_forecasts/1/fs2000_cal.mod")
-    print(f"  todas as variáveis, 40 períodos   desvio relativo máx {d:.1e}")
+    print("\nConditional forecast — tests/conditional_forecasts/1/fs2000_cal.mod")
+    print(f"  all variables, 40 periods   max relative deviation {d:.1e}")
     return d < 1e-10
 
 
 def main() -> int:
-    res = {"ponto inicial": check_point()}
+    res = {"initial point": check_point()}
     ok_mode, pb, mode = check_mode()
-    res["moda e Laplace"] = ok_mode
-    if "--sem-mh" not in sys.argv and pb is not None:
+    res["mode and Laplace"] = ok_mode
+    # --no-mh skips the Metropolis part; --sem-mh is kept as an alias
+    if not {"--no-mh", "--sem-mh"} & set(sys.argv) and pb is not None:
         res["Metropolis"] = check_mh(pb, mode)
-    res["filtro difuso"] = check_unitroot()
-    res["previsão condicional"] = check_conditional_forecast()
+    res["diffuse filter"] = check_unitroot()
+    res["conditional forecast"] = check_conditional_forecast()
     print("\n" + "  ".join(f"{k}: {_ok(v)}" for k, v in res.items()))
     return 0 if all(res.values()) else 1
 

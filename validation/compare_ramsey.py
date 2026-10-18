@@ -1,40 +1,42 @@
-"""compare_ramsey.py — o planejador de Ramsey do dsgelab contra o ramsey_model do Dynare.
+"""compare_ramsey.py: dsgelab's Ramsey planner against Dynare's ramsey_model.
 
-Dois modelos:
+Two models:
 
-  nk_linear         o novo-keynesiano de livro-texto (Galí, cap. 5), escrito nesta pasta. Tem
-                    resposta analítica, e tests/test_optimal.py já a confere; aqui o Dynare é a
-                    terceira testemunha.
-  nk_ramsey_model   do conjunto de testes do próprio Dynare (tests/optimal_policy). Não linear:
-                    Phillips de Rotemberg, Euler com c(+1) e pai(+1), produtividade em exp(a). As
-                    derivadas das restrições em relação às variáveis de t+1 dependem das de t, de
-                    modo que a CPO precisa de cópias defasadas — é o caso que o linear não exercita.
+  nk_linear         the textbook New Keynesian model (Galí, ch. 5), written in this folder. It has
+                    an analytical answer, which tests/test_optimal.py already checks. Here Dynare
+                    is the third witness.
+  nk_ramsey_model   from Dynare's own test suite (tests/optimal_policy). It is nonlinear, with a
+                    Rotemberg Phillips curve, an Euler equation in c(+1) and pai(+1), and
+                    productivity in exp(a). The derivatives of the constraints with respect to the
+                    t+1 variables depend on those of t, so the FOC needs lagged copies. This is the
+                    case that the linear model does not exercise.
 
-O que se compara: o estado estacionário e as respostas a impulso, 40 períodos, em níveis, de todas
-as variáveis privadas E dos multiplicadores. O Dynare numera um multiplicador por equação, inclusive
-as dos processos exógenos; o dsgelab só os das restrições. O MULT_j do dsgelab é o da j-ésima
-restrição, e é comparado ao multiplicador que o Dynare dá à MESMA equação. Os dois escrevem o
-lagrangiano com o mesmo sinal, e os valores batem sem troca de sinal.
+What is compared: the steady state and the impulse responses, 40 periods, in levels, of every
+private variable AND of the multipliers. Dynare numbers one multiplier per equation, including
+those of the exogenous processes, and dsgelab only those of the constraints. dsgelab's MULT_j
+belongs to the j-th constraint, and it is compared with the multiplier that Dynare gives to the
+SAME equation. Both write the Lagrangian with the same sign, and the values agree without a sign
+flip.
 
-O estacionário de referência é oo_.dr.ys, o ponto em que o Dynare linearizou. oo_.steady_state não
-serve: no nk_ramsey_model ele guarda o initval (c = n = 0.9671684882), que erra a raiz exata
-c = 0.875^(1/4) na sétima casa.
+The reference steady state is oo_.dr.ys, the point at which Dynare linearised.
+oo_.steady_state cannot be used, because in nk_ramsey_model it holds the initval
+(c = n = 0.9671684882), which misses the exact root c = 0.875^(1/4) in the seventh decimal place.
 
-O .mod do Dynare não fixa a ordem, e a omissão do Dynare é 2: as IRFs dele seriam generalizadas, de
-segunda ordem. run_ramsey.sh fixa order=1 antes de reexecutar o stoch_simul.
+Dynare's .mod does not set the order, and Dynare's default is 2, so its IRFs would be generalised
+second-order ones. run_ramsey.sh sets order=1 before rerunning stoch_simul.
 
-  rbc_labortax      um RBC com imposto sobre o trabalho como instrumento, escrito nesta pasta. O
-                    equilíbrio competitivo com tau = 0 é eficiente, e o planejador o mantém em zero;
-                    o que o caso exercita é a condição do planejador para um ESTOQUE, k(+1),
-                    escolhido em t e válida em esperança.
+  rbc_labortax      an RBC with a labour tax as the instrument, written in this folder. The
+                    competitive equilibrium with tau = 0 is efficient, and the planner keeps tau
+                    at zero. The case exercises the planner's condition for a STOCK, k(+1), chosen
+                    in t and holding in expectation.
 
-Datação: o k do Dynare em predetermined_variables entra nas equações como o do dsgelab, mas a
-série que o Dynare reporta é a da variável redatada, k(+1). Como em compare.py, as variáveis
-predeterminadas cuja linha de Q é nula são comparadas com um período de defasagem.
+Timing. Dynare's k in predetermined_variables enters the equations as dsgelab's does, but the
+series Dynare reports is that of the redated variable, k(+1). As in compare.py, the predetermined
+variables whose row of Q is zero are compared with a lag of one period.
 
-Pré-requisitos:
-    bash fetch.sh          # baixa mods/ramsey/nk_ramsey_model.mod
-    bash run_ramsey.sh     # roda o Dynare e exporta out/<nome>.mat
+Prerequisites:
+    bash fetch.sh          # downloads mods/ramsey/nk_ramsey_model.mod
+    bash run_ramsey.sh     # runs Dynare and exports out/<name>.mat
 """
 from __future__ import annotations
 
@@ -43,7 +45,7 @@ from pathlib import Path
 
 import numpy as np
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.optimal import ramsey_model, ramsey_steady_state
 
 HERE = Path(__file__).resolve().parent
@@ -65,8 +67,8 @@ def nk_linear():
 
 
 def nk_ramsey_model():
-    # Tradução literal de tests/optimal_policy/nk_ramsey_model.mod. A(-1) vira o estado `a`
-    # com a(+1) = rho*a + u; o resto é escrito como no .mod, com ^ trocado por **.
+    # Literal translation of tests/optimal_policy/nk_ramsey_model.mod. A(-1) becomes the state
+    # `a` with a(+1) = rho*a + u. The rest is written as in the .mod, with ^ replaced by **.
     model = ramsey_model(
         ["a(+1) = rho*a + u",
          "1/c = beta*(1/c(+1))*(r/pai(+1))",
@@ -83,8 +85,8 @@ def nk_ramsey_model():
 
 
 def rbc_labortax():
-    # O k do dsgelab é o estoque disponível em t; o .mod declara predetermined_variables k,
-    # que é a mesma datação nas equações. a(-1) vira o estado `a`.
+    # dsgelab's k is the stock available in t. The .mod declares predetermined_variables k,
+    # which is the same timing in the equations. a(-1) becomes the state `a`.
     model = ramsey_model(
         ["1/c = beta*(1/c(+1))*(alpha*exp(a(+1))*k(+1)**(alpha-1)*n(+1)**(1-alpha) + 1 - delta)",
          "chi*n**phi*c = (1-tau)*(1-alpha)*exp(a)*k**alpha*n**(-alpha)",
@@ -121,14 +123,14 @@ def compare(name: str) -> dict:
     private = model.ramsey["private"]
 
     ss = ramsey_steady_state(model, guess, params)
-    # nome no dsgelab -> nome no Dynare: as privadas e, para MULT_j, o da mesma equação
+    # name in dsgelab -> name in Dynare: the private variables and, for MULT_j, the same equation's
     names = {v: v for v in private}
     for j, eq in enumerate(model.ramsey["constraint_index"]):
         names[model.ramsey["multipliers"][j]] = f"MULT_{eq + 1}"
     dy_ss = dict(zip(ex.endo_names, np.atleast_1d(ex.ys)))
     err_ss = max(abs(ss.values[v] - dy_ss[d]) for v, d in names.items())
 
-    sol = dk.solve(model, params, steady=ss)
+    sol = dsg.solve(model, params, steady=ss)
     sd = np.sqrt(np.diag(np.atleast_2d(ex.sigma_e)))
     shifted = {s for i, s in enumerate(model.states)
                if s in private and not np.any(sol.Q[i])}
@@ -156,13 +158,13 @@ def main() -> int:
     for name in ALL:
         r = compare(name)
         if r.get("missing"):
-            print(f"{name:<17} sem out/{name}.mat — rode fetch.sh e run_ramsey.sh")
+            print(f"{name:<17} no out/{name}.mat, run fetch.sh and run_ramsey.sh")
             bad += 1
             continue
-        flag = "OK" if r["ok"] else "FALHOU"
-        print(f"{name:<17} e.e. {r['ss']:.1e}   IRFs {r['irf']:.1e}   "
-              f"({r['n_cmp']} séries; modelo com {r['n_vars']} variáveis, {r['added']} do "
-              f"planejador)   {flag}")
+        flag = "OK" if r["ok"] else "FAILED"
+        print(f"{name:<17} s.s. {r['ss']:.1e}   IRFs {r['irf']:.1e}   "
+              f"({r['n_cmp']} series; model with {r['n_vars']} variables, {r['added']} from the "
+              f"planner)   {flag}")
         bad += not r["ok"]
     return 1 if bad else 0
 

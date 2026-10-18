@@ -1,280 +1,312 @@
 # Roadmap
 
-Plano revisto em 11 de outubro de 2026. O objetivo é deixar o `dsgelab` **o mais completo
-possível**: a **versão 1.0** cobre o que as ferramentas de referência oferecem — Dynare,
-MacroModelling.jl, gEconpy, dolo, sequence-jacobian — e ainda os buracos que os modelos aplicados
-revelaram nos objetos que o pacote já tem. O **release público** acontece na **versão 0.5**.
+*Versão em português: [ROADMAP.pt-BR.md](ROADMAP.pt-BR.md).*
 
-Este plano substitui o de 25 de setembro, que deixava de fora, de propósito, a estimação completa,
-os métodos globais, os agentes heterogêneos, o estado estacionário analítico declarado e as
-defasagens e avanços no texto, apontando para as ferramentas que já os têm. Em 11 de outubro a
-decisão foi revertida: tudo isso entra. Os argumentos da exclusão não foram descartados. Viraram
-**condições de desenho** dos itens correspondentes, registradas junto de cada um.
+Plan revised on 11 October 2026 and updated on 17 October 2026. The goal is for `dsgelab` to be
+**as complete as possible**. **Version 1.0** covers what the reference tools offer (Dynare,
+MacroModelling.jl, gEconpy, dolo, sequence-jacobian) and fills the gaps that applied models
+exposed in the objects the package already has. The **public release** happens at **version 0.5**.
 
-A comparação item a item com as outras ferramentas está em
-[`docs/comparison.md`](docs/comparison.md). O `cgelab` avança pelos mesmos marcos, no roadmap dele:
-"0.3" quer dizer a 0.3 de cada um.
+This plan replaces the one of 25 September, which left out full estimation, global methods,
+heterogeneous agents, the declared analytic steady state and lags and leads in text equations. For
+these items, the earlier plan pointed to the tools that already have them. On 11 October that
+decision was reversed, and all of these items entered the plan. The arguments for the exclusion
+became **design requirements** of the corresponding items, recorded next to each one.
 
-## Onde estamos
+The item-by-item comparison with the other tools is in [`docs/comparison.md`](docs/comparison.md).
+`cgelab` moves through the same milestones in its own roadmap, so "0.3" means the 0.3 of each.
 
-Versão 0.4.0, em `https://github.com/GustavoHM/dsgelab`; reúne os marcos 0.2 a 0.4. Estado
-estacionário com positividade e âncora externa, em forma fechada conferida, com equações de
-calibração e homotopia; Klein/QZ com Blanchard–Kahn imposto e, opcionalmente, o critério de raiz
-unitária do Dynare; impulso, momentos e decomposição de variância; segunda ordem com correção de
-risco, média ergódica em forma fechada, simulação podada e impulso generalizado; terceira ordem com o
-bloco cúbico e a inclinação de risco; previsão perfeita com trajetória anunciada de parâmetros e de
-inovações, e com erros de expectativa; **restrições ocasionalmente ativas** (OccBin); **trajetória
-estendida**, determinística e estocástica; **modelos em níveis**, com tendências declaradas e o
-caminho de crescimento balanceado; decomposição histórica e previsão condicional; calibração conjunta
-com diagnóstico de posto; filtro e suavizador de Kalman, estimação bayesiana e por máxima
-verossimilhança; projeção de Chebyshev; equações em texto com derivadas exatas até a hessiana e
-defasagens e avanços de qualquer ordem; derivação de CPOs e montagem de vários agentes; o planejador
-de Ramsey, discrição, regras simples ótimas e bem-estar; diagnóstico do modelo; leitura de `.mod`;
-exportação para Dynare e MacroModelling.jl.
+## Where we stand
 
-A validação contra o Dynare cobre três modelos portados à mão, nove `.mod` lidos sem porte (cinco da
-pasta `examples/` do próprio Dynare) e, dos seus testes, os de política ótima, previsão perfeita,
-estimação, OccBin, trajetória estendida, crescimento balanceado e diagnóstico; as equações de
-calibração, contra o MacroModelling.jl. Detalhes em [`validation/`](validation/README.md).
+Version 0.5.0, at `https://github.com/GustavoHM/dsgelab`, brings together milestones 0.2 to 0.4
+and the publication work of milestone 0.5, and is released when the tag `v0.5.0` is created.
+The steady state is found with positivity and an outer anchor, accepted in closed form after a
+check, and computed with calibration equations and homotopy. The first-order solution is Klein/QZ
+with Blanchard–Kahn enforced and, optionally, Dynare's unit-root criterion, and it gives impulse
+responses, moments and variance decomposition. At second order the package computes the risk
+correction, the ergodic mean in closed form, pruned simulation and the generalised impulse
+response, and at third order the cubic block and the risk slope of the rules. Perfect foresight
+takes an announced path of parameters and of innovations, and expectation errors. The package
+also handles **occasionally binding constraints** (OccBin) and the **extended path**,
+deterministic and stochastic. **Models in levels** are covered, with declared trends and the
+balanced growth path, and so is Chebyshev projection. For data there are historical
+decomposition and conditional forecasting, joint calibration with a rank diagnostic, the Kalman
+filter and smoother, and Bayesian and maximum-likelihood estimation. Models can be written as
+text equations, with exact derivatives up to the Hessian and lags and leads of any order. They
+can also be built by deriving FOCs and assembling several agents, or read from a `.mod`, and
+they are exported to Dynare and MacroModelling.jl. Optimal policy covers the Ramsey planner,
+discretionary policy, optimal simple rules and welfare, and model diagnostics complete the set.
 
-## O que conta como pronto
+Validation against Dynare covers three models ported by hand, nine `.mod` files read without manual
+conversion (five of them from Dynare's own `examples/` folder) and, from Dynare's test suite, the
+tests for optimal policy, perfect foresight, estimation, OccBin, the extended path, balanced growth
+and diagnostics. The calibration equations are validated against MacroModelling.jl. Details are in
+[`validation/`](validation/README.md).
 
-Um item só sai do roadmap quando cumpre as seis condições abaixo. A garantia que o pacote oferece
-é que cada número foi conferido contra uma referência independente, e um recurso sem essa
-conferência rebaixaria o pacote inteiro.
+## What counts as done
 
-1. Implementado com API pública em `__all__`.
-2. **Validado contra uma referência independente**: outra implementação (Dynare,
-   MacroModelling.jl, gEconpy, dolo, sequence-jacobian), uma solução fechada ou um resultado
-   publicado. A validação fica num script que qualquer pessoa consegue rodar.
-3. Testes na suíte do pacote, sem dependência de ferramentas externas. O que precisa do Dynare ou
-   do Julia fica em `validation/`.
-4. Documentado na referência da API, com exemplo executável no site, conferido por
+An item leaves the roadmap only when it meets the six conditions below. The package's standard
+is that each feature is validated against an independent reference where one exists (another
+implementation, a closed form or a published result), and a few features rest on internal tests
+only. A new feature without that check would weaken the standard for the whole package.
+
+1. Implemented with a public API in `__all__`.
+2. **Validated against an independent reference**, which may be another implementation (Dynare
+   and MacroModelling.jl so far, and dolo, sequence-jacobian and RISE for the items planned
+   against them), a closed-form solution or a published result. The validation lives in a
+   script that anyone can run.
+3. Tested in the package's suite, with no dependence on external tools. Whatever needs Dynare or
+   Julia lives in `validation/`.
+4. Documented in the API reference, with a runnable example on the site, checked by
    `tools/check_site_examples.py`.
-5. Linha correspondente atualizada em `docs/comparison.md`.
-6. Entrada no [`CHANGELOG.md`](CHANGELOG.md).
+5. The matching row updated in `docs/comparison.md`.
+6. An entry in [`CHANGELOG.md`](CHANGELOG.md).
 
-## Marcos
+## Milestones
 
-### 0.2 — política ótima, bem-estar e os buracos dos objetos que já existem
+### 0.2 — optimal policy, welfare and the gaps in the objects that already exist
 
-- [x] **Ramsey com compromisso**, perspectiva atemporal, e o seu estado estacionário
-  (`ramsey_model`, `ramsey_steady_state`). Validado contra a regra de metas e a forma fechada de
-  Galí (2015, cap. 5) e contra o `ramsey_model` do Dynare em três modelos, inclusive o
-  `tests/optimal_policy/nk_ramsey_model.mod` do Dynare, sem alteração: estado estacionário a 5e-11,
-  IRFs das variáveis e dos multiplicadores a 5e-13.
-- [x] **Regras simples ótimas** (`osr`): perda quadrática nos momentos incondicionais, com aviso
-  quando o ótimo cai na fronteira. No `osr_example.mod` do Dynare a perda bate com a do Dynare a
-  2,5e-15 no ótimo dele, e o `dsgelab` acha um ótimo de perda menor, que o próprio Dynare confirma.
-  Também sobre o bem-estar (`objective=`), o `osr` com `planner_objective` do Dynare.
-- [x] **Política discricionária** (`discretionary_policy`), linear-quadrática, pelo algoritmo de
-  Dennis. Validada contra a forma fechada de Galí e contra o `dennis_1.mod` do Dynare.
-- [x] **Bem-estar** (`welfare`, `consumption_equivalent`): a função-objetivo viaja com o modelo;
-  bem-estar de segunda ordem, condicional e incondicional, e, no Ramsey, com os multiplicadores
-  defasados em zero; equivalente proporcional numa variável nomeada, sem assumir log nem consumo.
-  Bate com o `evaluate_planner_objective` do Dynare a 1e-12.
-- [x] **Impulso generalizado de segunda ordem** (`SecondOrderSolution.irf`): simulações podadas com
-  e sem o choque, porque a resposta depende do estado em que o choque chega e do seu sinal.
-- [x] **Sequência de inovações na previsão perfeita** (`perfect_foresight(..., shocks=)`), validada
-  contra o `perfect_foresight_solver` do Dynare nos `rbc_det1`–`3` dele a 1e-13.
-- [x] **Previsão perfeita com erros de expectativa** (`perfect_foresight_with_expectation_errors`),
-  validada contra o solver do Dynare nos `pfwee.mod` e `pfwee_constant_sim_length.mod` a 3e-12.
-- [x] **Ramsey e discrição a partir do `.mod`**: `from_mod` lê `planner_objective`,
-  `ramsey_model`, `discretionary_policy`, `osr_params` e `optim_weights`; os testes de política
-  ótima do Dynare rodam sem tradução manual.
+- [x] **Ramsey under commitment**, timeless perspective, and its steady state
+  (`ramsey_model`, `ramsey_steady_state`). Validated against the targeting rule and the closed form
+  of Galí (2015, ch. 5) and against Dynare's `ramsey_model` on three models, including Dynare's
+  `tests/optimal_policy/nk_ramsey_model.mod`, unchanged. On the three models the steady state
+  agrees to 5e-11 and the IRFs of the variables and the multipliers to 5e-13.
+- [x] **Optimal simple rules** (`osr`), on a quadratic loss in unconditional moments, with a warning
+  when the optimum lies on the boundary. On Dynare's `osr_example.mod` the loss matches Dynare's to
+  2.6e-16 at Dynare's optimum, and `dsgelab` finds an optimum with a lower loss, which Dynare itself
+  confirms. The rules can also be optimised on welfare (`objective=`), as Dynare's `osr` with
+  `planner_objective` does.
+- [x] **Discretionary policy** (`discretionary_policy`), linear-quadratic, by Dennis's algorithm.
+  Validated against Galí's closed form and against Dynare's `dennis_1.mod`.
+- [x] **Welfare** (`welfare`, `consumption_equivalent`). The objective function is stored in the
+  model. Welfare is computed at second order, conditional and unconditional, and for Ramsey with the
+  lagged multipliers at zero. The proportional equivalent is taken in a named variable, without
+  assuming log utility or that the variable is consumption. It matches Dynare's
+  `evaluate_planner_objective` to 1.4e-12 for Ramsey and to 6.1e-10 under discretionary policy.
+- [x] **Second-order generalised impulse responses** (`SecondOrderSolution.irf`), from pruned
+  simulations with and without the shock, because the response depends on the state in which the
+  shock arrives and on its sign.
+- [x] **Sequence of innovations in perfect foresight** (`perfect_foresight(..., shocks=)`),
+  validated against Dynare's `perfect_foresight_solver` on its `rbc_det1`–`3` to 1e-13.
+- [x] **Perfect foresight with expectation errors** (`perfect_foresight_with_expectation_errors`),
+  validated against Dynare's solver on `pfwee.mod` and `pfwee_constant_sim_length.mod` to 3e-12.
+- [x] **Ramsey and discretionary policy from the `.mod`**. `from_mod` reads `planner_objective`,
+  `ramsey_model`, `discretionary_policy`, `osr_params` and `optim_weights`, and Dynare's
+  optimal-policy tests run without manual translation.
 
-### 0.3 — estimação, previsão e decomposição
+### 0.3 — estimation, forecasting and decomposition
 
-Validado contra o Dynare no `fs2000.mod` da pasta `examples/` dele, com os seus priors e dados
+Validated against Dynare on the `fs2000.mod` from its `examples/` folder, with its priors and data
 (`validation/compare_estimation.py`).
 
-- [x] Filtro de Kalman sobre a solução linear, moda da posteriori e Metropolis–Hastings
-  (`kalman_filter`, `posterior_mode`, `metropolis_hastings`). Verossimilhança a 6e-12 e densidade a
-  priori a 4e-13 contra o Dynare; moda com núcleo maior ou igual ao do Dynare; médias do Metropolis
-  a menos de 2,5 erros de Monte Carlo.
-- [x] **Decomposição histórica** (`shock_decomposition`) e **previsão condicional**
-  (`conditional_forecast`, com `controlled`), contra o `shock_decomposition` (5e-15) e o
-  `conditional_forecast` do Dynare (`tests/conditional_forecasts`, 1e-13).
-- [x] **Equações de observação** e **erro de medida** (`state_space`, `EstimationProblem`):
-  observáveis em nível ou em log (`loglinear` com `logdata`), desvios-padrão de medida fixos ou
-  estimados (`"stderr y"`), dados faltantes.
-- [x] **Suavizador de Kalman** (`kalman_smoother`) e **inicialização difusa exata** para raízes
-  unitárias, contra o `diffuse_filter` do Dynare: verossimilhança a 2e-12, suavizador a 1e-15.
-- [x] **Máxima verossimilhança** (`maximum_likelihood`), com erros-padrão pela hessiana.
-- [x] **Estimação bayesiana completa**: priors do Dynare por média e desvio (`prior`), SMC
-  (`smc`), R-hat e tamanho efetivo de amostra, verificação preditiva a priori com a fração de
-  sorteios determinados (`prior_predictive`). Validada contra formas fechadas (o caso conjugado
-  normal) e contra o `estimation` do Dynare no `fs2000.mod`.
-- [x] **Verossimilhança marginal**: Laplace (a fórmula reproduz o número do Dynare a 2e-13 com a
-  covariância dele) e média harmônica modificada; `model_probabilities` para a comparação.
-- [x] **Decomposição histórica em tempo real** (`realtime_shock_decomposition`, 5e-15 contra o
-  Dynare) e **previsão com bandas** (`forecast`, com incerteza do estado e dos choques, contra o
-  `forecast` do Dynare; `posterior_forecast`, com a incerteza dos parâmetros).
+- [x] Kalman filter on the linear solution, posterior mode and Metropolis–Hastings
+  (`kalman_filter`, `posterior_mode`, `metropolis_hastings`). Against Dynare, the likelihood agrees
+  to 6e-12 and the prior density to 4e-13, the mode has a kernel greater than or equal to Dynare's,
+  and the Metropolis means lie within 3 Monte Carlo standard errors of Dynare's (largest 2.9).
+- [x] **Historical decomposition** (`shock_decomposition`) and **conditional forecast**
+  (`conditional_forecast`, with `controlled`), against Dynare's `shock_decomposition` (5e-15) and
+  `conditional_forecast` (`tests/conditional_forecasts`, 1.6e-13).
+- [x] **Observation equations** and **measurement error** (`state_space`, `EstimationProblem`),
+  with observables in levels or in logs (`loglinear` with `logdata`), measurement standard
+  deviations fixed or estimated (`"stderr y"`), and missing data.
+- [x] **Kalman smoother** (`kalman_smoother`) and **exact diffuse initialisation** for unit roots,
+  against Dynare's `diffuse_filter`, with the likelihood to 2.5e-12 and the smoother to 1e-15.
+- [x] **Maximum likelihood** (`maximum_likelihood`), with standard errors from the Hessian.
+- [x] **Full Bayesian estimation**, with Dynare's priors by mean and standard deviation (`prior`),
+  SMC (`smc`), R-hat and effective sample size, and the prior predictive check with the share
+  of draws with a determinate equilibrium (`prior_predictive`). Validated against closed forms
+  (the normal conjugate case) and against Dynare's `estimation` on `fs2000.mod`.
+- [x] **Marginal likelihood** by Laplace (the formula reproduces Dynare's number to 2e-13 with
+  Dynare's covariance) and by modified harmonic mean, and `model_probabilities` for comparing
+  models.
+- [x] **Real-time historical decomposition** (`realtime_shock_decomposition`, 5e-15 against
+  Dynare) and **forecasts with bands** (`forecast`, with state and shock uncertainty, against
+  Dynare's `forecast`, and `posterior_forecast`, with parameter uncertainty).
 
-### 0.4 — não linearidades e declaração do modelo
+### 0.4 — nonlinearities and the declaration of the model
 
-Concluído na versão 0.4.0, em 11 de outubro de 2026.
+Completed in version 0.4.0, on 11 October 2026.
 
-- [x] **Importar `.mod`** (`from_mod`), com macros, variáveis locais, `steady_state()`, avanços e
-  defasagens de qualquer ordem. Validado em nove `.mod`, lidos sem alteração, contra o Dynare.
-- [x] **Defasagens e avanços arbitrários**, no `.mod` e em `from_equations`, com toda variável
-  auxiliar listada em `auxiliary`. *A condição de desenho vale nos dois caminhos: o que é
-  predeterminado continua declarado num lugar só, a defasagem de um salto é um estado novo com
-  equação própria, e nenhuma auxiliar nasce em silêncio.*
-- [x] **Restrições ocasionalmente ativas** pelo método linear por partes de Guerrieri e Iacoviello,
-  sobre o mesmo Klein: `OccbinModel`, `occbin_simulate`. Contra o `+occbin` do Dynare com uma e com
-  duas restrições (`borrcon.mod`, `dynrbc.mod`), a 2e-15, com os mesmos históricos de regime.
-- [x] **Trajetória estendida**, determinística e estocástica (árvores esparsa e cheia, correção
-  híbrida de segunda ordem): `extended_path`. Contra o `extended_path` do Dynare em sete variantes do
-  `burnside.mod`, a 1e-11. *Falta a correção híbrida de ordem maior que 2, que pede a perturbação de
-  ordem 4 (0.7).*
-- [x] **Estado estacionário analítico declarado**, inclusive o `steady_state_model` de um `.mod`:
-  `analytic_steady_state`, `ModFile.steady_state(analytic=True)`. *Condição de desenho cumprida:* o
-  bloco analítico é conferido contra o resíduo do modelo dinâmico antes de usado, e recusado se não o
-  anula, como no Dynare.
-- [x] **Equações de calibração dentro do modelo**, à maneira do MacroModelling.jl. Contra o
-  MacroModelling a 4e-15.
-- [x] **Vários agentes num equilíbrio só**: `assemble`. Os limites são os de `Problem`; não é uma
-  linguagem de blocos.
-- [x] **Homotopia e continuação** para estados estacionários difíceis, com passo adaptativo, e o
-  `homotopy_setup` de um `.mod`.
-- [x] **Modelos não estacionários**: `trend_var`, `log_trend_var`, `var(deflator=)` e
-  `var(log_deflator=)` destendenciados como o Dynare faz, com a verificação do crescimento
-  balanceado; `balanced_growth` resolve o problema do `+bgp`, com resíduos idênticos aos do Dynare.
-  *Falta declarar tendências em `from_equations`; hoje o caminho é o `.mod`.*
-- [x] **Diagnóstico do modelo**: `diagnose`, o `model_diagnostics` do Dynare, com o mesmo relatório.
+- [x] **Import `.mod`** (`from_mod`), with macros, model-local variables, `steady_state()`, and
+  leads and lags of any order. Validated on nine `.mod` files, read unchanged, against Dynare.
+- [x] **Arbitrary lags and leads**, in the `.mod` and in `from_equations`, with every auxiliary
+  variable listed in `auxiliary`. *On both paths, as the design requirement asks, what is
+  predetermined is still declared in a single place. The lag of a jump variable is a new state with
+  its own equation, and no auxiliary variable is created without a warning.*
+- [x] **Occasionally binding constraints** by the piecewise-linear method of Guerrieri and
+  Iacoviello, on the same Klein solver (`OccbinModel`, `occbin_simulate`). Checked against Dynare's
+  `+occbin` with one and with two constraints (`borrcon.mod`, `dynrbc.mod`), to 2e-15, with the same
+  regime histories.
+- [x] **Extended path**, deterministic and stochastic (sparse and full trees, hybrid second-order
+  correction), in `extended_path`. Checked against Dynare's `extended_path` in seven variants of
+  `burnside.mod`, to 1.1e-11. *The hybrid correction of order higher than 2 is still missing, since
+  it requires order-4 perturbation (0.7).*
+- [x] **Declared analytic steady state**, including the `steady_state_model` of a `.mod`
+  (`analytic_steady_state`, `ModFile.steady_state(analytic=True)`). *The design requirement is
+  met, since* the analytic block is checked against the residual of the dynamic model before it is
+  used, and refused if it does not zero it, as in Dynare.
+- [x] **Calibration equations inside the model**, in the manner of MacroModelling.jl, matching
+  MacroModelling to 4e-15.
+- [x] **Several agents in one equilibrium** (`assemble`). The limits are those of `Problem`, and it
+  is not a block language.
+- [x] **Homotopy and continuation** for hard steady states, with an adaptive step, and the
+  `homotopy_setup` of a `.mod`.
+- [x] **Nonstationary models**. `trend_var`, `log_trend_var`, `var(deflator=)` and
+  `var(log_deflator=)` are detrended as Dynare does, with the balanced-growth check.
+  `balanced_growth` solves the `+bgp` problem, with residuals equal to Dynare's to 2.2e-16.
+  *Declaring trends in `from_equations` is still missing, and for now the route is the `.mod`.*
+- [x] **Model diagnostics** (`diagnose`), Dynare's `model_diagnostics`, with the same report.
 
-### 0.5 — release público
+### 0.5 — public release
 
-Nenhum recurso novo. Os itens abaixo são condição para publicar.
+No new features. The items below are conditions for publishing.
 
-**Bloqueantes**
+**Prerequisites**
 
-- [x] **Renomear.** `dsgekit` estava tomado no PyPI por um pacote concorrente, *"A Python toolkit
-  for DSGE models"*. O pacote agora é `dsgelab`, livre no PyPI em 11 de outubro de 2026. Falta
-  reservar o nome com um primeiro upload ao TestPyPI e ao PyPI.
-- [x] **Um repositório canônico.** `https://github.com/GustavoHM/dsgelab`. As cópias do
-  repositório de pesquisa foram arquivadas.
-- [ ] **Idioma.** Feito em 12 de outubro de 2026: o site tem versão em inglês na raiz e a
-  portuguesa em `site/pt-br/`, como o do `cgelab`, e os exemplos rodam nas duas; o código não tem
-  mais texto em português (mensagens de erro, rótulos das CPOs, cabeçalho dos arquivos
-  exportados). Em 13 de outubro foram traduzidos `docs/comparison.md`, `docs/whitepaper.md` (e
-  o PDF, regenerado), `docs/heutel.md`, `validation/README.md`, `site/README.md` e o
-  `CITATION.cff`. Falta traduzir as docstrings e as mensagens que os scripts de `validation/`
-  imprimem, e os comentários de `tests/` e `tools/`, e decidir se o roadmap fica em português.
-- [ ] **Validação reproduzível por terceiros.** A evidência publicada roda na mão de qualquer um:
-  os `.mod` do Dynare, as soluções fechadas e o Heutel (2012). Feito em 12 de outubro de 2026:
-  `validation/run_all.sh` roda tudo de uma vez; as versões ficam fixadas (pacotes do Octave por
-  sha256 em `setup_octave_packages.sh`, MacroModelling.jl em `validation/macromodelling/`, `.mod`
-  em tags do Dynare); os arquivos do Heutel vêm da cópia pública da Georgia State University
-  (`validation/heutel/fetch.sh`), idêntica byte a byte nos seis `.m`. Tudo passa no Dynare 7.2,
-  Octave 11.3.0, statistics 2.0.0 e datatypes 1.5.0. Falta tirar da documentação pública as
-  afirmações que só o modelo do artigo sustenta, ou marcá-las como tal.
-- [ ] **Revisão de segurança antes do release público.**
-- [ ] **Revisão do autor de todo texto que vai a público.** Nada é publicado — repositório
-  tornado público, site, release no GitHub, PyPI, Zenodo — antes de Gustavo revisar todos os
-  textos que vão junto: README, CHANGELOG, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, modelos de
-  *issue* e de *pull request*, `CITATION.cff`, a descrição no `pyproject.toml`, o site nas duas
-  línguas, `docs/` e `validation/README.md`.
+- [x] **Rename.** `dsgekit` was already in use on PyPI by another package, *"A Python toolkit for
+  DSGE models"*. The package is now `dsgelab`, which was available on PyPI on 11 October 2026.
+  The name still has to be reserved with a first upload to TestPyPI and to PyPI.
+- [x] **One canonical repository.** `https://github.com/GustavoHM/dsgelab`. The copies of the
+  research repository have been archived.
+- [x] **Language.** The site has an English version at the root and a Portuguese version in
+  `site/pt-br/`, like `cgelab`'s, and the examples run in both (12 October 2026). The code, the
+  documentation (`docs/`, with the whitepaper PDF regenerated), `validation/README.md`,
+  `CITATION.cff` and the messages that the scripts in `validation/` print are in English (13 to 16
+  October). The roadmap exists in both languages, with `ROADMAP.md` in English and
+  `ROADMAP.pt-BR.md` in Portuguese.
+- [x] **Validation reproducible by third parties.** The published evidence, which consists of
+  Dynare's `.mod` files, the closed forms and Heutel (2012), can be reproduced by anyone. As of
+  12 October 2026, `validation/run_all.sh` runs everything at once. Versions are pinned (Octave
+  packages by sha256 in `setup_octave_packages.sh`, MacroModelling.jl in
+  `validation/macromodelling/`, `.mod` files at Dynare tags), and Heutel's files come from the
+  public copy at Georgia State University (`validation/heutel/fetch.sh`), byte-identical in all
+  six `.m` files. Everything passes on Dynare 7.2, Octave 11.3.0, statistics 2.0.0 and
+  datatypes 1.5.0. On 16 October, the only comparison made on a model that is not public (the
+  author's unpublished applied model, a DSGE with 71 variables) was marked on the site as not
+  reproducible from the repository. The README and `validation/README.md` mark it the same way.
+- [x] **Security review before the public release.**
+- [ ] **Author's review of every public text.** Nothing is published (the repository made public,
+  the site, a GitHub release, PyPI, Zenodo) before the author has reviewed all the texts that go
+  with it, namely the README, CHANGELOG, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, the issue
+  and pull-request templates, `CITATION.cff`, the description in `pyproject.toml`, the site in both
+  languages, `docs/` and `validation/README.md`.
 
-**Engenharia de publicação**
+**Publication engineering**
 
-- [ ] Integração contínua: testes em Python 3.11 a 3.14, em Linux, macOS e Windows;
-  `check_site_examples.py`. *Escrito* (`tests.yml`): a suíte roda contra a *wheel* instalada em
-  12 combinações, o sdist é testado a partir da própria árvore, os exemplos do site rodam.
-  Conferido localmente no macOS em 3.11, 3.12 e 3.14. Falta a primeira execução no GitHub. O
-  Python 3.10 saiu do suporte em 12 de outubro de 2026: o SciPy 1.15.3, a última versão para ele,
-  não carrega no macOS 27 (`__thread_bss`).
-- [ ] Validações externas como tarefa agendada na CI. *Escrito* (`validation.yml`, semanal e sob
-  demanda): no macOS, com Octave e Dynare do Homebrew — no Ubuntu o Dynare dos repositórios fica
-  atrás, e compilá-lo a cada semana não compensa —, os pacotes do Octave fixados, Julia 1.12.7
-  com MacroModelling.jl. O Dynare do Homebrew acompanha a versão corrente, e é isso que faz da
-  tarefa o aviso antecipado de que os riscos abaixo falam. Falta a primeira execução no GitHub.
-- [x] Instalação testada a partir da *wheel*: em Python 3.14 no macOS, 144 testes contra a *wheel*
-  instalada (`DSGELAB_TEST_INSTALLED=1`), e o sdist com o que os próprios testes leem.
-- [ ] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes.
-  *Escrito* (`release.yml`, disparado por uma tag `v*`): confere a tag contra a versão, publica no
-  TestPyPI, roda a suíte contra o que o TestPyPI serve e só então publica no PyPI. `twine check
-  --strict` passa. Falta cadastrar o *trusted publisher* nos dois índices e criar os ambientes
-  `testpypi` e `pypi` no repositório.
-- [ ] DOI no Zenodo a cada release; `CITATION.cff` com ORCID e DOI.
-- [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
-- [x] `py.typed` e anotações de tipo na API pública: nenhuma função ou método público sem
-  anotação; o `mypy` não acusa erro novo. Os invólucros preguiçosos de `__init__.py`
-  (`from_equations`, `assemble`, `to_dynare`...) aceitam `*args, **kwargs`, e o verificador de
-  tipos não confere os argumentos deles.
-- [x] Seção de limitações conhecidas no README.
+- [x] Continuous integration, with tests on Python 3.11 to 3.14, on Linux, macOS and Windows, and
+  `check_site_examples.py`. *Written* (`tests.yml`): the suite runs against the installed wheel
+  in 12 combinations, the sdist is tested from its own tree, and the site examples run. The
+  first run on GitHub, on 13 October 2026, passed in all 17 jobs, Windows included. Python 3.10
+  stopped being supported on 12 October 2026 because SciPy 1.15.3, the last version for it,
+  does not load on macOS 27 (`__thread_bss`).
+- [x] External validations as a scheduled CI job. *Written* (`validation.yml`, weekly and on
+  demand). It runs on macOS, with Octave and Dynare from Homebrew, the pinned Octave packages, and
+  Julia 1.12.7 with MacroModelling.jl. On Ubuntu the Dynare in the distribution's repositories is
+  behind the current version, and compiling it every week would add its build time to each run.
+  Homebrew's Dynare follows the current version, and so the job serves as an early warning of the
+  risk described under Risks. The first run was
+  triggered by hand on 16 October 2026, and its 25 steps passed in 28 minutes.
+- [x] Installation tested from the wheel, with 148 tests against the installed wheel on Python
+  3.14 on macOS (`DSGELAB_TEST_INSTALLED=1`), and the sdist with the files its own tests read.
+- [ ] `python -m build`, `twine check`, publication by trusted publishing, TestPyPI first.
+  *Written* (`release.yml`, triggered by a `v*` tag): it checks the tag against the version,
+  publishes to TestPyPI, runs the suite against what TestPyPI serves, and only then publishes to
+  PyPI. `twine check --strict` passes. The version is already 0.5.0. The trusted publisher is
+  registered on both indexes and the `testpypi` and `pypi` environments exist in the repository
+  (16 October 2026), with the required reviewer of `pypi` to be set once the repository is public.
+  What remains, on release day, is to date the CHANGELOG and `CITATION.cff` and create the tag
+  `v0.5.0`.
+- [ ] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
+  change, with the links to `docs/` pointed at GitHub. It only runs once the repository is public.
+- [ ] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. The ORCID is already in
+  `CITATION.cff`. Connecting the repository to Zenodo, which requires the repository to be public,
+  and adding the DOI of the first release are still to be done.
+- [x] `CONTRIBUTING.md`, code of conduct, issue and pull-request templates.
+- [x] `py.typed` and type annotations on the public API, with no public function or method left
+  unannotated and no new error reported by `mypy`. The lazy-import wrappers in `__init__.py`
+  (`from_equations`, `assemble`, `to_dynare`...) accept `*args, **kwargs`, and the type checker
+  does not check their arguments.
+- [x] A known-limitations section in the README.
 
-**Política de versões a partir da 0.5.** Versionamento semântico. Antes da 1.0 uma versão menor
-ainda pode mudar a API, mas toda remoção ou mudança incompatível passa antes por um aviso de
-descontinuação que dura pelo menos uma versão menor. A API pública é o que está em `__all__`.
+**Version policy from 0.5 on.** Versions follow semantic versioning. Before 1.0 a minor version
+may still change the API, but every removal or incompatible change is preceded by a deprecation
+warning that lasts at least one minor version. The public API is what is in `__all__`.
 
-### 0.6 — identificação, momentos e dados
+### 0.6 — identification, moments and data
 
-- [ ] **Identificação local** (Iskrev; Komunjer e Ng). Validação contra o `+identification` do Dynare.
-- [ ] **Sensibilidade global**: região de estabilidade e determinação no espaço de parâmetros,
-  filtragem de Monte Carlo. Validação contra o `+gsa` do Dynare.
-- [ ] **Método dos momentos**: GMM, SMM e ajuste de IRF. Validação contra o `+mom` do Dynare.
-- [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
-- [ ] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda).
-- [ ] **Dados de frequência mista**.
-- [ ] **Gráficos**: impulsos, simulações, decomposições, previsões, posteriores.
+- [ ] **Local identification** (Iskrev; Komunjer and Ng), to be validated against Dynare's
+  `+identification`.
+- [ ] **Global sensitivity**, covering the stability and determinacy region in the parameter space
+  and Monte Carlo filtering. The reference is Dynare's `+gsa`.
+- [ ] **Method of moments** (GMM, SMM and IRF matching). Validation against Dynare's `+mom`.
+- [ ] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`).
+- [ ] **Filtered theoretical moments** (Hodrick–Prescott and band-pass).
+- [ ] **Mixed-frequency data**.
+- [ ] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
+  distributions.
 
-### 0.7 — terceira ordem completa e derivadas
+### 0.7 — complete third order and derivatives
 
-- [ ] **Núcleo de perturbação na forma de regra de decisão do Dynare**, com a inovação como
-  argumento (`g_u`, `g_uu`, `g_ku`). A inclinação de risco `g_σσk` já está; o tensor com a inovação
-  em todos os monômios, não.
-- [ ] **Estado estacionário estocástico** e IRFs generalizadas analíticas. A prova é a ida e volta
-  contra o Dynare em `order=3`.
-- [ ] **Terceira ordem no tamanho do modelo aplicado**: tensores esparsos. No sistema de 71
-  variáveis, `m = 2n + n_ε` fica perto de 150 e o tensor denso não cabe.
-- [ ] **Derivadas da solução em relação aos parâmetros**, por diferenciação automática, e
-  **estimação com gradiente** (HMC/NUTS).
-- [ ] **Filtros não lineares**: inversão e partículas, para estimar em segunda e terceira ordem.
-  Validação contra o MacroModelling.jl.
+- [ ] **Perturbation core in Dynare's decision-rule form**, with the innovation as an
+  argument (`g_u`, `g_uu`, `g_ku`). The risk slope (`g_ssk` and `h_ssk`) is already implemented,
+  and the tensor with the innovation in every monomial is still missing.
+- [ ] **Stochastic steady state** and analytic generalised IRFs. The test is the round trip
+  against Dynare at `order=3`.
+- [ ] **Third order at the size of the applied model**, with sparse tensors. In the author's
+  unpublished applied model, with 71 variables, `m = 2n + n_ε` is close to 150 and the dense tensor
+  does not fit.
+- [ ] **Derivatives of the solution with respect to the parameters**, by automatic differentiation,
+  and **gradient-based estimation** (HMC/NUTS).
+- [ ] **Nonlinear filters** (the inversion filter and the particle filter), for estimation at
+  second and third order. MacroModelling.jl serves as the reference.
 
-### 0.8 — métodos globais
+### 0.8 — global methods
 
-- [ ] **Iteração de tempo, de função-valor, grade endógena, grade esparsa.** A colocação de
-  Chebyshev até três estados já existe e reproduz a solução fechada do crescimento estocástico.
-  Validação contra o dolo.
-- [ ] **Discretização de processos** (Tauchen, Rouwenhorst).
+- [ ] **Time iteration, value function iteration, the endogenous grid method, sparse grids.**
+  Chebyshev collocation with up to three states already exists and reproduces the closed-form
+  solution of stochastic growth. The comparison will be with dolo.
+- [ ] **Process discretisation** (Tauchen, Rouwenhorst).
 
-### 0.9 — a fronteira
+### 0.9 — the frontier
 
-- [ ] **Troca de regime de Markov** na solução e na estimação. Validação contra o RISE.
-- [ ] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências. Validação contra o
-  sequence-jacobian. *Condição de desenho, herdada da exclusão anterior:* `vec` continua sendo a
-  forma de escrever um número finito de grupos; uma distribuição é outro algoritmo, num módulo
-  próprio.
-- [ ] **BVAR e DSGE-VAR**. Validação contra o `+bvar` e o `dsge_var` do Dynare.
+- [ ] **Markov regime switching** in solution and estimation. Validation against RISE.
+- [ ] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
+  sequence-jacobian. *The design requirement, inherited from the earlier exclusion, is that* `vec`
+  remains the way to write a finite number of groups, and that a distribution is a different
+  algorithm, in a module of its own.
+- [ ] **BVAR and DSGE-VAR**, to be checked against Dynare's `+bvar` and `dsge_var`.
 
 ### 1.0
 
-Toda a lista acima coberta, API congelada, e a partir daí versionamento semântico estrito.
+Everything in the list above is covered, the API is frozen, and from then on versioning is strictly
+semantic.
 
-## O `cgelab` como chamador
+## Integration with `cgelab`
 
-O equilíbrio de um período, calibrado numa matriz de contabilidade social, continua no `cgelab`.
-O que passaria para cá é o resíduo intertemporal, nos pontos em que um agente olha para a frente.
-A matriz não entra neste pacote, e a dependência seria opcional: só o módulo-ponte do `cgelab`
-importaria o `dsgelab`. A lista completa está no roadmap do `cgelab`, na seção *Extensions that
-call dsgelab*.
+The one-period equilibrium, calibrated on a social accounting matrix, stays in `cgelab`. The
+intertemporal residual, at the points where an agent's decisions depend on expectations of the
+future, is solved here. The matrix does
+not enter this package, and the dependence is optional, since only `cgelab`'s bridge module imports
+`dsgelab` (`pip install "cgelab[dsge]"`). The bridge already exists in `cgelab.bridge`, as a Ramsey
+CGE in which investment follows an Euler equation, with announced policy and first-order aggregate
+uncertainty. The next extensions are in `cgelab`'s roadmap, in the section *Extensions that call
+dsgelab*. The sites of the two packages link to each other.
 
-## Riscos
+## Risks
 
-**Escopo.** Vários itens equivalem cada um a um pacote inteiro: agentes heterogêneos é o escopo do
-sequence-jacobian; métodos globais, o do dolo; troca de regime, o do RISE. Com o padrão de
-validação deste roadmap, cada um é trabalho de meses. Se algum travar, a saída é publicar primeiro
-uma ponte validada para a ferramenta que já o faz — como o exportador para o Dynare já faz com a
-terceira ordem — e manter o item aberto até a implementação própria passar na mesma validação.
+**Scope.** Several items are each the size of a whole package. Heterogeneous agents are the scope
+of sequence-jacobian, global methods that of dolo, and regime switching that of RISE. Under this
+roadmap's validation standard, each one is months of work. If one of them does not advance, the way
+out is to publish first a validated bridge to the tool that already does it (as the Dynare exporter
+does today for third order) and keep the item open until the package's own implementation passes
+the same validation.
 
-**Dependências.** Estimação, diferenciação automática e métodos globais puxam dependências pesadas.
-O núcleo continua com numpy e scipy; o resto entra como extra opcional, para que quem só resolve
-modelos não pague por isso.
+**Dependencies.** Estimation, automatic differentiation and global methods require large
+dependencies. The core stays on numpy and scipy, and the rest comes in as optional extras, so that
+users who only solve models do not need to install them.
 
-**Validação dependente de ferramentas externas.** Quase toda a evidência vem de comparar com o
-Dynare e o MacroModelling.jl. Se uma dessas ferramentas mudar de comportamento entre versões, as
-validações quebram sem que o pacote tenha mudado. Por isso os `.mod` vêm de tags fixas do Dynare
-(6.4 para os exemplos, 7.2 para os testes; os arquivos usados são idênticos aos da 7.1), e a versão usada fica registrada nos scripts.
+**Validation that depends on external tools.** Almost all of the evidence comes from comparison
+with Dynare and MacroModelling.jl. If one of these tools changes behaviour between versions, the
+validations break without the package having changed. For that reason the `.mod` files come from
+fixed Dynare tags (6.4 for the examples and 7.2 for the tests, with the files used identical to
+those of 7.1), and the version used is recorded in the scripts.

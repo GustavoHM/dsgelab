@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
-# run_estimation.sh — referências do Dynare para a estimação do fs2000.mod (Schorfheide, 2000).
+# run_estimation.sh: Dynare's references for the estimation of fs2000.mod (Schorfheide, 2000).
 #
-# Uso:  bash run_estimation.sh [calib|mode|mh|unitroot|condfc ...]   (sem argumentos: todas)
+# Usage:  bash run_estimation.sh [calib|mode|mh|unitroot|condfc ...]   (no arguments: all)
 #
-# O fs2000.mod da pasta examples/ do Dynare roda com o modelo, os priors e os dados como estão;
-# só a linha `estimation(...)` muda, em três variantes:
-#   calib  sem otimização, no ponto inicial (as médias a priori, regra do Dynare): verossimilhança,
-#          densidade a priori, núcleo da posterior (evaluate_likelihood, evaluate_posterior_kernel),
-#          o suavizador, a previsão (forecast=8), shock_decomposition e
-#          realtime_shock_decomposition nesse ponto;
-#   mode   a moda da posterior (csminwel, mode_compute=4) e a aproximação de Laplace;
-#   mh     Metropolis-Hastings, 2 cadeias de 10 000, mh_jscale 0,8: médias a posteriori e a
-#          média harmônica modificada.
-# (A lista de variáveis depois de estimation(...) evita a pergunta interativa do Dynare sobre
-# quais variáveis suavizar.)
-# options_.riccati_tol = 1e-16 desliga a troca para o ganho estacionário do filtro de Kalman, que o Dynare
-# faz por omissão quando a variância converge a 1e-6 e que move a verossimilhança na sétima casa.
-# Exporta para out_estimation/fs2000_<variante>.mat; os dados que o Dynare usou vão junto.
-# Mais duas variantes: unitroot (o filtro difuso, num modelo escrito aqui) e condfc (o teste de
-# previsão condicional do Dynare, tests/conditional_forecasts/1/fs2000_cal.mod).
+# fs2000.mod from Dynare's examples/ folder runs with the model, the priors and the data as they
+# are. Only the `estimation(...)` line changes, in three variants:
+#   calib  no optimisation, at the initial point (the prior means, Dynare's rule): likelihood,
+#          prior density, posterior kernel (evaluate_likelihood, evaluate_posterior_kernel),
+#          the smoother, the forecast (forecast=8), shock_decomposition and
+#          realtime_shock_decomposition at that point;
+#   mode   the posterior mode (csminwel, mode_compute=4) and the Laplace approximation;
+#   mh     Metropolis-Hastings, 2 chains of 10,000, mh_jscale 0.8: posterior means and the
+#          modified harmonic mean.
+# (The list of variables after estimation(...) avoids Dynare's interactive question about which
+# variables to smooth.)
+# options_.riccati_tol = 1e-16 turns off the switch to the steady-state gain of the Kalman filter,
+# which Dynare makes by default when the variance converges to 1e-6 and which moves the likelihood
+# in the seventh decimal place.
+# Exports to out_estimation/fs2000_<variant>.mat, together with the data Dynare used.
+# Two more variants: unitroot (the diffuse filter, in a model written here) and condfc (Dynare's
+# conditional forecast test, tests/conditional_forecasts/1/fs2000_cal.mod).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -30,10 +31,10 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 COMMON="order=1, datafile=fs2000_data, loglinear, logdata, nograph, nodisplay, plot_priors=0"
-est() {   # a linha estimation(...) de cada variante (o bash do macOS não tem arrays associativos)
+est() {   # the estimation(...) line of each variant (macOS's bash has no associative arrays)
   case "$1" in
     calib) echo "estimation($COMMON, mode_compute=0, mh_replic=0, smoother, forecast=8) m P c e W R k d n l gy_obs gp_obs y dA; shock_decomposition(parameter_set=calibration) gp_obs gy_obs c y; realtime_shock_decomposition(parameter_set=calibration) gp_obs gy_obs c y;" ;;
     mode)  echo "estimation($COMMON, mode_compute=4, mh_replic=0);" ;;
@@ -45,14 +46,14 @@ VARIANTS=("$@")
 [ ${#VARIANTS[@]} -eq 0 ] && VARIANTS=(calib mode mh unitroot condfc)
 mkdir -p out_estimation
 
-octave_run() {   # octave_run <diretório> <código>
+octave_run() {   # octave_run <directory> <code>
   ( cd "$1" && "$OCTAVE" --no-gui --eval "pkg load statistics datatypes; addpath '$DYNARE_MATLAB'; $2" )
 }
 
 for v in "${VARIANTS[@]}"; do
   if [ "$v" = unitroot ]; then
-    # estimation/unitroot.mod, escrito aqui: um nível de preços observado (raiz unitária) e o
-    # diffuse_filter do Dynare. Verossimilhança em dois pontos e o suavizador.
+    # estimation/unitroot.mod, written here: an observed price level (unit root) and Dynare's
+    # diffuse_filter. Likelihood at two points, and the smoother.
     echo ">>> unitroot"
     W=work_estimation_unitroot; rm -rf "$W"; mkdir -p "$W"
     python3 - estimation/unitroot.mod "$W/unitroot.mod" <<'PY'
@@ -69,21 +70,21 @@ PY
       ex.ll2 = evaluate_likelihood(ex.x2, M_, estim_params_, oo_, options_, bayestopt_);
       ex.sv = oo_.SmoothedVariables; ex.ss = oo_.SmoothedShocks; ex.data = dataset_.data;
       ex.varobs = options_.varobs;
-      save('-mat7-binary', '../out_estimation/unitroot.mat', 'ex'); printf('gravado out_estimation/unitroot.mat\n');" \
-      > out_estimation/unitroot.log 2>&1 || { echo "FALHOU unitroot"; tail -20 out_estimation/unitroot.log; }
+      save('-mat7-binary', '../out_estimation/unitroot.mat', 'ex'); printf('saved out_estimation/unitroot.mat\n');" \
+      > out_estimation/unitroot.log 2>&1 || { echo "FAILED unitroot"; tail -20 out_estimation/unitroot.log; }
     tail -1 out_estimation/unitroot.log; rm -rf "$W"; continue
   fi
   if [ "$v" = condfc ]; then
-    # tests/conditional_forecasts/1/fs2000_cal.mod do Dynare, sem o gráfico: os dois choques
-    # controlados, trajetórias para gy_obs e gp_obs nos períodos 1 a 5.
+    # Dynare's tests/conditional_forecasts/1/fs2000_cal.mod, without the plot: the two controlled
+    # shocks, paths for gy_obs and gp_obs in periods 1 to 5.
     echo ">>> condfc"
     W=work_estimation_condfc; rm -rf "$W"; mkdir -p "$W"
     grep -v "plot_conditional_forecast" mods/forecast/fs2000_cal.mod > "$W/fs2000_cal.mod"
     rm -f out_estimation/condfc.mat
     octave_run "$W" "dynare fs2000_cal noclearall nograph;
       ex = struct(); ex.cond = oo_.conditional_forecast.cond.Mean; ex.endo_names = M_.endo_names;
-      save('-mat7-binary', '../out_estimation/condfc.mat', 'ex'); printf('gravado out_estimation/condfc.mat\n');" \
-      > out_estimation/condfc.log 2>&1 || { echo "FALHOU condfc"; tail -20 out_estimation/condfc.log; }
+      save('-mat7-binary', '../out_estimation/condfc.mat', 'ex'); printf('saved out_estimation/condfc.mat\n');" \
+      > out_estimation/condfc.log 2>&1 || { echo "FAILED condfc"; tail -20 out_estimation/condfc.log; }
     tail -1 out_estimation/condfc.log; rm -rf "$W"; continue
   fi
   echo ">>> fs2000 — $v"
@@ -130,9 +131,9 @@ PY
     if isfield(oo_, 'posterior_mean'), ex.posterior_mean = oo_.posterior_mean; end
     if isfield(oo_, 'posterior_hpdinf'), ex.hpdinf = oo_.posterior_hpdinf; ex.hpdsup = oo_.posterior_hpdsup; end
     save('-mat7-binary', '../out_estimation/fs2000_$v.mat', 'ex');
-    printf('gravado out_estimation/fs2000_$v.mat\n');
-  " > "../out_estimation/fs2000_$v.log" 2>&1 ) || { echo "FALHOU $v — ver out_estimation/fs2000_$v.log"; tail -20 "out_estimation/fs2000_$v.log"; }
+    printf('saved out_estimation/fs2000_$v.mat\n');
+  " > "../out_estimation/fs2000_$v.log" 2>&1 ) || { echo "FAILED $v, see out_estimation/fs2000_$v.log"; tail -20 "out_estimation/fs2000_$v.log"; }
   tail -1 "out_estimation/fs2000_$v.log"
   rm -rf "$W"
 done
-echo "pronto."
+echo "done."

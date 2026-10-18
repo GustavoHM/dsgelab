@@ -22,7 +22,7 @@ The innovation \(\varepsilon_{t+1}\) is unknown at \(t\), with \(E_t \varepsilon
 \log a_{t+1} = \rho \log a_t + \varepsilon_{a,t+1}.
 \]
 
-Dating the innovation at \(t\), as though it were already in the information set when \(u_t\) is chosen, does not change the first-order solution, because certainty equivalence makes the two timings coincide at that order. At second order the risk correction comes out identically zero, since no uncertainty is left within the period. The test that pins down the convention is the lognormal AR(1) of section 7, in which the correction on technology must be \(\sigma^2\). Under the inverted timing that correction is zero, and the rest of the solution still has the appearance of a solved model.
+Dating the innovation at \(t\), as though it were already in the information set when \(u_t\) is chosen, does not change the first-order solution, because certainty equivalence makes the two timings coincide at that order. At second order the risk correction comes out identically zero, since no uncertainty is left within the period. The test that pins down the convention is the lognormal AR(1) of section 7, in which the second-order risk coefficient on technology must be \(\sigma^2\). Under the inverted timing that coefficient is zero, and the rest of the solution still has the appearance of a solved model.
 
 The same function \(f\) is linearised, perturbed at higher order and stacked under perfect foresight. A deterministic path written by hand over a different set of equations has no place in the package, because the two would stop being the same model as soon as one of them was edited.
 
@@ -55,9 +55,9 @@ x = \bar x + s \odot \hat y, \qquad
 s_i = \begin{cases} |\bar x_i| & \text{if } |\bar x_i| > 10^{-8}, \\ 1 & \text{otherwise.} \end{cases}
 \]
 
-The change of variables is affine. The Hessian in deviations is the Hessian in levels multiplied by \(s_i s_j\), and an exact derivative supplied in levels is converted by that multiplication. A genuine log-linearisation, \(x_i = \bar x_i e^{\hat y_i}\), is nonlinear and would not have this property. The branch \(s_i = 1\) is chosen by the steady-state level, not by the variable's name. A mean-zero shifter, with \(\bar x_i = 0\), would be annihilated by a rule that wrote it as \(\bar x_i(1+\hat y_i)\).
+The change of variables is affine. The Hessian in deviations is the Hessian in levels multiplied by \(s_i s_j\), and an exact derivative supplied in levels is converted by that multiplication. A genuine log-linearisation, \(x_i = \bar x_i e^{\hat y_i}\), is nonlinear and would not have this property. The branch \(s_i = 1\) is chosen by the steady-state level, and the variable's name plays no part. A mean-zero shifter, with \(\bar x_i = 0\), would be annihilated by a rule that wrote it as \(\bar x_i(1+\hat y_i)\).
 
-The rows of the pencil \((B, A)\) are then divided by the largest absolute entry of each row, with a floor of \(10^{-12}\). This operation multiplies the pencil on the left by a diagonal matrix, an equivalence transformation, so the generalised eigenvalues do not change. The conditioning does change, and it decides whether the Blanchard–Kahn count can be computed when a capital stock of order tens sits beside a mean-zero shifter.
+The rows of the pencil \((B, A)\) are then divided by the largest absolute entry of each row, and a row whose largest entry is below \(10^{-12}\) is left as it is. This operation multiplies the pencil on the left by a diagonal matrix, an equivalence transformation, so the generalised eigenvalues do not change. The conditioning does change, and it decides whether the Blanchard–Kahn count can be computed when a capital stock of order tens sits beside a mean-zero shifter.
 
 ## 4. First-order system
 
@@ -88,11 +88,11 @@ A forward difference is first-order accurate, and its truncation error enters th
 
 ## 5. Klein's solution
 
-The pencil \((B, A)\) is brought to the real generalised Schur form, ordered so that the eigenvalues of modulus less than one occupy the leading block (Moler and Stewart, 1973; Klein, 2000). A \(2\times 2\) diagonal block of the real form holds a complex conjugate pair, whose two roots share their modulus, so the ordering by modulus never splits a block between the stable and the unstable subspaces. The solution inverts \(T_{11}\), \(S_{11}\) and \(Z_{11}\) whole and never reads a block entry by entry. If the real reordering fails, the complex form, with \(1\times 1\) blocks, is used instead. The complex form was the default until October 2026. In SciPy 1.18 the complex reordering loses up to \(10^{-8}\) on a pencil with a zero root and refuses one with several infinite roots, while the real reordering is exact in both cases.
+The pencil \((B, A)\) is brought to the real generalised Schur form, ordered so that the eigenvalues of modulus less than one occupy the leading block (Moler and Stewart, 1973; Klein, 2000). A \(2\times 2\) diagonal block of the real form holds a complex conjugate pair, whose two roots share their modulus, so the ordering by modulus never splits a block between the stable and the unstable subspaces. The solution inverts \(Z_{11}\), solves a linear system in \(T_{11}\) and multiplies by \(S_{11}\), each as a whole matrix, and never reads a block entry by entry. If the real reordering fails, the complex form, with \(1\times 1\) blocks, is used instead. The complex form was the default until October 2026. It was replaced after the package's tests with SciPy 1.18, in which the complex reordering lost up to \(10^{-8}\) on a pencil with a zero root and refused one with several infinite roots, while the real reordering was exact in both cases.
 
 With `ordqz(B, A)`, \(S\) is the Schur form of \(B\) and \(T\) that of \(A\). The generalised eigenvalues are \(\lambda = |\alpha|/|\beta|\), with \(|\beta|\) bounded below by \(10^{-9}\) to avoid dividing by zero at an infinite eigenvalue. An eigenvalue counts as stable when \(\lambda < 1 - 10^{-9}\).
 
-The Blanchard and Kahn (1980) condition is enforced, and it requires the number of stable eigenvalues to equal \(n_k\). Fewer stable roots means that no non-explosive equilibrium exists. More stable roots means a continuum of solutions. In either case \(F\) and \(P\) would be arithmetic without interpretation, and the function raises an error instead of returning them. The margin between the largest stable root and the smallest unstable one is available separately, because a root at \(0.9999\) passes the same test as a root at \(0.8\) and changes classification under a parameter perturbation too small to show up in a coarse sweep.
+The Blanchard and Kahn (1980) condition is enforced, and it requires the number of stable eigenvalues to equal \(n_k\). Fewer stable roots means that no non-explosive equilibrium exists. More stable roots means a continuum of solutions. In either case \(F\) and \(P\) would have no economic interpretation, and the function raises an error instead of returning them. The margin between the largest stable root and the smallest unstable one is reported separately, by `blanchard_kahn_report`, because a root at \(0.9999\) passes the same test as a root at \(0.8\) and changes classification under a parameter perturbation too small to show up in a coarse sweep.
 
 Partitioning \(Z\), the matrix of Schur vectors, into blocks of \(n_k\) and \(n_u\),
 
@@ -126,7 +126,7 @@ M Q = C_{\text{rows}}, \qquad
 M = A_{\text{rows},\,k} + A_{\text{rows},\,u} F.
 \]
 
-The second term is zero by construction on these rows. \(M\) has rank \(n_k\) exactly when every predetermined variable has a law of motion. A lower rank means a state whose law is missing or was written with a jump at \(t+1\). The residual \(\|MQ - C_{\text{rows}}\|_\infty\) is reported and must be at round-off. A material residual in an equation without a jump at \(t+1\) arises in practice when the only forward term is an exogenous state, as in \(q_t = \beta f(a_{t+1})\). That forward term has to be declared as a jump, with its own defining equation, so that the expectational row is marked as expectational.
+The second term is zero by construction on these rows. \(M\) has rank \(n_k\) exactly when every predetermined variable has a law of motion. A lower rank means a state whose law is missing or was written with a jump at \(t+1\). The residual \(\|MQ - C_{\text{rows}}\|_\infty\) is reported and sits at round-off in a well-posed model. Above \(10^{-8}\) times the larger of one and the largest absolute entry of \(C\), the function raises an error. A residual of that size in an equation without a jump at \(t+1\) arises in practice when the only forward term is an exogenous state, as in \(q_t = \beta f(a_{t+1})\). That forward term has to be declared as a jump, with its own defining equation, so that the expectational row is marked as expectational.
 
 ## 6. Impulses, moments and decomposition
 
@@ -150,7 +150,7 @@ V_k^{(m)}(h) = \sum_{j=0}^{h-1} P^j Q \Sigma^{(m)} Q^{\mathsf T} (P^{\mathsf T})
 
 with \(\Sigma^{(m)}\) the matrix that keeps only the \((m,m)\) entry. The share is the ratio between the diagonal of \(J V_k^{(m)} J^{\mathsf T}\) and its sum over \(m\).
 
-The order-of-accuracy test feeds the rules back into the nonlinear function at shrinking displacements. A correct first-order solution leaves a residual of order \(\|\hat y\|^2\), so halving the displacement divides the residual by about four. A system assembled with a transposed block leaves a residual of order \(\|\hat y\|\), and the ratio comes out near two. The test reads this ratio and disregards the size of any single residual, because a wrong system can have a small residual at a small displacement and still leave a first-order error. In an exactly linear model the residual sits at round-off, and the report flags the case instead of deriving an order from machine noise.
+The order-of-accuracy test, which the user runs by calling `accuracy()` on a solution, feeds the rules back into the nonlinear function at shrinking displacements. A correct first-order solution leaves a residual of order \(\|\hat y\|^2\), so halving the displacement divides the residual by about four. A system assembled with a transposed block leaves a residual of order \(\|\hat y\|\), and the ratio comes out near two. The test reads this ratio and disregards the size of any single residual, because a wrong system can have a small residual at a small displacement and still leave a first-order error. In an exactly linear model the residual sits at round-off, and the report flags the case instead of deriving an order from machine noise.
 
 ## 7. Second order
 
@@ -161,9 +161,9 @@ u_t &= F k_t + \tfrac12 g_{kk}[k_t, k_t] + \tfrac12 g_{ss}, \\
 k_{t+1} &= P k_t + \tfrac12 h_{kk}[k_t, k_t] + \tfrac12 h_{ss} + Q\varepsilon_{t+1}.
 \end{align*}
 
-\(g_{kk}\) and \(h_{kk}\) are the second derivatives with respect to the states. \(g_{ss}\) and \(h_{ss}\) are the risk corrections, the terms that first order sets to zero by certainty equivalence. A first-order simulation keeps the mean of the states at the deterministic steady state. Any mean effect it reports comes from the curvature of the static map, without the shift of the rules themselves. With a convex adjustment cost that shift changes the sign of a mean effect as well as its magnitude, and welfare rankings that rest on such an effect change with it.
+\(g_{kk}\) and \(h_{kk}\) are the second derivatives with respect to the states. \(g_{ss}\) and \(h_{ss}\) are the risk corrections, the terms that first order sets to zero by certainty equivalence. A first-order simulation keeps the mean of the states at the deterministic steady state. Any mean effect it reports comes from the curvature of the static map, without the shift of the rules themselves. With a convex adjustment cost that shift can change the sign of a mean effect as well as its magnitude, and welfare rankings that rest on such an effect can change with it.
 
-The Hessian of each residual with respect to \(w = (\hat y_{t+1}, \hat y_t, \varepsilon)\) uses step \(h = 10^{-4}\). The second difference divides by \(h^2\). Round-off grows as \(\varepsilon_{\mathrm{mach}}/h^2\) while truncation falls as \(h^2\), so the balance sits near \(\varepsilon_{\mathrm{mach}}^{1/4}\). The step \(10^{-6}\), used for the first derivative, loses about six digits here. The mixed partials use a six-point symmetric form that reuses the single-coordinate displacements, at a cost of \(2m^2 + 2m\) evaluations instead of \(4m^2\), with \(m = 2n + n_\varepsilon\). When the model was declared in text, the symbolic derivative replaces this Hessian.
+The Hessian of each residual with respect to \(w = (\hat y_{t+1}, \hat y_t, \varepsilon)\) uses step \(h = 10^{-4}\). The second difference divides by \(h^2\). Round-off grows as \(\varepsilon_{\mathrm{mach}}/h^2\) while truncation falls as \(h^2\), so the balance sits near \(\varepsilon_{\mathrm{mach}}^{1/4}\). The step \(10^{-6}\), used for the first derivative, loses about six digits here. The mixed partials use a six-point symmetric form that reuses the single-coordinate displacements, at a cost of \(m^2 + m + 1\) evaluations instead of the \(3m^2 - m + 1\) that recomputing the displacements for each pair would take, with \(m = 2n + n_\varepsilon\). When the model was declared in text, the symbolic derivative replaces this Hessian.
 
 Let \(f_1 = A\) and \(f_2 = -B\), already in the row scaling of section 3, and let \(H\) be the Hessian in the same scaling. The derivatives of the composite map with respect to the states are
 
@@ -191,7 +191,7 @@ with \(\bar A = [A_1 \mid A_3]\) and \(\bar B = [0 \mid A_2]\). The symmetry of 
 
 While \(n \cdot n_k^2\) does not exceed 6000, the system is formed and factorised. Above that count, a matrix-free linear operator solved by LGMRES replaces the dense Kronecker product, whose storage grows with the square of the count.
 
-The risk corrections do not require solving the Sylvester equation again. With \(\Sigma\) the covariance of the innovations and
+The risk corrections solve a second linear system, in which \(W\) is already known. With \(\Sigma\) the covariance of the innovations and
 
 \[
 L = \begin{pmatrix} Q \\ FQ \\ 0 \\ I \end{pmatrix}
@@ -205,7 +205,7 @@ the derivative of \(w\) with respect to the innovations,
   = -\Big( A_2\,(g_{kk} : Q\Sigma Q^{\mathsf T}) + H : L\Sigma L^{\mathsf T} \Big).
 \]
 
-A covariance sweep therefore reuses \(g_{kk}\), \(h_{kk}\) and \(H\).
+Since \(\Sigma\) enters only this system, a covariance sweep could reuse \(g_{kk}\) and \(h_{kk}\). The implementation solves the Sylvester equation again at every call of `solve_second_order`, and what a sweep can reuse is \(H\), passed in through `hessian=`.
 
 For the process \(\log a' = \rho \log a + \varepsilon\), with \(\mathrm{Var}(\varepsilon) = \sigma^2\), one has \(E_t a' = a^{\rho} \exp(\sigma^2/2)\). In proportional deviation the shift is \(\sigma^2/2\). The rule adds \(h_{ss}/2\), so \(h_{ss}\) on technology comes out as \(\sigma^2\). Where the rule is exact in the model's coordinates, as for capital under full depreciation and log utility, the corresponding correction is zero. A nonzero correction on that capital stock is an error in the risk block.
 
@@ -219,9 +219,9 @@ k^s_{t+1} &= P k^s_t + \tfrac12 h_{kk}[k^f_t, k^f_t] + \tfrac12 h_{ss}, \\
 k_t &= k^f_t + k^s_t.
 \end{align*}
 
-Without pruning, the quadratic term is evaluated on a state that already contains the quadratic terms of earlier periods, and a long sample explodes. That is what iterating a quadratic map does. An unpruned sample therefore cannot support a moment over any horizon long enough for the moment to carry meaning.
+Without pruning, the quadratic term is evaluated on a state that already contains the quadratic terms of earlier periods, and a long sample explodes. Iterating a quadratic map produces this whatever the numerical settings, so an unpruned second-order sample cannot support a moment over a long horizon.
 
-The ergodic mean is obtained in closed form from the pruned system and not as a sample average. With \(V_f\) the first-order covariance of the states,
+The ergodic mean is obtained in closed form from the pruned system instead of as a sample average. With \(V_f\) the first-order covariance of the states,
 
 \[
 E[k^s] = (I - P)^{-1}\Big(\tfrac12 h_{kk} : V_f + \tfrac12 h_{ss}\Big),
@@ -248,7 +248,7 @@ The cubic coefficients \(g_{kkk}\) and \(h_{kkk}\) are computed. They solve the 
 \bar A\, W_3 + \bar B\, W_3\, (P \otimes P \otimes P) = -K_3,
 \]
 
-and symmetry in the three indices is imposed by averaging over the six permutations. The known term \(K_3\) combines the Hessian contracted with the second derivatives of the map and the third-derivative tensor contracted with \(Z\). The third derivative is a central difference of the Hessian, with an outer step of \(10^{-3}\), larger than the inner one, because differentiating an object already obtained by differencing needs a step that dominates the noise in that object. When the Hessian is symbolic, this difference inherits its exactness. The dense third-order tensor has size of order \(n m^3\). In a model with tens of variables it does not fit as a symbolic object, and at that size the route is the Dynare exporter with `order=3`.
+and symmetry in the three indices is imposed by averaging over the six permutations. The known term \(K_3\) combines the Hessian contracted with the second derivatives of the map and the third-derivative tensor contracted with \(Z\). The third derivative is a central difference of the Hessian, with an outer step of \(10^{-3}\), larger than the inner one, because differentiating an object already obtained by differencing needs a step that dominates the noise in that object. When the Hessian is symbolic, the difference is free of the round-off that a difference of finite differences accumulates, and it keeps the truncation error of a central difference, of order \(h^2\). The dense third-order tensor has size of order \(n m^3\). In a model with tens of variables it does not fit as a symbolic object, and at that size the route is the Dynare exporter with `order=3`.
 
 \(g_{ssk}\) and \(h_{ssk}\) are computed from the curvature of the rule in \(\varepsilon\), before the expectation is taken. In the log AR(1), \(h_{ssk}[a,a] = \rho\sigma^2\), which is the cross term of \((1+\hat a)^{\rho}\exp(\sigma^2/2)\). The first-order solution still adds \(Q\varepsilon\). The \(\sigma^2 k\) term of the decision rule is assembled, while the tensor in which the innovation is an argument of every monomial, \(y_t = g(y_{t-1}, u_t, \sigma)\), is not.
 
@@ -258,7 +258,7 @@ Third-order simulation uses the three-layer pruning of Andreasen, Fernández-Vil
 
 The deterministic transition from an initial steady state to a terminal one, over \(T\) periods, uses the same \(f\), with \(\varepsilon = 0\) at every date. The unknowns are the \(n_u\) jumps at \(t = 0\) and the full vector at \(t = 1,\ldots,T\). The \(n_k\) states at \(t = 0\) come from the initial state. At \(t = T\), the \(n_u\) jumps are fixed at the terminal state. Fixing the whole terminal vector would overdetermine the system by \(n_k\) equations. The symptom is a Newton iteration that stops converging and looks like a hard problem.
 
-The stacked residual has \(T n + n_u\) entries. The first \(Tn\) are \(f(y_{t+1}, y_t, 0)\) for \(t = 0,\ldots,T-1\). The remaining ones are the difference between the terminal jumps and those of the destination steady state. The Jacobian is block-bidiagonal and is assembled in sparse form. Its default step is a forward difference. The accuracy of the converged path is set by the residual tolerance, \(10^{-10}\) by default, and not by the order of the Jacobian. A central difference is available when the residual is noisy.
+The stacked residual has \(T n + n_u\) entries. The first \(Tn\) are \(f(y_{t+1}, y_t, 0)\) for \(t = 0,\ldots,T-1\). The remaining ones are the difference between the terminal jumps and those of the destination steady state. The Jacobian is block-bidiagonal and is assembled in sparse form. By default it uses the model's exact derivatives when the model was declared in text, and a forward difference otherwise. The accuracy of the converged path is set by the residual tolerance, \(10^{-10}\) by default, and not by the order of the Jacobian. A central difference is available when the residual is noisy.
 
 A surprise is a change in the terminal state with constant parameters. An announced path is a sequence of parameters, or of context values, of length \(T+1\), known from \(t = 0\). The two produce different impacts, and that difference is what the experiment measures. Next-period parameters, when an equation needs them, are carried in the context, which also accepts a path.
 
@@ -272,7 +272,7 @@ Given free parameters \(\theta\) and targets \(m^\star\), calibration solves
 
 by bounded least squares, with denominator 1 when the target is smaller than \(10^{-12}\) in absolute value. \(m(\theta)\) can be a steady-state variable or a function of one, such as a capital–output ratio. The steady state is solved at each evaluation, warm-started from the previous point. The accepted solution is re-evaluated at the returned point, because the solver's last trial step is not necessarily its best. The default tolerance on the maximum relative error is \(10^{-10}\).
 
-Identification is assessed by the singular values of the elasticity matrix \(\partial \log m_i / \partial \log \theta_j\), obtained by differencing with step \(10^{-5}\). A rank deficiency means a direction of \(\theta\) to which no target responds. The solver then stops at a point that depends on the start, and no tolerance corrects that.
+Identification is assessed by `target_jacobian`, a separate call that `calibrate` does not make, from the singular values of the elasticity matrix \(\partial \log m_i / \partial \log \theta_j\), obtained by differencing with step \(10^{-5}\). A rank deficiency means a direction of \(\theta\) to which no target responds. The solver then stops at a point that depends on the start, and no tolerance corrects that.
 
 ## 11. First-order conditions
 
@@ -296,7 +296,7 @@ Inequalities, complementarity and transversality conditions are not derived. The
 
 ## 12. Translating timing in the export
 
-The exporter accepts only a model declared in text, because a Python residual function cannot be decompiled into equations. The part that is not mechanical reprinting is the timing, and that is where a manual port goes wrong.
+The exporter accepts only a model declared in text, because a Python residual function cannot be decompiled into equations. The part that is not mechanical reprinting is the timing, which differs between the conventions and has to be translated.
 
 Predetermined stocks, the states whose row of \(Q\) is zero, enter Dynare as `predetermined_variables`. The variable without a lag is the stock available at \(t\), and \(k_{t+1}\) is written \(k(+1)\). In MacroModelling.jl the same stock is \(k[-1]\). Exogenous processes follow Dynare's standard timing, in which the innovation is realised at \(t\) and moves the variable at \(t\), so the equation is written one period back, \(\,a = \rho\, a(-1) + \varepsilon_a\,\). Writing these processes with a lead produces a model that solves and whose risk corrections vanish, for the reason given in section 1.
 
@@ -310,7 +310,7 @@ Projection places the same residual on a Chebyshev grid. The rows of the Jacobia
 
 Heterogeneous agents, in the sense of a distribution over agents, remain outside the package. The map of what each routine does not cover is in `ROADMAP.md`.
 
-A period equilibrium calibrated on a social accounting matrix is not an instance of \(f\). If a model of that kind needed an Euler equation or an announced path, the intertemporal residual is what would come here, while the matrix would stay in the other package. The corresponding section is in the `cgekit` roadmap.
+A period equilibrium calibrated on a social accounting matrix is not an instance of \(f\). If a model of that kind needed an Euler equation or an announced path, the intertemporal residual is what would come here, while the matrix would stay in the other package. The corresponding section is in the `cgelab` roadmap.
 
 ## References
 

@@ -13,12 +13,12 @@ def main(argv=None) -> int:
     parser.add_argument("--periods", type=int, default=12, help="impulse-response length")
     args = parser.parse_args(argv)
 
-    import dsgelab as dk
+    import dsgelab as dsg
     from dsgelab.examples import nk, rbc
 
     build = {"rbc": rbc.build, "nk": nk.build}[args.example]
     model, params, guess = build()
-    sol = dk.solve(model, params, guess=guess)
+    sol = dsg.solve(model, params, guess=guess)
     print(sol.summary())
 
     acc = sol.accuracy()

@@ -266,8 +266,8 @@ class FirstOrderSolution:
             percent: bool = True) -> dict[str, np.ndarray]:
         """Impulse response of every variable.
 
-        ``kind="shock"`` applies an innovation of ``size`` standard-deviation
-        units, so the impact period is ``k = Q e_m * size``. ``kind="state"``
+        ``kind="shock"`` applies an innovation equal to ``size``, in the units of the
+        shock, so the impact period is ``k = Q e_m * size``. ``kind="state"``
         displaces the named state directly, which is what one wants for a
         counterfactual on an exogenous LEVEL rather than on its innovation.
 

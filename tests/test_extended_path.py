@@ -9,11 +9,11 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.extended_path import extended_path, quadrature_nodes  # noqa: E402
 
 # Burnside (1998): the price-dividend ratio of a Lucas tree with AR(1) dividend growth.
-BURNSIDE = dk.from_equations(
+BURNSIDE = dsg.from_equations(
     ["x(+1) = (1 - rho)*xbar + rho*x + e",
      "1 = beta*exp(theta*x(+1))*(1 + y(+1))/y"],
     states=["x"], jumps=["y"], shocks=["e"], parameters=["beta", "theta", "rho", "xbar"])
@@ -23,7 +23,7 @@ SS_B = dict(x=PB["xbar"], y=_g / (1 - _g))
 
 
 def test_deterministic_extended_path_is_the_truncated_backward_recursion():
-    ss = dk.steady_state(BURNSIDE, SS_B, PB)
+    ss = dsg.steady_state(BURNSIDE, SS_B, PB)
     H = 40
     E = 0.0348 * np.random.default_rng(1).standard_normal((8, 1))
     r = extended_path(BURNSIDE, ss, PB, E, horizon=H)
@@ -39,7 +39,7 @@ def test_deterministic_extended_path_is_the_truncated_backward_recursion():
         assert r["y"][t] == pytest.approx(y, rel=1e-12)
 
 
-LINEAR = dk.from_equations(
+LINEAR = dsg.from_equations(
     ["a(+1) = 0.8*a + e1",
      "b(+1) = 0.5*b + e2",
      "y = 0.6*y(+1) + a - 0.5*pie",
@@ -49,8 +49,8 @@ COV = np.diag([0.01, 0.04])
 
 
 def test_in_a_linear_model_every_extended_path_is_the_first_order_solution():
-    ss = dk.steady_state(LINEAR, dict(a=0, b=0, y=0, pie=0), {})
-    sol = dk.solve(LINEAR, {}, steady=ss)
+    ss = dsg.steady_state(LINEAR, dict(a=0, b=0, y=0, pie=0), {})
+    sol = dsg.solve(LINEAR, {}, steady=ss)
     E = np.random.default_rng(2).standard_normal((12, 2)) * np.sqrt(np.diag(COV))
     k = np.zeros(2)
     lin = []
@@ -65,7 +65,7 @@ def test_in_a_linear_model_every_extended_path_is_the_first_order_solution():
 
 def test_risk_raises_the_price_of_the_tree_and_order_matters():
     # with theta < 0, uncertainty about dividend growth raises the price-dividend ratio
-    ss = dk.steady_state(BURNSIDE, SS_B, PB)
+    ss = dsg.steady_state(BURNSIDE, SS_B, PB)
     cov = np.array([[0.0348 ** 2]])
     E = np.zeros((3, 1))
     det = extended_path(BURNSIDE, ss, PB, E, horizon=40)

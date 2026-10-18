@@ -1,27 +1,28 @@
-"""Os modelos de referência do Dynare, declarados em dsgelab.
+"""Dynare's reference models, declared in dsgelab.
 
-Cada porte é uma transcrição das equações do `.mod`, com uma única tradução mecânica: a DATAÇÃO.
+Each port is a transcription of the `.mod` equations, with a single mechanical translation, the
+TIMING.
 
     Dynare                          dsgelab
     ------------------------------  --------------------------------------------
-    x        (variável de salto)    cur["x"]
+    x        (jump variable)        cur["x"]
     x(+1)                           nxt["x"]
-    k        (estoque decidido em t)  nxt["k"]      <- k é PREDETERMINADO
-    k(-1)    (estoque usado em t)      cur["k"]
-    a        (processo com a(-1))      cur["a"], e a equação anda um período à frente
-    e        (inovação)                dsgelab datada em t+1
+    k        (stock decided in t)     nxt["k"]      <- k is PREDETERMINED
+    k(-1)    (stock used in t)         cur["k"]
+    a        (process with a(-1))      cur["a"], and the equation moves one period ahead
+    e        (innovation)              dsgelab dated t+1
 
-O ponto delicado é o estoque. No Dynare `k` é o estoque de FIM de período e `k(-1)` o que produziu
-`y` no período; no dsgelab o estado em t é o que está disponível em t, isto é, o `k(-1)` do Dynare.
-Trocar os dois dá um modelo que resolve, satisfaz Blanchard-Kahn e responde a choques — e não é o
-mesmo modelo. É por isso que a validação compara IRFs e momentos, e não apenas o estado
-estacionário.
+The stock is where care is needed. In Dynare `k` is the END-of-period stock and `k(-1)` the one
+that produced `y` in the period. In dsgelab the state in t is what is available in t, that is,
+Dynare's `k(-1)`. Swapping the two gives a model that solves, satisfies Blanchard-Kahn and responds
+to shocks, and is not the same model. This is why the validation compares IRFs and moments, and not
+only the steady state.
 
-Os processos exógenos não sofrem deslocamento: `a = rho*a(-1) + e` no Dynare determina `a_t` a
-partir de `t-1` mais a inovação de `t`, que é exatamente a convenção do dsgelab
+The exogenous processes are not shifted. In Dynare `a = rho*a(-1) + e` determines `a_t` from
+`t-1` plus the innovation of `t`, which is exactly dsgelab's convention
 (`nxt.a = rho*cur.a + eps`).
 
-Cada função devolve `(model, params, guess, cov, dynare_mod)`.
+Each function returns `(model, params, guess, cov, dynare_mod)`.
 """
 from __future__ import annotations
 
@@ -36,25 +37,25 @@ __all__ = ["example1", "example2", "rbc_baseline", "ALL"]
 # example1.mod — Collard (2001), "Stochastic simulations with DYNARE"
 # ---------------------------------------------------------------------------
 def example1():
-    """Crescimento estocástico com lazer e dois processos exógenos CRUZADOS.
+    """Stochastic growth with leisure and two CROSS-LINKED exogenous processes.
 
-    Exercita: choques CORRELACIONADOS (`var e, u = phi*0.009*0.009`) e processos exógenos que se
-    alimentam um do outro (`a` depende de `b(-1)` e vice-versa), de modo que a matriz de transição
-    dos estados não é diagonal e o carregamento de choque não é trivial.
+    Exercises CORRELATED shocks (`var e, u = phi*0.009*0.009`) and exogenous processes that feed
+    each other (`a` depends on `b(-1)` and vice versa), so that the state transition matrix is not
+    diagonal and the shock loading is not the identity.
     """
     p = dict(alpha=0.36, rho=0.95, tau=0.025, beta=0.99, delta=0.025, psi=0.0, theta=2.95)
     model = from_equations(
         [
-            # FOC intratemporal:  c*theta*h^(1+psi) = (1-alpha)*y
+            # intratemporal FOC:  c*theta*h^(1+psi) = (1-alpha)*y
             "c*theta*h**(1+psi) - (1-alpha)*y",
             # Euler:  k = beta*((exp(b)*c)/(exp(b(+1))*c(+1)))*(exp(b(+1))*alpha*y(+1)+(1-delta)*k)
             "k(+1) - beta*((exp(b)*c)/(exp(b(+1))*c(+1)))"
             "*(exp(b(+1))*alpha*y(+1) + (1-delta)*k(+1))",
-            # produção:  y = exp(a)*k(-1)^alpha*h^(1-alpha)
+            # production:  y = exp(a)*k(-1)^alpha*h^(1-alpha)
             "y - exp(a)*k**alpha*h**(1-alpha)",
-            # acumulação:  k = exp(b)*(y-c) + (1-delta)*k(-1)
+            # accumulation:  k = exp(b)*(y-c) + (1-delta)*k(-1)
             "k(+1) - exp(b)*(y-c) - (1-delta)*k",
-            # processos cruzados
+            # cross-linked processes
             "a(+1) - rho*a - tau*b - eps_e",
             "b(+1) - tau*a - rho*b - eps_u",
         ],
@@ -69,15 +70,15 @@ def example1():
 
 
 # ---------------------------------------------------------------------------
-# example2.mod — o MESMO modelo, escrito em logaritmos
+# example2.mod — the SAME model, written in logarithms
 # ---------------------------------------------------------------------------
 def example2():
-    """O modelo do example1 com todas as variáveis em log, e choques não correlacionados.
+    """The example1 model with every variable in logs, and uncorrelated shocks.
 
-    Por que vale a pena portar os dois: a alocação REAL tem de ser a mesma, e as duas leituras
-    diferem apenas por uma transformação das variáveis. É um teste da própria escolha de
-    coordenadas do dsgelab, que carrega desvios PROPORCIONAIS para variáveis com e.e. não nulo —
-    aqui as variáveis já são logs, e os desvios são absolutos.
+    Porting both tests something. The REAL allocation has to be the same, and the two versions
+    differ only by a transformation of the variables. This tests dsgelab's own choice of
+    coordinates, which carries PROPORTIONAL deviations for variables with a nonzero s.s. Here the
+    variables are already logs, and the deviations are absolute.
     """
     p = dict(alpha=0.36, rho=0.95, tau=0.025, beta=0.99, delta=0.025, psi=0.0, theta=2.95)
     model = from_equations(
@@ -99,17 +100,17 @@ def example2():
 
 
 # ---------------------------------------------------------------------------
-# RBC_baseline.mod — Johannes Pfeifer, calibrado a dados dos EUA 1947Q4-2016Q1
+# RBC_baseline.mod — Johannes Pfeifer, calibrated to US data 1947Q4-2016Q1
 # ---------------------------------------------------------------------------
 def rbc_baseline():
-    """RBC com lazer, crescimento e gasto do governo.
+    """RBC with leisure, growth and government spending.
 
-    Exercita um modelo de 15 variáveis com seis identidades logarítmicas puras — equações
-    ESTÁTICAS, que põem linhas nulas em A e tornam o feixe QZ singular. É a situação em que uma
-    implementação que inverta A falha, e uma que passe pela transformação QZ não.
+    Exercises a 15-variable model with six pure logarithmic identities. These are STATIC
+    equations, which put zero rows in A and make the QZ pencil singular. In that situation an
+    implementation that inverts A fails, and one that goes through the QZ decomposition does not.
 
-    Os parâmetros derivados (gammax, delta, beta, psi, g_ss) saem dos alvos de calibração pela
-    mesma aritmética do bloco `steady_state_model` do `.mod`.
+    The derived parameters (gammax, delta, beta, psi, g_ss) follow from the calibration targets by
+    the same arithmetic as the `steady_state_model` block of the `.mod`.
     """
     alpha, sigma, i_y, k_y = 0.33, 1.0, 0.25, 10.4
     x, n, rhoz, rhog, gshare = 0.0055, 0.0027, 0.97, 0.989, 0.2038
@@ -131,18 +132,19 @@ def rbc_baseline():
             # Euler: c^-sigma = beta/gammax*c(+1)^-sigma*(alpha*exp(z(+1))*(k/l(+1))^(alpha-1)+1-delta)
             "c**(-sigma) - beta/gammax*c(+1)**(-sigma)"
             "*(alpha*exp(z(+1))*(k(+1)/l(+1))**(alpha-1) + (1-delta))",
-            "psi*c**sigma*1/(1-l) - w",                       # FOC do trabalho
-            "gammax*k(+1) - (1-delta)*k - invest",            # acumulação
-            "y - invest - c - g_ss*exp(ghat)",                # restrição de recursos
-            "y - exp(z)*k**alpha*l**(1-alpha)",               # produção
-            "w - (1-alpha)*y/l",                              # CPO do trabalho, firma
-            "r - 4*alpha*y/k",                                # juro anualizado
+            "psi*c**sigma*1/(1-l) - w",                       # labour FOC
+            "gammax*k(+1) - (1-delta)*k - invest",            # accumulation
+            "y - invest - c - g_ss*exp(ghat)",                # resource constraint
+            "y - exp(z)*k**alpha*l**(1-alpha)",               # production
+            "w - (1-alpha)*y/l",                              # labour FOC, firm
+            "r - 4*alpha*y/k",                                # annualised interest rate
             "z(+1) - rhoz*z - eps_z",
             "ghat(+1) - rhog*ghat - eps_g",
-            # ATENÇÃO à datação: no .mod `log_k = log(k)` refere-se ao `k` CORRENTE do Dynare,
-            # que é o estoque de FIM de período — o `k(+1)` daqui. Escrever `log(k)` daria o log
-            # do estoque disponível, uma série atrasada em um período: o e.e. coincidiria e a IRF
-            # não, que é exatamente o tipo de erro que só a comparação dinâmica revela.
+            # NOTE the timing. In the .mod, `log_k = log(k)` refers to Dynare's CURRENT `k`,
+            # which is the END-of-period stock, the `k(+1)` here. Writing `log(k)` would give the
+            # log of the available stock, a series lagged by one period. The s.s. would coincide
+            # and the IRF would not, which is exactly the kind of error that only the dynamic
+            # comparison reveals.
             "log_y - log(y)", "log_k - log(k(+1))", "log_c - log(c)",
             "log_l - log(l)", "log_w - log(w)", "log_invest - log(invest)",
         ],
@@ -160,5 +162,5 @@ def rbc_baseline():
     return model, p, guess, cov, "RBC_baseline.mod"
 
 
-#: nome -> construtor, na ordem em que a validação os percorre
+#: name -> constructor, in the order in which the validation goes through them
 ALL = {"example1": example1, "example2": example2, "rbc_baseline": rbc_baseline}

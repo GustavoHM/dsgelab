@@ -1,24 +1,24 @@
-"""compare_diagnostics.py — diagnóstico do modelo e estado estacionário declarado, contra o Dynare.
+"""compare_diagnostics.py: model diagnostics and the declared steady state, against Dynare.
 
-Parte 1, diagnose contra model_diagnostics.
+Part 1, diagnose against model_diagnostics.
 
-diagnostics/walras.mod, escrito aqui, é um modelo quebrado de propósito: falta a equação de
-Euler, e no lugar dela está uma restrição de recursos implicada pelas outras duas (a lei de
-Walras); e q só aparece um período adiante. O Dynare roda o model_diagnostics; o dsgelab lê o
-mesmo arquivo por from_mod e roda diagnose no ponto do steady_state_model. Compara-se o que os
-dois apontam: a variável ausente no período corrente, o número de relações colineares, as
-variáveis e as equações de cada relação, e as equações redundantes da jacobiana dinâmica.
+diagnostics/walras.mod, written here, is a model broken on purpose. The Euler equation is missing,
+and in its place there is a resource constraint implied by the other two (Walras' law). Also, q
+only appears one period ahead. Dynare runs model_diagnostics, and dsgelab reads the same file with
+from_mod and runs diagnose at the steady_state_model point. What the two report is compared: the
+variable absent in the current period, the number of collinear relationships, the variables and
+the equations of each relationship, and the redundant equations of the dynamic Jacobian.
 
-As variáveis auxiliares do dsgelab (LAG1_k é k(-1)) são lidas pelo nome do Dynare.
+dsgelab's auxiliary variables (LAG1_k is k(-1)) are read under Dynare's name.
 
-Parte 2, o steady_state_model como estado estacionário (analytic=True), sem Newton. O do fs2000.mod
-do Dynare tem de dar o ponto do Dynare (out_import/fs2000.mat, de run_examples.sh); o de
-diagnostics/bad_steady.mod, errado de propósito, tem de ser recusado pelos dois.
+Part 2, the steady_state_model as the steady state (analytic=True), without Newton. The one in
+Dynare's fs2000.mod has to give Dynare's point (out_import/fs2000.mat, from run_examples.sh). The
+one in diagnostics/bad_steady.mod, wrong on purpose, has to be refused by both.
 
-Parte 3, homotopia. diagnostics/homotopy.mod, escrito aqui, tem um initval bom para delta = 0.02
-e o modelo com delta = 0.9; o homotopy_setup leva um ao outro. Newton direto falha; com a
-homotopia, o dsgelab chega à forma fechada e o Dynare (homotopy_mode=3) ao mesmo ponto, dentro
-da tolerância do próprio Dynare.
+Part 3, homotopy. diagnostics/homotopy.mod, written here, has an initval that is good for
+delta = 0.02 and the model with delta = 0.9, and homotopy_setup takes one to the other. Newton
+alone fails. With the homotopy, dsgelab reaches the closed form and Dynare (homotopy_mode=3) the
+same point, within Dynare's own tolerance.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.dynare import from_mod
 
 HERE = Path(__file__).resolve().parent
@@ -38,7 +38,7 @@ MOD = HERE / "diagnostics" / "walras.mod"
 
 
 def _tools() -> tuple[str, Path] | None:
-    """O Octave e o diretório matlab/ do Dynare; OCTAVE e DYNARE_MATLAB têm precedência."""
+    """Octave and Dynare's matlab/ directory. OCTAVE and DYNARE_MATLAB take precedence."""
     octave = os.environ.get("OCTAVE") or shutil.which("octave") or "/opt/homebrew/bin/octave"
     candidates = [os.environ.get("DYNARE_MATLAB"), "/opt/homebrew/opt/dynare/lib/dynare/matlab",
                   "/opt/homebrew/lib/dynare/matlab", "/usr/local/opt/dynare/lib/dynare/matlab",
@@ -83,11 +83,11 @@ def parse(text: str) -> dict:
 def main() -> int:
     text = dynare_report()
     if text is None:
-        print("Octave/Dynare indisponíveis")
+        print("Octave/Dynare unavailable")
         return 1
     dy = parse(text)
     mf = from_mod(MOD)
-    r = dk.diagnose(mf.model, mf.params, mf.full_guess())
+    r = dsg.diagnose(mf.model, mf.params, mf.full_guess())
     ours = dict(absent=r["absent_current"], relations=r["relations"],
                 variables=sorted({mf.name_of(v) for v in r["collinear_variables"][0]}),
                 equations=sorted(i for i, _ in r["collinear_equations"][0]),
@@ -106,19 +106,19 @@ def main() -> int:
 def check_homotopy() -> bool:
     import numpy as np
     from dsgelab.steady import SteadyStateError  # noqa: F401
-    print("\nhomotopia (homotopy_setup)")
+    print("\nhomotopy (homotopy_setup)")
     mf = from_mod(HERE / "diagnostics" / "homotopy.mod")
     a, b, d = (mf.params[x] for x in ("alpha", "beta", "delta"))
     k = (a / (1 / b - 1 + d)) ** (1 / (1 - a))
     exact = dict(k=k, c=k ** a - d * k)
     try:
         mf.steady_state()
-        direct = "converge (inesperado)"
+        direct = "converges (unexpected)"
     except Exception:
-        direct = "falha"
+        direct = "fails"
     ss = mf.steady_state(homotopy=mf.homotopy)
     err = max(abs(ss.values[v] / exact[v] - 1) for v in exact)
-    print(f"  Newton direto: {direct}; com homotopia, contra a forma fechada  {err:.1e}")
+    print(f"  Newton alone: {direct}; with homotopy, against the closed form  {err:.1e}")
     text = _run_dynare(HERE / "diagnostics" / "homotopy.mod")
     dy = {}
     if text:
@@ -127,18 +127,18 @@ def check_homotopy() -> bool:
             if m:
                 dy[v] = float(m.group(1))
     if len(dy) != len(exact):
-        print("  Dynare: sem estado estacionário no log")
+        print("  Dynare: no steady state in the log")
         return False
     errd = max(abs(dy[v] / exact[v] - 1) for v in exact)
-    print(f"  Dynare, contra a forma fechada  {errd:.1e}  (o que o log imprime, com 6 algarismos)")
-    return bool(err < 1e-12 and errd < 1e-5 and direct == "falha" and np.isfinite(errd))
+    print(f"  Dynare, against the closed form  {errd:.1e}  (what the log prints, with 6 digits)")
+    return bool(err < 1e-12 and errd < 1e-5 and direct == "fails" and np.isfinite(errd))
 
 
 def check_closed_forms() -> bool:
     import numpy as np
     from scipy.io import loadmat
     from dsgelab.steady import SteadyStateError
-    print("\nsteady_state_model como estado estacionário")
+    print("\nsteady_state_model as the steady state")
     ok = True
     f = HERE / "out_import" / "fs2000.mat"
     if f.exists():
@@ -147,20 +147,20 @@ def check_closed_forms() -> bool:
         mf = from_mod(HERE / "mods" / "examples" / "fs2000.mod")
         ss = mf.steady_state(analytic=True)
         d = max(abs(ss.values[v] - ys[v]) for v in mf.endogenous)
-        print(f"  fs2000: forma fechada contra o e.e. do Dynare  {d:.1e}   resíduo {ss.residual:.1e}")
+        print(f"  fs2000: closed form against Dynare's s.s.  {d:.1e}   residual {ss.residual:.1e}")
         ok &= d < 1e-12
     else:
-        print("  fs2000: sem out_import/fs2000.mat — rode run_examples.sh")
+        print("  fs2000: no out_import/fs2000.mat, run run_examples.sh")
         ok = False
     try:
         from_mod(HERE / "diagnostics" / "bad_steady.mod").steady_state(analytic=True)
-        print("  bad_steady: ACEITO — deveria ser recusado")
+        print("  bad_steady: ACCEPTED, should have been refused")
         ok = False
     except SteadyStateError as e:
-        print(f"  bad_steady: recusado ({str(e)[:90]}...)")
+        print(f"  bad_steady: refused ({str(e)[:90]}...)")
     text = _run_dynare(HERE / "diagnostics" / "bad_steady.mod")
     refused = text is not None and "did not compute the steady state" in text
-    print(f"  bad_steady no Dynare: {'recusado' if refused else 'ACEITO'}")
+    print(f"  bad_steady in Dynare: {'refused' if refused else 'ACCEPTED'}")
     return ok and refused
 
 

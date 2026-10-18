@@ -1,23 +1,24 @@
-"""compare_bgp.py — crescimento balanceado, contra o bgp.write do Dynare e os testes dele.
+"""compare_bgp.py: balanced growth, against Dynare's bgp.write and its tests.
 
-Os três modelos são de tests/bgp do Dynare 7.2, lidos por `dsgelab.from_mod`: Solow com
-progresso técnico e população crescendo (só defasagens), um Ramsey com tendência determinística
-(defasagens e avanços) e um novo-keynesiano em níveis (só avanços).
+The three models come from tests/bgp of Dynare 7.2, read by `dsgelab.from_mod`. They are Solow
+with technical progress and a growing population (lags only), a Ramsey model with a deterministic
+trend (lags and leads) and a New Keynesian model in levels (leads only).
 
-Parte 1, o problema. O Dynare escreve a função bgpfun, que avalia o modelo em dois períodos
-consecutivos com x_t = y g^t; run_bgp.sh a avalia em cinco pontos fixos. O dsgelab avalia
-`dsgelab.bgp.bgp_residual` nos mesmos pontos, com a datação de cada um: o nível do Dynare é o da
-defasagem quando o modelo tem defasagens (e então o nível corrente do dsgelab é y g, e o da
-auxiliar LAG1_v é y), e o corrente num modelo só com avanços. Compara-se resíduo a resíduo.
+Part 1, the problem. Dynare writes the function bgpfun, which evaluates the model at two
+consecutive periods with x_t = y g^t, and run_bgp.sh evaluates it at five fixed points. dsgelab
+evaluates `dsgelab.bgp.bgp_residual` at the same points, with the timing of each. Dynare's level
+is that of the lag when the model has lags (and then dsgelab's current level is y g, and that of
+the auxiliary LAG1_v is y), and the current one in a model with leads only. The comparison goes
+residual by residual.
 
-Parte 2, a solução. `ModFile.balanced_growth` a partir de partidas aleatórias, como nos testes
-do Dynare, e as asserções deles: no Solow, K/Y = s gE gN / (gE gN - 1 + delta), crescimento do
-produto e do capital gE gN, nível do crescimento da eficiência gE (300 partidas); no Ramsey,
-todo fator de crescimento é 1.02; no novo-keynesiano, níveis e fatores iguais a 1.
+Part 2, the solution. `ModFile.balanced_growth` from random starting points, as in Dynare's tests,
+with their assertions. In Solow, K/Y = s gE gN / (gE gN - 1 + delta), output and capital grow at
+gE gN, and the level of efficiency growth is gE (300 starting points). In Ramsey, every growth
+factor is 1.02. In the New Keynesian model, levels and factors equal 1.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_bgp.sh           # exporta out_bgp/<nome>.mat
+    bash run_bgp.sh           # exports out_bgp/<name>.mat
 """
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ def residuals_match(name) -> bool:
     from scipy.io import loadmat
     f = HERE / "out_bgp" / f"{name}.mat"
     if not f.exists():
-        sys.exit(f"falta {f}: rode bash run_bgp.sh")
+        sys.exit(f"missing {f}: run bash run_bgp.sh")
     ex = loadmat(f, simplify_cells=True)["ex"]
     names = [str(v).strip() for v in ex["endo_names"]]
     mf = _modfile(name)
@@ -66,7 +67,7 @@ def residuals_match(name) -> bool:
         ours = np.concatenate([r[:nd], r[n:n + nd]])      # Dynare's equations, both dates
         err = max(err, float(np.max(np.abs(ours - ex["F"][:, j]))))
     ok = err < 1e-10
-    print(f"  {name:7s} resíduos em 5 pontos contra bgpfun: desvio máx {err:.1e}  "
+    print(f"  {name:7s} residuals at 5 points against bgpfun: max deviation {err:.1e}  "
           f"{'OK' if ok else 'DIVERGE'}")
     return ok
 
@@ -86,25 +87,25 @@ def solutions() -> bool:
                                       r.growth["PhysicalCapitalStock"] - gE * gN,
                                       r.levels["EfficiencyGrowth"] - gE]))
     good = bool(np.all(dev < 1e-8))
-    print(f"  solow   300 partidas: K/Y {dev[0]:.1e}, g_Y {dev[1]:.1e}, g_K {dev[2]:.1e}, "
+    print(f"  solow   300 starts: K/Y {dev[0]:.1e}, g_Y {dev[1]:.1e}, g_K {dev[2]:.1e}, "
           f"gE {dev[3]:.1e}  {'OK' if good else 'DIVERGE'}")
     ok &= good
     mf = _modfile("ramsey")
     r = mf.balanced_growth(seed=1)
     d = max(abs(r.growth[v] - 1.02) for v in mf.endogenous)
-    print(f"  ramsey  fatores de crescimento contra 1.02: {d:.1e}  {'OK' if d < 1e-6 else 'DIVERGE'}")
+    print(f"  ramsey  growth factors against 1.02: {d:.1e}  {'OK' if d < 1e-6 else 'DIVERGE'}")
     ok &= d < 1e-6
     mf = _modfile("nk")
     r = mf.balanced_growth(seed=2)
     d = max(max(abs(r.levels[v] - 1), abs(r.growth[v] - 1)) for v in mf.endogenous)
-    print(f"  nk      níveis e fatores contra 1: {d:.1e}  {'OK' if d < 1e-9 else 'DIVERGE'}")
+    print(f"  nk      levels and factors against 1: {d:.1e}  {'OK' if d < 1e-9 else 'DIVERGE'}")
     return ok and d < 1e-9
 
 
 def main() -> int:
-    print("o problema (bgp.write)")
+    print("the problem (bgp.write)")
     ok = all([residuals_match(n) for n in FILES])
-    print("a solução (asserções dos testes do Dynare)")
+    print("the solution (assertions of Dynare's tests)")
     ok &= solutions()
     return 0 if ok else 1
 

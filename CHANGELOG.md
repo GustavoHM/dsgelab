@@ -1,29 +1,31 @@
 # Changelog
 
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
-before 1.0, a minor version may add to the API and a patch version only fixes.
+before 1.0, a minor version may add to the API and a patch version only fixes bugs.
 
-## Unreleased
+## 0.5.0 — unreleased
 
-Toward the roadmap's milestone 0.5, the public release. No new solver features.
+The roadmap's milestone 0.5, the public release. No new solver features.
 
 ### Added
 
 - `py.typed`: the package declares its type annotations (PEP 561).
-- CI tests the built wheel, not the checkout, on Linux, macOS and Windows with Python
-  3.11 to 3.14; the sdist is installed and tested from its own tree; the site examples
-  run; `twine check --strict` passes on both artifacts. `DSGELAB_TEST_INSTALLED=1`
-  makes the suite import the installed package instead of `src/`.
+- CI tests the built wheel on Linux, macOS and Windows with Python 3.11 to 3.14, and
+  installs the sdist and tests it from its own tree. The site examples run in CI, and
+  `twine check --strict` passes on both artefacts. `DSGELAB_TEST_INSTALLED=1` makes the
+  suite import the installed package instead of `src/`.
 - `validation/run_all.sh` runs the whole external validation and summarises which
-  comparisons passed; `validation/setup_octave_packages.sh` installs the Octave packages
-  at the versions the comparison used, checked by sha256; `validation/macromodelling/`
+  comparisons passed. `validation/setup_octave_packages.sh` installs the Octave packages
+  at the versions the comparison used, checked by sha256, and `validation/macromodelling/`
   is a Julia project with MacroModelling.jl pinned. A weekly CI job runs all three.
 - A release workflow that publishes by trusted publishing, to TestPyPI first, tests what
   TestPyPI serves, and only then publishes to PyPI.
-- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue and pull-request templates; a section
-  of known limitations in the README.
-- The site in English, with the Portuguese version under `site/pt-br/`; the examples of
-  both run.
+- `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and issue and pull-request templates. The
+  README has a section of known limitations.
+- `.github/workflows/pages.yml` publishes the site to GitHub Pages, pointing the links to
+  `docs/` at the files on GitHub. It is skipped while the repository is private.
+- The site in English, with the Portuguese version under `site/pt-br/`. The examples of
+  both versions run.
 - `validation/heutel/fetch.sh` downloads Heutel's MATLAB files from the public copy at
   Georgia State University's repository and checks them; the six `.m` files are
   byte-identical to the ones the port was validated on.
@@ -35,22 +37,47 @@ Toward the roadmap's milestone 0.5, the public release. No new solver features.
 
 ### Changed
 
+- The validation scripts print their reports in English (`s.s.` for steady state,
+  `moments`, `max relative deviation`, ...), with the same columns and numbers.
+  `compare_estimation.py --no-mh` and `compare_policy.py --no-dynare` are the new flag
+  names, and `--sem-mh` and `--sem-dynare` still work.
+- The roadmap is in English (`ROADMAP.md`) and in Portuguese (`ROADMAP.pt-BR.md`).
+- Examples, documentation, tests and validation scripts import the package as
+  `import dsgelab as dsg`. The former alias `dk` came from the old name, dsgekit.
+- The site links to cgelab, whose `cgelab.bridge` uses dsgelab for the intertemporal part of
+  a model.
+- The one comparison made on a model that is not public (the applied DSGE of an unpublished
+  paper) is marked on the site as not reproducible from the repository.
 - The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
-  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
-  licence. `heutel.fetch()` generates it on the user's machine;
+  no longer distributed, because it is a translation of Heutel's MATLAB files, which
+  carry no licence. `heutel.fetch()` generates it on the user's machine, and
   `validation/heutel/translate.py` is gone.
-- Python 3.11 or later is required. Python 3.10 is dropped: SciPy 1.15.3, the last
-  release for it, does not load on macOS 27.
+- The calibration example on the site and in the user guide is replaced by one whose
+  targets identify the free parameters (`target_jacobian` reports `identified=True`). The
+  former example had a target that held identically, and `calibrate` returned different
+  answers from different starting points.
+- The validation figures quoted on the site match the current run of
+  `validation/run_all.sh`. The README, `CONTRIBUTING.md`, the roadmap and the API
+  reference are corrected where they described the checks, the validation layers or the
+  API inaccurately.
+- Python 3.11 or later is required. Python 3.10 is dropped, because SciPy 1.15.3, the
+  last release for it, does not load on macOS 27.
 - Error messages, the labels of derived first-order conditions ("FOC for control c",
   "Euler equation for state k", "constraint i: ...") and the header comments of files
   written by `to_dynare` and `to_macromodelling` are in English. The exported model text
   is unchanged.
 - The external validation runs on Dynare 7.2, with Octave 11.3.0 and the Octave packages
   statistics 2.0.0 and datatypes 1.5.0. Every comparison prints the same numbers as on
-  Dynare 7.1; the Heutel errors move in their last digit.
+  Dynare 7.1, and the Heutel errors move in their last digit.
 
 ### Fixed
 
+- `SecondOrderSolution.simulate`, `mean_correction` and `ergodic_mean`, `ThirdOrderSolution.simulate`
+  and `solve_third_order`, when given a covariance other than the one the solution was computed at,
+  combined risk terms (`g_ss`, `h_ss`) of the old covariance with shocks or a state covariance of the
+  new one. On the RBC with the standard deviation doubled, the mean correction of capital came out
+  5.8e-05 instead of 2.4e-03. They now solve again at the covariance asked for, through the new
+  `SecondOrderSolution.at_covariance`.
 - The sdist now carries `validation/heutel/reference.json`, which its own test suite
   reads.
 - `validation/compare_diagnostics.py` honours `OCTAVE` and `DYNARE_MATLAB` and looks in
@@ -70,31 +97,31 @@ against a closed form.
 ### Added
 
 - `OccbinModel`, `occbin_simulate`, `OccbinResult`: occasionally binding constraints by
-  the piecewise-linear method of Guerrieri and Iacoviello (2015), as Dynare's `+occbin`
-  -- any number of constraints, time-varying rules found backwards, Dynare's regime
-  update with `curb_retrench`, surprise shocks with re-planning, the horizon extended
-  while a constraint binds at its end. `from_mod` reads `bind=`/`relax=` equation tags,
+  the piecewise-linear method of Guerrieri and Iacoviello (2015), as in Dynare's
+  `+occbin`, with any number of constraints, time-varying rules found backwards, Dynare's
+  regime update with `curb_retrench`, surprise shocks with re-planning, and the horizon
+  extended while a constraint binds at its end. `from_mod` reads `bind=`/`relax=` equation tags,
   `occbin_constraints`, `shocks(surprise)` and the `occbin_setup`/`occbin_solver`
   options; `ModFile.occbin_simulate` runs them. Against Dynare's `borrcon.mod` (one
   constraint) and `dynrbc.mod` (two) to 2e-15, with identical regime histories.
 - `extended_path`, `quadrature_nodes`, `ExtendedPath`: the extended path (Fair and
   Taylor, 1983) and the stochastic extended path (Adjemian and Juillard) of any order,
-  on Dynare's sparse or full tree of Gauss--Hermite nodes, with the hybrid second-order
-  risk correction; `ModFile.extended_path`. Against Dynare's `burnside.mod` in seven
-  variants to 1e-11, and `linearmodel0.mod` to 3e-13.
+  on Dynare's sparse or full tree of Gauss–Hermite nodes, with the hybrid second-order
+  risk correction, and `ModFile.extended_path`. Against Dynare's `burnside.mod` in seven
+  variants to 1.1e-11, and `linearmodel0.mod` to 2e-15.
 - Declared trends in `from_mod`: `trend_var`, `log_trend_var`, `var(deflator=)` and
   `var(log_deflator=)` are detrended as Dynare does, and an equation that still depends
   on the level of a trend is refused (Dynare's balanced-growth test, checked at several
   points). `fs2000_nonstationary.mod` from Dynare's tests joins `compare_import`.
 - `balanced_growth`, `BalancedGrowth`, `ModFile.balanced_growth`: Dynare's `bgp.write`
-  problem, solved by Levenberg--Marquardt with restarts away from degenerate paths;
-  the residual matches Dynare's generated `bgpfun` exactly on its three tests.
-- `diagnose`: Dynare's `model_diagnostics` -- variables absent at the current date,
-  collinear relations of the static Jacobian with their variables and equations,
-  redundant equations of the dynamic Jacobian, unit roots. Same report as Dynare on a
-  model broken on purpose.
-- `analytic_steady_state` and `SteadyStateError`; `from_equations(steady_state_model=)`;
-  `ModFile.steady_state(analytic=True)`: a closed-form steady state is used only after it
+  problem, solved by Levenberg–Marquardt with restarts away from degenerate paths. The
+  residual matches Dynare's generated `bgpfun` to 2.2e-16 on its three tests.
+- `diagnose`, Dynare's `model_diagnostics`. It reports variables absent at the current
+  date, collinear relations of the static Jacobian with their variables and equations,
+  redundant equations of the dynamic Jacobian, and unit roots, and gives the same report
+  as Dynare on a model broken on purpose.
+- `analytic_steady_state`, `SteadyStateError`, `from_equations(steady_state_model=)` and
+  `ModFile.steady_state(analytic=True)`. A closed-form steady state is used only after it
   zeroes the model's residuals, and refused otherwise, as Dynare refuses it.
 - Calibration equations inside the model, MacroModelling's `k[ss]/q[ss] = 2.5 | β`:
   `from_equations(calibration_equations=)` and `steady_state(calibrate=)`. Against
@@ -109,10 +136,6 @@ against a closed form.
 
 ### Changed
 
-- The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
-  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
-  licence. `heutel.fetch()` generates it on the user's machine;
-  `validation/heutel/translate.py` is gone.
 - `perfect_foresight(jacobian="auto")` is the default: the stacked Jacobian is assembled
   sparse from the model's exact derivatives when it has them (forward differences
   otherwise); ex-post states use them too.
@@ -132,10 +155,6 @@ forecasting), each item validated against Dynare 7.1 on Dynare's own files.
 
 ### Changed
 
-- The translated algebra of the Heutel port (`dsgelab/examples/_heutel_algebra.py`) is
-  no longer distributed: it is a translation of Heutel's MATLAB files, which carry no
-  licence. `heutel.fetch()` generates it on the user's machine;
-  `validation/heutel/translate.py` is gone.
 - Renamed from `dsgekit` to `dsgelab`: `dsgekit` is taken on PyPI by an unrelated
   project. The import name, distribution name, CLI entry point and URLs move together.
 
@@ -144,21 +163,22 @@ forecasting), each item validated against Dynare 7.1 on Dynare's own files.
 - `state_space`, `kalman_filter`, `kalman_smoother`: the state space of a first-order
   solution, with observables in levels or logs (Dynare's `loglinear` with `logdata`),
   measurement errors and missing data; the filter starts stationary roots at their
-  unconditional law and unit roots exactly diffuse (Koopman and Durbin, 2000, unit
-  roots first in the Schur form, as Dynare). Likelihood against Dynare's on `fs2000.mod`
-  to 6e-12 and against its `diffuse_filter` to 2e-12; smoother to 1e-15.
+  unconditional law and unit roots with the exact diffuse initialisation (Koopman and Durbin, 2000, unit
+  roots first in the Schur form, as Dynare does). The likelihood matches Dynare's on
+  `fs2000.mod` to 6e-12 and its `diffuse_filter` to 2.5e-12, and the smoother matches to
+  1e-14.
 - `EstimationProblem`, `posterior_mode`, `maximum_likelihood`, `metropolis_hastings`,
   `smc`, `prior_predictive`, `model_probabilities`, `posterior_forecast`, `rhat`,
   `effective_sample_size`: estimation, with Dynare's priors by mean and standard
   deviation (`prior`), the Laplace and modified-harmonic-mean marginal likelihoods,
   and `ModFile.estimation_problem` reading `estimated_params`, `varobs` and the options
   of `estimation(...)`. Validated on Dynare's `fs2000.mod`: prior density to 4e-13, a
-  mode at least as high as Dynare's, Laplace by the same formula to 2e-13, posterior
-  means within Monte Carlo error.
+  mode at least as high as Dynare's, Laplace by the same formula to 2e-13, and posterior
+  means within 3 Monte Carlo standard errors of Dynare's (largest 2.9).
 - `shock_decomposition`, `realtime_shock_decomposition`, `forecast`: against Dynare's
   commands of the same names to 5e-15 (forecast bands to 6e-9).
 - `FirstOrderSolution.conditional_forecast(..., controlled=, levels=)`: Dynare's
-  `conditional_forecast` with `controlled_varexo`, to 1e-13 on its own test file.
+  `conditional_forecast` with `controlled_varexo`, to 1.6e-13 on its own test file.
 - `perfect_foresight_with_expectation_errors` and `News`: agents re-plan at each date of
   news from the states they have reached; constant or shrinking horizon. Validated
   against Dynare's `pfwee.mod` and `pfwee_constant_sim_length.mod` to 3e-12.
@@ -175,11 +195,12 @@ forecasting), each item validated against Dynare 7.1 on Dynare's own files.
   against Galí's closed form and Dynare's `tests/discretionary_policy/dennis_1.mod`.
 - `osr` and `OSRResult`: optimal simple rules on a quadratic loss in unconditional
   moments, Dynare's `optim_weights` convention. On Dynare's `osr_example.mod` the loss
-  matches Dynare's at its optimum (2.5e-15) and the optimiser finds a lower one, which
+  matches Dynare's at its optimum to 2.6e-16, and the optimiser finds a lower one, which
   Dynare's own objective confirms.
 - `welfare`, `welfare_model`, `consumption_equivalent`: second-order welfare,
   conditional and unconditional, and for Ramsey models with the lagged multipliers at
-  zero. Matches Dynare's `evaluate_planner_objective` to 1e-12.
+  zero. Matches Dynare's `evaluate_planner_objective` to 1.4e-12 for Ramsey and to
+  6.1e-10 under discretion.
 - `from_mod` reads `planner_objective`, `ramsey_model`, `discretionary_policy`,
   `osr_params`, `optim_weights` and `osr_params_bounds`; `ramsey_model` and
   `discretionary_policy` accept the resulting `ModFile`. `PrivateBlock` holds a

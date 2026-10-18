@@ -1,37 +1,37 @@
-"""Exportadores para Dynare e MacroModelling.jl."""
+"""Exporters to Dynare and MacroModelling.jl."""
 
 import numpy as np
 import pytest
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import rbc
 
 pytest.importorskip("sympy")
 from dsgelab.export import ExportError, to_dynare, to_macromodelling  # noqa: E402
 
 
-def test_modelo_declarado_por_funcao_e_recusado():
-    """Uma função Python não pode ser descompilada em equações, e o erro diz isso."""
+def test_model_declared_by_function_is_refused():
+    """A Python function cannot be decompiled into equations, and the error says so."""
     model, params, guess = rbc.build()
     with pytest.raises(ExportError, match="from_equations"):
         to_dynare(model, params)
 
 
-def test_dynare_separa_estoques_predeterminados_de_processos_exogenos():
-    """A distinção é o que faz o porte funcionar, e o cabeçalho a registra.
+def test_dynare_separates_predetermined_stocks_from_exogenous_processes():
+    """The port works because of this distinction, and the header records it.
 
-    `k` é estoque: entra em `predetermined_variables` e é escrito sem defasagem. `a` é processo
-    exógeno: segue o dating padrão, e a sua equação vai um período atrás para que a inovação
-    apareça sem defasagem, como o Dynare exige.
+    `k` is a stock. It goes into `predetermined_variables` and is written without a lag. `a` is an
+    exogenous process. It follows the default timing, and its equation moves one period back so
+    that the innovation appears without a lag, as Dynare requires.
     """
     model, params, guess = rbc.build_symbolic()
-    ss = dk.steady_state(model, guess, params)
+    ss = dsg.steady_state(model, guess, params)
     texto = to_dynare(model, params, steady=ss, cov={"eps_a": 0.007})
     assert "predetermined_variables k;" in texto
     assert "predetermined : k" in texto
     assert "exogenous     : a" in texto
-    assert "rho*log(a(-1))" in texto          # equação do AR deslocada
-    assert "k(+1)" in texto                    # estoque decidido em t
+    assert "rho*log(a(-1))" in texto          # AR equation shifted
+    assert "k(+1)" in texto                    # stock decided in t
     assert "var eps_a = 4.9" in texto
 
 
@@ -44,10 +44,10 @@ def test_dynare_escreve_covariancia_cruzada():
 
 
 def test_macromodelling_poe_o_desvio_padrao_na_equacao():
-    """Nas convenções do MacroModelling as inovações são normais PADRÃO.
+    """In MacroModelling's conventions the innovations are STANDARD normals.
 
-    Esquecer de multiplicar sig_* na equação dá variâncias unitárias e momentos fora de escala por
-    ordens de grandeza — o erro que este teste existe para impedir.
+    Forgetting to multiply by sig_* in the equation gives unit variances and moments off by orders
+    of magnitude, the error this test exists to prevent.
     """
     model, params, guess = rbc.build_symbolic()
     texto = to_macromodelling(model, params, cov={"eps_a": 0.007})
@@ -57,8 +57,8 @@ def test_macromodelling_poe_o_desvio_padrao_na_equacao():
     assert "@model" in texto and "@parameters" in texto
 
 
-def test_potencias_saem_com_circunflexo():
-    """Python escreve `**`; as duas linguagens de destino, `^`."""
+def test_powers_are_written_with_caret():
+    """Python writes `**`, and the two target languages write `^`."""
     model, params, guess = rbc.build_symbolic()
     texto = to_dynare(model, params)
     assert "**" not in texto

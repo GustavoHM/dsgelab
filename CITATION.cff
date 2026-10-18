@@ -3,17 +3,17 @@ message: "If you use this software in a publication, please cite it as below."
 type: software
 title: "dsgelab: a general toolkit for solving DSGE models in Python"
 abstract: >-
-  Steady state, Klein/QZ first-order solution, second- and third-order perturbation, perfect foresight with expectation errors, optimal policy (Ramsey, discretion, optimal simple rules) and welfare, Kalman filtering and smoothing, Bayesian estimation, shock decompositions and forecasts, reading Dynare .mod files, and export to Dynare and MacroModelling.jl. Validated against Dynare and MacroModelling.jl.
+  Steady state, Klein/QZ first-order solution, second-order perturbation and a partial third order (the cubic block and the risk slope), Chebyshev projection, perfect foresight with expectation errors, optimal policy (Ramsey, discretion, optimal simple rules) and welfare, Kalman filtering and smoothing, Bayesian estimation, shock decompositions and forecasts, reading Dynare .mod files, and export to Dynare and MacroModelling.jl. Validated against Dynare, MacroModelling.jl and closed-form solutions.
 authors:
   - family-names: "Moreira"
     given-names: "Gustavo Hoffmann"
     email: "gustavo@gakusai.net"
-    # orcid: "https://orcid.org/0000-0000-0000-0000"   # fill in
-version: "0.4.0"
-date-released: "2026-10-11"
+    orcid: "https://orcid.org/0000-0003-0827-2521"
+version: "0.5.0"
+date-released: "2026-10-16"   # set to the release day when tagging v0.5.0
 license: MIT
-# Fill in on publication. A Zenodo DOI, obtained by linking the repository and creating a release,
-# makes the citation stable, since a repository URL is not an archivable reference.
+# The DOI is filled in with the first release archived on Zenodo, which makes the citation stable,
+# since a repository URL is not an archivable reference.
 repository-code: "https://github.com/GustavoHM/dsgelab"
 # doi: "10.5281/zenodo.XXXXXXX"
 keywords:

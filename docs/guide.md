@@ -1,5 +1,20 @@
 # dsgelab user guide
 
+Unless a section says otherwise, the blocks continue from
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import rbc
+
+model, params, guess = rbc.build()
+```
+
+and from the blocks before them, so `ss` (§2) and `sol` (§3) are available in
+the later sections. `rbc` is the stochastic growth model with log
+utility and full depreciation, with states `k` and `a`, the jump `c` and the shock
+`eps_a`. Blocks that begin with the comment `# sketch` show the shape of code for
+a model of your own and use names that `rbc` does not define.
+
 1. [Declaring a model](#1-declaring-a-model)
 2. [The steady state](#2-the-steady-state)
 3. [First-order solution](#3-first-order-solution)
@@ -15,10 +30,22 @@
 
 ## 1. Declaring a model
 
-A model is three name lists and one function.
+A model is three name lists and one function. This section declares the model
+that `rbc.build()` returns.
 
 ```python
+import numpy as np
 from dsgelab import Model
+
+def equations(nxt, cur, eps, p):
+    y  = cur.a * cur.k ** p.alpha
+    y1 = nxt.a * nxt.k ** p.alpha
+    return [
+        nxt.k - ((1 - p.delta) * cur.k + y - cur.c),                  # resource constraint
+        cur.c ** -p.gamma - p.beta * nxt.c ** -p.gamma                # Euler equation
+            * (p.alpha * y1 / nxt.k + 1 - p.delta),
+        np.log(nxt.a) - p.rho * np.log(cur.a) - eps.eps_a,            # technology
+    ]
 
 model = Model(
     states=["k", "a"],       # predetermined; exogenous processes belong here
@@ -29,31 +56,29 @@ model = Model(
 )
 ```
 
-The number of residuals must equal `len(states) + len(jumps)`; the constructor
-checks it and says which is which when it does not.
+The number of residuals must equal `len(states) + len(jumps)`. `Model.residuals`
+checks it at every evaluation, so a mismatch raises a `ValueError` at the first
+one (usually inside `steady_state`), with the counts of residuals, states and
+jumps.
 
 ### The equation function
 
-```python
-def equations(nxt, cur, eps, params):
-    ...
-    return [resid_1, resid_2, ...]
-```
+`nxt` and `cur` are `VarView` objects over the variables at `t+1` and `t`. A
+variable is read as `cur["k"]` or `cur.k`, and `in` tests membership.
+`.vec("K")` gathers an indexed family `K0, K1, …` into an array (see §10). `eps`
+is a `VarView` over the shocks.
 
-`nxt` and `cur` are `VarView` objects. Both `cur["k"]` and `cur.k` work; `in`
-tests membership; `.vec("K")` gathers an indexed family `K0, K1, …` into an
-array (see §10). `eps` is a `VarView` over the shocks.
-
-`params` is whatever you pass to `solve` — a dataclass, a mapping, or any object
-with attributes. Dataclasses are the natural choice: `dataclasses.replace` gives
-you a policy sweep for free, and `set_params` uses it internally.
+`params` is whatever you pass to `solve`, whether a dataclass, a mapping or any
+object with attributes. With a dataclass, `dataclasses.replace` produces each
+point of a policy sweep without further code, and `set_params` uses it
+internally.
 
 ### The optional fifth argument
 
-If the equations need side information, accept a fifth positional argument:
+If the equations need side information, they accept a fifth positional argument.
 
 ```python
-def equations(nxt, cur, eps, params, ctx):
+def equations_with_ctx(nxt, cur, eps, params, ctx):
     ...
 ```
 
@@ -63,73 +88,73 @@ block of calibrated constants reaches the equations. See §2 and §6.
 
 ### Timing
 
-`eps` is dated `t+1`. Write an AR(1) as
-
-```python
-nxt.a - p.rho * cur.a - eps.eps_a
-```
-
-Getting this backwards is the one mistake the package cannot detect for you: the
-model still solves, the impulse responses still look plausible, and every
-second-order risk correction is silently zero. §5 explains why.
+`eps` is dated `t+1`, so an AR(1) is the residual
+`nxt.a - p.rho * cur.a - eps.eps_a`. The package cannot detect a reversed timing
+in a user's model. The model still solves, the impulse responses look plausible,
+and every second-order risk correction is zero, with no error. The test suite
+checks the convention on the log AR(1), where the risk coefficient `h_ss` must
+equal `σ²` (§5).
 
 ---
 
 ## 2. The steady state
 
 ```python
-ss = dk.steady_state(model, guess, params)
+ss = dsg.steady_state(model, guess, params)
 ss["k"], ss.residual, ss.values
 ```
 
 `guess` is a mapping of names to values, or an array in the model's variable
-order. Convergence is judged on the **residual**, never on the solver's success
-flag: `hybr` reports failure whenever its finite-difference Jacobian stops
-improving, and that includes the case where the starting point already *is* the
-solution.
+order. Convergence is judged on the residual, and the solver's success flag is
+ignored, because `hybr` reports failure whenever its finite-difference Jacobian
+stops improving, including when the starting point already is the solution. A
+solve whose residual stays above `tol` raises `RuntimeError`.
 
 ### Positivity
 
 ```python
-ss = dk.steady_state(model, guess, params, positive=["k", "c", "a"])
+ss = dsg.steady_state(model, guess, params, positive=["k", "c", "a"])
 ```
 
-Those coordinates are solved in logs. This imposes positivity exactly, rather
-than by a clip that would flatten the residual and stall the solver at zero. Use
-it for stocks, prices and quantities — a Newton step walks them negative and the
-next residual is a NaN or a complex number.
+Those coordinates are solved in logs, which keeps them positive at every
+iterate. A clip would flatten the residual and stall the solver at zero. Use it
+for stocks, prices and quantities, which a Newton step can otherwise take
+negative, so that the next residual is a NaN or a complex number.
 
 ### Anchors: the outer loop
 
 Some residuals need side information that is itself a function of the steady
 state. The recurring cases are a portfolio adjustment cost centred on
 steady-state wealth, and an exogenous level pinned to equilibrium demand.
-Substituting the solution directly into that term makes it vanish and leaves the
-corresponding margin indeterminate — which is exactly what the term existed to
-prevent. So it is carried in `ctx` and updated by an outer loop:
+Substituting the solution directly into that term makes it vanish, and the margin
+the term was there to pin down becomes indeterminate. The term is therefore
+carried in `ctx` and updated by an outer loop.
 
 ```python
+# sketch: a model whose equations take ctx, with a demand variable D
 def ctx_update(values, ctx):
     return {**ctx, "k_anchor": values["k"], "QR": renew_share * values["D"]}
 
-ss = dk.steady_state(model, guess, params, ctx=ctx0, ctx_update=ctx_update)
+ss = dsg.steady_state(my_model, my_guess, my_params, ctx=ctx0, ctx_update=ctx_update)
 ```
 
 The loop stops when the context stops moving. `ss.ctx` carries the converged
-context, and `solve` inherits it automatically.
+context, and `solve` inherits it.
 
 ---
 
 ## 3. First-order solution
 
 ```python
-sol = dk.solve(model, params, guess=guess)         # solves the steady state too
-sol = dk.solve(model, params, steady=ss)           # or reuse one
+sol = dsg.solve(model, params, guess=guess)         # solves the steady state too
+sol = dsg.solve(model, params, steady=ss)           # or reuse one
+print(sol.summary())                                # a one-screen report
 ```
 
 `solve` differentiates the residuals at the steady state, assembles
-`A E_t x_{t+1} = B x_t + C eps`, and calls the Klein/QZ solver with
-Blanchard–Kahn enforced. What comes back:
+`A E_t x_{t+1} = B x_t + C eps`, and calls the Klein/QZ solver, which raises
+`BlanchardKahnError` when the Blanchard–Kahn condition fails. The result is a
+`FirstOrderSolution`, whose main attributes are listed below.
 
 | Attribute | Meaning |
 |---|---|
@@ -148,13 +173,13 @@ Everything is in the rescaled deviation
 x = xbar + s * yhat,     s_i = |xbar_i| if nonzero, else 1
 ```
 
-so `yhat` is a **proportional** deviation for variables with a nonzero steady
-state and an **absolute** one for the rest. The change of variables is linear,
-which is what makes it safe at second order.
+so `yhat` is a proportional deviation for variables with a nonzero steady state
+and an absolute one for the rest. The change of variables is linear, so it adds
+no curvature of its own to the second-order terms.
 
-Testing which variables are proportional by their steady-state *level* rather
-than by name matters. A scaling that went by name multiplies a mean-zero
-variable by `(1 + yhat)` around zero and the shock disappears in silence. The
+Whether a variable is proportional is decided from its steady-state level. A
+scaling chosen by variable name would multiply a mean-zero variable by
+`(1 + yhat)` around zero, and the shock would disappear without an error. The
 `nk` example exists to test that branch.
 
 Use `sol.to_levels(paths)` or `sol.coords.to_level(y)` to get back to levels.
@@ -169,10 +194,17 @@ irf = sol.irf("eps_a", size=0.01, periods=40, levels=True)
 irf = sol.irf("a", size=0.01, periods=40, kind="state")
 ```
 
-`kind="shock"` applies an innovation, so the impact period is `k = Q e size`.
-`kind="state"` displaces the named state directly, which is what a counterfactual
-on an exogenous **level** — a permanent hydrological shift, a one-off
-revaluation — actually means.
+Each call returns a dict from variable name to an array of length `periods`,
+whose entry 0 is the impact date. `size` is the value of the innovation in the
+units it has in the equations. Here `eps_a` is the innovation to `log a`, so
+`size=0.01` raises `a` by 1 per cent on impact, and a one-standard-deviation
+shock is `size=σ`. The deviations are in the coordinates of §3 and are
+multiplied by 100 unless `percent=False`. `levels=True` returns levels.
+
+`kind="shock"` applies an innovation, so the impact period is `k = Q e · size`.
+`kind="state"` displaces the named state directly. That is how a change in the
+level of an exogenous state (a hydrological shift, a one-off revaluation) is
+represented without passing through its innovation.
 
 ```python
 sim  = sol.simulate(periods=10_000, cov={"eps_a": 0.007}, seed=42, burn=200)
@@ -181,40 +213,44 @@ dec  = sol.variance_decomposition(cov={"eps_a": 0.007})          # unconditional
 dec4 = sol.variance_decomposition(cov={"eps_a": 0.007}, horizon=4)  # FEVD at h=4
 ```
 
-The covariance may be a mapping of standard deviations, a vector of standard
-deviations, or a full matrix. A shock switched off by setting its variance to
-zero is handled (the factorisation falls back to an eigendecomposition, since
-Cholesky refuses a singular matrix).
+`simulate` gives a dict of arrays. `moments` returns a dict with the keys
+`names`, `std`, `corr`, `cov`, `autocorr` (by lag, then by name) and
+`std_by_name`, and `variance_decomposition` one with `names`, `shocks`,
+`variance` and `share`. The covariance may be a mapping of standard deviations, a
+vector of standard deviations, or a full matrix. A shock switched off by setting
+its variance to zero is handled, since the factorisation falls back to an
+eigendecomposition where Cholesky refuses a singular matrix.
 
-Moments come from the discrete Lyapunov equation, not from a simulation, so they
-are exact for the linear solution. `test_simulation_reproduces_the_analytic_moments`
-checks the two against each other.
+Moments come from the discrete Lyapunov equation, so they are exact for the
+linear solution and carry no sampling error.
+`test_simulation_reproduces_the_analytic_moments` checks a long simulation against
+them.
 
 ### Accuracy
 
 ```python
 sol.accuracy()
-# {'sizes': [...], 'residuals': [...], 'ratios': [...], 'implied_order': [2.00, 2.00]}
+# {'sizes': [...], 'residuals': [...], 'ratios': [...], 'implied_order': [2.00, 2.00], 'exact': False}
 ```
 
-This feeds the decision rules back into the **nonlinear** residuals at shrinking
+This feeds the decision rules back into the nonlinear residuals at shrinking
 displacements. A correct first-order solution leaves a residual of order
 `‖y‖²`, so halving the displacement divides the residual by roughly four. A
-wrongly assembled system — a transposed block, a misplaced timing — leaves a
-residual of order `‖y‖` and the ratio comes out near two. The *ratio* is the
-discriminating test; the size of any single residual is not.
+wrongly assembled system (a transposed block, a misplaced timing) leaves a
+residual of order `‖y‖`, and the ratio comes out near two. The test reads the
+ratio and disregards the size of any single residual.
 
-For an exactly linear model the residuals sit at round-off and the report says
-`exact: True` rather than inventing an order from machine noise.
+For an exactly linear model the residuals sit at round-off, and the report says
+`exact: True` instead of inferring an order from machine noise.
 
 ---
 
 ## 5. Second order and risk
 
 ```python
-so = dk.solve_second_order(sol, cov={"eps_a": 0.007})
+so = dsg.solve_second_order(sol, cov={"eps_a": 0.007})
 so.g_kk, so.h_kk        # quadratic terms
-so.g_ss, so.h_ss        # risk corrections -- what first order sets to zero
+so.g_ss, so.h_ss        # risk coefficients, which first order sets to zero
 ```
 
 The decision rules are
@@ -224,14 +260,13 @@ u_t     = F k_t + ½ g_kk[k_t, k_t] + ½ g_ss
 k_{t+1} = P k_t + ½ h_kk[k_t, k_t] + ½ h_ss + Q eps_{t+1}
 ```
 
-**Why it matters.** A first-order simulation holds the mean of the states at the
-deterministic steady state *by construction*. Every mean effect it reports is
-therefore the curvature of the static mapping alone, with the displacement of the
-decision rules missing. When that displacement is large — and in models with a
-convex adjustment cost and an occasionally-tight margin it routinely is — a
-first-order simulation can get the **sign** of a mean effect wrong, not merely
-its size. Welfare rankings and certainty-equivalent comparisons are exactly the
-objects that depend on it.
+A first-order simulation holds the mean of the states at the deterministic
+steady state by construction, so every mean effect it reports comes from the
+curvature of the static mapping alone, without the displacement of the decision
+rules. When that displacement is large, as it can be in models with a convex
+adjustment cost and an occasionally tight margin, a first-order simulation can
+get the sign of a mean effect wrong as well as its size. Welfare rankings and
+certainty-equivalent comparisons depend on that sign.
 
 ### The ergodic mean
 
@@ -240,11 +275,11 @@ so.mean_correction()      # deviations from the deterministic steady state
 so.ergodic_mean()         # levels
 ```
 
-Computed in closed form from the pruned system, not by averaging a simulation.
-The distinction is practical: the displacement is of order `σ²` while the
-simulated series has standard deviation of order `σ`, so a sample long enough to
-separate them by averaging runs to millions of periods in a persistent model, and
-a shorter one reports Monte Carlo noise with a plausible sign.
+Both are computed in closed form from the pruned system. The displacement is of
+order `σ²` while the simulated series has a standard deviation of order `σ`, so
+separating them by averaging a simulation takes millions of periods in a
+persistent model, and a shorter sample reports Monte Carlo noise with a plausible
+sign.
 
 ### Simulation and pruning
 
@@ -252,11 +287,12 @@ a shorter one reports Monte Carlo noise with a plausible sign.
 sim = so.simulate(periods=20_000, seed=3)              # pruned by default
 ```
 
-Pruning (Kim–Kim–Schaumburg–Sims) keeps the quadratic term a function of the
-first-order path only. Without it the quadratic feeds on itself and a long sample
-explodes — not a numerical artefact to be tuned away but a property of iterating
-a quadratic map, and the reason an unpruned second-order simulation cannot be
-trusted at any horizon that makes moments meaningful.
+Pruning (Kim, Kim, Schaumburg and Sims) keeps the quadratic term a function of
+the first-order path only. Without it, the quadratic term is evaluated on a state
+that already contains the quadratic terms of earlier periods, and a long sample
+explodes. Iterating a quadratic map produces this whatever the numerical
+settings, so an unpruned second-order sample cannot support a moment over a long
+horizon.
 
 ### Checking it
 
@@ -268,64 +304,80 @@ Halving the displacement must divide the residual by about eight. A ratio near
 four means the quadratic block is wrong and the solution is no better than first
 order.
 
-Two closed-form checks are in the test suite and worth reproducing on your own
-model if you can find an analogue: for `log a' = ρ log a + ε` the risk term must
-be exactly `h_ss = σ²`; and where the true policy is exact in the model's own
-coordinates, the corresponding risk term must be exactly zero.
+The test suite contains two closed-form checks that can be reproduced on a model
+with an analogue. For `log a' = ρ log a + ε` the risk coefficient must equal
+`h_ss = σ²`, and the correction in the rule, `½ h_ss = σ²/2`, is the Jensen
+term. Where the true policy is exact in the model's own coordinates, the
+corresponding risk term must be zero.
 
 ### Cost
 
 The Sylvester equation is solved directly when `n_vars * n_states² ≤ direct_limit`
 (6000 by default) and iteratively above it. The Hessian costs
-`O((2n + n_shocks)²)` residual evaluations by finite differences; use the
-symbolic front end (§9) to get it exactly and much faster.
+`O((2n + n_shocks)²)` residual evaluations by finite differences. The symbolic
+front end (§9) supplies the exact Hessian, evaluated from compiled expressions in
+place of those residual evaluations.
 
 ---
 
 ## 6. Perfect-foresight transitions
 
+The examples use a permanent rise in `beta` from 0.99 to 0.995, which raises the
+capital stock.
+
 ```python
-path = dk.perfect_foresight(model, start=ss0, terminal=ss1, params=p1, T=120)
+from dataclasses import replace
+
+p_old, p_new = params, replace(params, beta=0.995)
+ss0 = dsg.steady_state(model, guess, p_old)
+ss1 = dsg.steady_state(model, guess, p_new)
+T = 120
+
+path = dsg.perfect_foresight(model, start=ss0, terminal=ss1, params=p_new, T=T)
 path["k"]              # (T+1,) levels
 path.levels            # (T+1, n_vars)
 ```
 
-A stacked-time Newton on the same residual function the perturbation linearises.
-The Jacobian is block-bidiagonal and assembled sparsely.
+`perfect_foresight` solves the path by a stacked-time Newton iteration on the
+same residual function that the perturbation linearises. The Jacobian is
+block-bidiagonal and assembled sparse.
 
 **Boundary conditions.** The `n_k` predetermined states at the start are
-inherited from `start`; the `n_u` forward jumps at the end sit at `terminal`.
-Fixing the whole terminal vector instead — the natural-looking mistake —
-overdetermines the system by `n_k` equations, and the only symptom is a Newton
-that stops converging.
+inherited from `start`, and the `n_u` forward jumps at the end sit at `terminal`.
+Fixing the whole terminal vector instead overdetermines the system by `n_k`
+equations, and the only symptom is a Newton iteration that stops converging.
 
 ### Announced paths
 
 A *surprise* is a change in `terminal` with constant `params`. An *announced*
-path is a sequence:
+path is a sequence.
 
 ```python
 schedule = [p_old] * 10 + [p_new] * (T + 1 - 10)
-path = dk.perfect_foresight(model, ss0, ss1, params=schedule, T=T)
+path = dsg.perfect_foresight(model, ss0, ss1, params=schedule, T=T)
 ```
 
 `params` and `ctx` each accept a constant, a sequence of length `T+1`, or a
-callable `f(t)`. A statutory calendar known to agents from the outset is a
-sequence; the difference from a surprise is visible on impact and is often the
-whole point of the exercise.
+callable `f(t)`. Element `t` enters the equations that link date `t` to `t+1`, so
+element `T` enters no equation and serves `path.derived` at the last date. A
+statutory calendar known to agents from the outset is a sequence. The two paths
+differ from the first date, because under a surprise the new parameters are in
+force at date 0, while under an announcement the agents at date 0 respond to
+parameters they expect to change later.
 
-If the equations need *next period's* parameters — a policy that agents know will
-change between `t` and `t+1` — carry them in `ctx`, since `ctx` is also a path.
+If the equations need *next period's* parameters (a policy that agents know will
+change between `t` and `t+1`), carry them in `ctx`, since `ctx` is also a path.
 
 ### Starting elsewhere
 
 ```python
-path = dk.perfect_foresight(model, ss, ss, params=p, T=150,
-                            initial_states=[0.5 * ss["k"], 1.0])
+path = dsg.perfect_foresight(model, ss, ss, params=params, T=150,
+                             initial_states=[0.5 * ss["k"], 1.0])
 ```
 
 `initial_states` overrides the inherited states, for a transition that does not
-begin at a steady state.
+begin at a steady state. It is an array of levels in the order of `model.states`,
+here `k` then `a`. A mapping is not accepted.
 
 ### Along the path
 
@@ -333,106 +385,142 @@ begin at a steady state.
 series = path.derived(lambda vals, p, ctx: {"y": vals["a"] * vals["k"] ** p.alpha})
 ```
 
-`derived` evaluates a per-period function of the variables over the whole path,
-which is how objects defined by identities — prices, shares, flows — are
-recovered without recomputing them by hand at every date.
+`derived` evaluates a per-period function of the variables over the whole path.
+Objects defined by identities (prices, shares, flows) are recovered this way
+without recomputing them by hand at every date.
 
 ---
 
 ## 7. Calibration on targets
 
+The example frees `beta` and `delta` and targets the capital-output ratio and the
+investment share.
+
 ```python
-res = dk.calibrate(
+def observables(ss, p):
+    y = ss["a"] * ss["k"] ** p.alpha
+    return {"ky": ss["k"] / y, "iy": p.delta * ss["k"] / y}   # capital-output, investment share
+
+res = dsg.calibrate(
     model, params,
-    free={"beta": 0.95, "alpha": 0.30},
-    targets={"ky": 0.35, "cy": 0.65},
+    free={"beta": 0.95, "delta": 0.5},
+    targets={"ky": 10.0, "iy": 0.25},
     guess=guess,
-    observables=lambda ss, p: {"ky": ss["k"] / (ss["a"] * ss["k"] ** p.alpha),
-                               "cy": ss["c"] / (ss["a"] * ss["k"] ** p.alpha)},
-    bounds={"alpha": (0.05, 0.9), "beta": (0.5, 0.999)},
+    observables=observables,
+    bounds={"beta": (0.5, 0.999), "delta": (0.001, 1.0)},
 )
 print(res.report())
 res.params, res.steady, res.values
 ```
 
-Targets are steady-state variables unless `observables` supplies them. The whole
-system is solved at once, which is the point: done by hand this becomes a nest of
-bespoke bisections, one per parameter, each hiding the fact that the targets are
-**jointly** determined.
+Targets are steady-state variables unless `observables` supplies them. Since
+`iy = delta · ky`, the two targets give `delta = 0.025`, and the Euler equation
+then gives `beta = 1/(alpha/ky + 1 − delta) = 0.98912`. The parameters and the steady state are solved as one system. Done by hand, the same
+calibration becomes nested bisections, one per parameter, each of which treats
+its target as set by its own parameter, although the targets are determined
+jointly.
 
-Warm starting is on by default and is worth an order of magnitude in a sweep; the
-accepted solution is still judged on its own residual.
+With `warm_start=True`, the default, each steady-state solve starts from the
+previous one. The accepted solution is still judged on its own residual.
 
 ### Identification
 
+`calibrate` does not check identification. `target_jacobian` does, from the
+derivatives of the targets with respect to the free parameters.
+
 ```python
-ident = dk.target_jacobian(model, params, free=["beta", "alpha"],
-                           targets=["k"], guess=guess)
-ident["identified"]        # False
-ident["rank"], ident["n_free"]
-ident["null_directions"]   # the parameter directions no target sees
-ident["elasticity"]        # d log target / d log parameter
+ident = dsg.target_jacobian(model, res.params, free=["beta", "delta"],
+                            targets=["ky", "iy"], guess=guess,
+                            observables=observables)
+ident["identified"]        # True: two targets pin the two parameters
+
+one = dsg.target_jacobian(model, params, free=["beta", "alpha"],
+                          targets=["k"], guess=guess)
+one["identified"]          # False: two parameters, one target
+one["rank"], one["n_free"] # 1, 2
+one["null_directions"]     # the direction no target sees
+one["elasticity"]          # d log target / d log parameter
 ```
 
-A calibration whose elasticity matrix is rank-deficient is not identified: some
+A calibration whose elasticity matrix is rank-deficient is not identified. Some
 direction in parameter space leaves every target where it was, and the numbers
-that come out of it are whichever point the solver happened to stop at. Run this
-whenever a calibration "will not converge" — no solver tolerance fixes an
-unidentified system.
+that come out of it depend on where the solver stops. Run this whenever a
+calibration fails to converge, because tightening the solver tolerance does not
+identify an unidentified system.
 
 ---
 
 ## 8. Diagnostics
 
+The Blanchard–Kahn condition in `solve` and the residual test in `steady_state`
+are the only checks that run by themselves. The user calls each of the functions
+below.
+
 ```python
-dk.blanchard_kahn_report(sol)
+dsg.blanchard_kahn_report(sol)
 ```
 
-Reports the **margin**, not only the pass. A model that satisfies Blanchard–Kahn
-with a root at 0.9999 satisfies it in the same sense that a bridge holds with one
-bolt: the classification flips under a parameter change small enough to be
-invisible in a sweep.
+Reports the margin between the largest stable and the smallest unstable root as
+well as the pass. A model that satisfies Blanchard–Kahn with a root at 0.9999
+changes classification under a parameter change small enough to be missed in a
+sweep.
 
 ```python
-dk.check_identity(model, resource_constraint, path, params)
+def consumption_share(nxt, now, p, ctx):     # c = (1 - alpha*beta) y in this model
+    return now["c"] - (1 - p.alpha * p.beta) * now["a"] * now["k"] ** p.alpha
+
+path = dsg.perfect_foresight(model, ss, ss, params=params, T=150,
+                             initial_states=[0.5 * ss["k"], 1.0])
+dsg.check_identity(model, consumption_share, path.levels, params)
 ```
 
-Evaluates an identity the model does **not** impose. The resource constraint of a
-closed model is the canonical case: it follows from the budget constraints, the
-firm's first-order conditions and the definitions of profit, so it is not one of
-the equations — and that is what makes it evidence. A Walras residual is a leak
-in the accounting; imposing it as an equation would hide the leak instead of
-revealing it.
+`check_identity` evaluates an identity the model does not impose. Its `points`
+are `path.levels`, an array whose consecutive rows it pairs (a `TransitionPath`
+itself is not accepted), or a sequence of `(x_next, x_now)` pairs. In `rbc` the
+consumption share `c = (1 − αβ) y` follows from the equations without being one
+of them. In a closed model the resource constraint follows from the budget
+constraints, the firms' first-order conditions and the definitions of profit. It
+is therefore not one of the equations, and its residual is an independent check
+on the accounting. Imposing it as an equation would set that residual to zero by
+construction and remove the check.
 
 ```python
-dk.check_slack(sol, {"QF_positive": lambda v: v["QF"]}, size=3.0)
+dsg.check_slack(sol, {"investment_positive": lambda v: v["a"] * v["k"] ** params.alpha - v["c"]},
+                size=0.05)
 ```
 
 A `max(x, 0)` or a floor is not differentiable and cannot be perturbed, so
-applied models replace it with its smooth interior branch. That substitution is
-legitimate only while the constraint is slack — and slack at the steady state is
-not slack along a large impulse response.
+applied models replace it with its smooth interior branch. The substitution is
+valid only while the constraint is slack, and a constraint that is slack at the
+steady state can bind along a large impulse response. `check_slack` evaluates
+each constraint, positive when slack, on the impulse responses in levels.
 
 ```python
-dk.steady_state_invariance(build_fn, grid, ["Y", "K", "r"])
-dk.compare_irfs(sol_a, sol_b, "eps_a")
+from dataclasses import replace
+
+dsg.steady_state_invariance(
+    lambda rho: dsg.steady_state(model, guess, replace(params, rho=rho)),
+    [0.0, 0.5, 0.9, 0.95], ["k", "c"])          # persistence does not move the steady state
+
+model_s, params_s, guess_s = rbc.build_symbolic()                 # requires sympy
+dsg.compare_irfs(sol, dsg.solve(model_s, params_s, guess=guess_s), "eps_a")
 ```
 
-The first asserts an invariance that is a *theorem* of the model over a parameter
-grid — output independent of a redistributive policy, a great ratio pinned by the
-Euler equation — which is the cheapest way to learn that a change broke the block
-delivering it. The second compares two solutions' impulse responses, for checking
-a port or a refactor: comparing steady states is not enough, since two different
-models routinely share a steady state and differ entirely in their dynamics.
+The first asserts, over a parameter grid, an invariance that is a theorem of the
+model, such as output independent of a redistributive policy or a great ratio
+pinned by the Euler equation. A failure shows that a change broke the block that
+delivers it. The second compares two solutions' impulse responses, for checking a
+port or a refactor. Comparing steady states is not enough, since two different
+models can share a steady state and differ in their dynamics.
 
 ---
 
 ## 9. Text equations and exact derivatives
 
-```python
-from dsgelab.symbolic import from_equations
+Requires sympy (`pip install "dsgelab[symbolic]"`).
 
-model = from_equations(
+```python
+model = dsg.from_equations(
     [
         "k(+1) = (1-delta)*k + a*k**alpha - c",
         "c**(-gamma) = beta * c(+1)**(-gamma) * (alpha*a(+1)*k(+1)**(alpha-1) + 1 - delta)",
@@ -441,40 +529,48 @@ model = from_equations(
     states=["k", "a"], jumps=["c"], shocks=["eps_a"],
     parameters=["alpha", "beta", "rho", "delta", "gamma"],
 )
+sol = dsg.solve(model, params, guess=guess)    # params and guess from rbc.build()
 ```
 
-`x` is the variable at `t`, `x(+1)` at `t+1`, shock names are the innovation at
-`t+1`. Equations may use `=` or be expressions that must vanish.
+`x` is the variable at `t` and `x(+1)` at `t+1`. A shock name stands for the
+innovation at `t+1`. Equations may use `=` or be expressions that must vanish.
 
-Beyond convenience, this gives **exact** derivatives: the residual, its Jacobian
-and its Hessian are differentiated symbolically and used in place of finite
-differences throughout. At second order that is not a nicety — a second
-difference divides by the square of the step, so a finite-difference Hessian
-carries roughly half the significant digits of the residual it came from, and the
-risk corrections are precisely the small terms that loses.
+The symbolic front end gives exact derivatives. The residual's Jacobian and
+Hessian are differentiated symbolically and used in place of finite differences
+in the first-order system, the second-order Hessian, the inner Hessian of the
+third order, and the Newton steps of `perfect_foresight` and `extended_path`.
+The steady-state root finder, the outer difference of the third-order tensor, and
+`calibrate` and `target_jacobian` (derivatives with respect to the parameters)
+still use finite differences. Exact derivatives matter at second order because a
+second difference divides by the square of the step, so a finite-difference
+Hessian carries roughly half the significant digits of the residual it came from,
+and the risk corrections are among the small terms that lose those digits.
 
-Two deliberate rules:
+The parser applies two rules to names and dates.
 
-- An undeclared name **raises** rather than becoming a free symbol. A typo must
-  not quietly turn into a new variable. (This also means `beta`, `gamma`, `S`
-  and other sympy objects are safe as parameter names — the parser is given no
-  global namespace to bind them to.)
-- A lag `x(-k)` or a lead `x(+k)` with `k >= 2` is carried by an auxiliary
-  variable with its own equation — `LAGk_x`, a state, or `LEADk_x`, a jump —
-  listed in `model.auxiliary`. What is predetermined is still declared in one
-  place: the lag of a jump is a new state, never a reclassification of the jump.
-  A lagged innovation is refused with an explanation.
+- An undeclared name raises an error instead of becoming a free symbol, so a
+  typo cannot turn into a new variable. For the same reason `beta`, `gamma`, `S`
+  and other sympy objects are safe as parameter names, since the parser is given
+  no global namespace to bind them to.
+- A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, and a lead
+  `x(+k)` with `k >= 2` by the jumps `LEAD1_x`, …, `LEAD{k-1}_x`, where `LEADj_x`
+  holds `x` at `t+j` (so `y(+2)` creates `LEAD1_y`). Each auxiliary has its own
+  equation and is listed in `model.auxiliary`. What is predetermined is still
+  declared in one place, since the lag of a jump becomes a new state and the jump
+  keeps its classification. A lagged innovation is refused with an explanation.
 
 `derivatives="jacobian"` skips the Hessian, which costs
-`n_eq * (2n + n_shocks)²` expressions to build; `"none"` skips both.
+`n_eq * (2n + n_shocks)²` expressions to build, and `"none"` skips both.
 
 ---
 
 ## 10. Multi-group and multi-sector models
 
-Declare the family with an index suffix and gather it in the equations:
+Declare the family with an index suffix and gather it in the equations.
 
 ```python
+# sketch: N groups; budget, euler, q_def, q_euler, revenue_neutral and shocks
+# stand for the model's own residual blocks
 states = [f"K{j}" for j in range(N)] + [f"KG{j}" for j in range(N)] + ["a", "z"]
 jumps  = [f"C{j}" for j in range(N)] + [f"q{j}" for j in range(N)] + ["piB"]
 
@@ -488,8 +584,9 @@ def equations(nxt, cur, eps, p, ctx):
 
 `vec` reads the family in index order, so the equations are written on vectors
 and the residual is assembled by `concatenate` in the same order as the variable
-lists. Keep the two orders together in one place and the layout cannot drift.
+lists. Keeping the two orders together in one place prevents the layout from
+drifting.
 
-Constants that do not vary with the solution — group masses, calibrated shares,
-a policy schedule — belong in `ctx`, not in the parameter dataclass, when they
-are arrays: it keeps `dataclasses.replace` usable for the scalar sweep.
+Constants that do not vary with the solution (group masses, calibrated shares, a
+policy schedule) belong in `ctx` when they are arrays. The parameter dataclass
+then holds only scalars, which `dataclasses.replace` can sweep.

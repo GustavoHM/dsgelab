@@ -1,22 +1,23 @@
-"""compare_occbin.py — restrições ocasionalmente ativas (OccBin) contra o Dynare.
+"""compare_occbin.py: occasionally binding constraints (OccBin) against Dynare.
 
-Os dois arquivos são de tests/occbin do Dynare 7.2, lidos por `dsgelab.from_mod` com suas
-equações marcadas (`bind=`/`relax=`), o bloco `occbin_constraints`, os choques-surpresa e as
-opções de `occbin_setup`/`occbin_solver`:
+The two files come from tests/occbin of Dynare 7.2, read by `dsgelab.from_mod` with their tagged
+equations (`bind=`/`relax=`), the `occbin_constraints` block, the surprise shocks and the
+`occbin_setup`/`occbin_solver` options.
 
-  borrcon.mod   uma restrição de endividamento; choques-surpresa nos períodos 10 e 30;
+  borrcon.mod   one borrowing constraint, surprise shocks in periods 10 and 30,
                 simul_periods=80, simul_maxit=11, simul_curb_retrench
-  dynrbc.mod    duas restrições (investimento irreversível e não negativo) com quatro
-                regimes; 52 choques-surpresa entre os períodos 1 e 169; simul_periods=200,
-                simul_curb_retrench, simul_check_ahead_periods=300 (cenário option=1)
+  dynrbc.mod    two constraints (irreversible and nonnegative investment) with four regimes,
+                52 surprise shocks between periods 1 and 169, simul_periods=200,
+                simul_curb_retrench, simul_check_ahead_periods=300 (scenario option=1)
 
-Compara-se, em níveis e em todos os períodos, cada variável endógena da trajetória por partes
-(oo_.occbin.endo_piecewise) e da linear (oo_.occbin.endo_linear), e, em cada período de choque,
-o regime que os agentes esperam (oo_.occbin.simul.regime_history: regimes e datas de início).
+In levels and in every period, each endogenous variable of the piecewise path
+(oo_.occbin.endo_piecewise) and of the linear one (oo_.occbin.endo_linear) is compared. In each
+shock period, so is the regime that agents expect (oo_.occbin.simul.regime_history: regimes and
+start dates).
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_occbin.sh        # exporta out_occbin/<nome>.mat e escreve work_occbin/<nome>.mod
+    bash run_occbin.sh        # exports out_occbin/<name>.mat and writes work_occbin/<name>.mod
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ def _load(name):
     from scipy.io import loadmat
     f = HERE / "out_occbin" / f"{name}.mat"
     if not f.exists():
-        sys.exit(f"falta {f}: rode bash run_occbin.sh")
+        sys.exit(f"missing {f}: run bash run_occbin.sh")
     return loadmat(f, simplify_cells=True)["ex"]
 
 
@@ -78,8 +79,8 @@ def compare(name, constraints_order):
             if (reg_o, st_o) != (reg_d, st_d):
                 bad += 1
     ok = err["piecewise"] < TOL and err["linear"] < TOL and bad == 0
-    print(f"{name:10s} {T:4d} períodos  por partes {err['piecewise']:.1e}  linear "
-          f"{err['linear']:.1e}  regimes {n_hist - bad}/{n_hist}  iterações "
+    print(f"{name:10s} {T:4d} periods  piecewise {err['piecewise']:.1e}  linear "
+          f"{err['linear']:.1e}  regimes {n_hist - bad}/{n_hist}  iterations "
           f"{sum(r.iterations)}  {'OK' if ok else 'DIVERGE'}")
     return ok
 

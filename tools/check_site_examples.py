@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""Executa os blocos de código de site/**/*.html, nas duas línguas.
+"""Runs the code blocks of site/**/*.html, in both languages.
 
-Um exemplo que não roda é pior do que exemplo nenhum. Cada página tem o seu
-espaço de nomes, e dentro da página os blocos compartilham nomes, na ordem.
-Os blocos rodam num diretório temporário: os que exportam modelos gravam
-arquivos, e eles não devem ir parar no repositório.
+An example that does not run misleads the reader, so every block is executed.
+Each page has its own namespace, and within a page the blocks share names, in
+order. The blocks run in a temporary directory, because the ones that export
+models write files, and those must not end up in the repository.
 
     python tools/check_site_examples.py
 """

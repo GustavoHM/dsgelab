@@ -1,12 +1,12 @@
-"""strip_mod.py — a copy of a .mod that only declares the model, for run_examples.sh.
+"""strip_mod.py: a copy of a .mod that only declares the model, for run_examples.sh.
 
-Os exemplos do Dynare seguem o modelo com estimação (fs2000 pede 20 000 sorteios e um arquivo de
-dados), gráficos e código MATLAB. Para comparar MODELOS, a cópia guarda o texto até o fim do último
-bloco que define o modelo — model, initval, steady_state_model, shocks —, tira os comandos soltos
-que houver nesse trecho e acrescenta o mesmo cálculo para todos: steady e stoch_simul de ordem 1,
-40 períodos de IRF e momentos teóricos.
+Dynare's examples follow the model with estimation (fs2000 asks for 20,000 draws and a data
+file), graphs and MATLAB code. To compare MODELS, the copy keeps the text up to the end of the
+last block that defines the model (model, initval, steady_state_model, shocks), removes any
+stand-alone commands in that stretch and appends the same computation for all of them: steady
+and an order-1 stoch_simul, 40 periods of IRF and theoretical moments.
 
-Uso:  python strip_mod.py origem.mod destino.mod
+Usage:  python strip_mod.py source.mod destination.mod
 """
 import re
 import sys

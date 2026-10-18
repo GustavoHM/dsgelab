@@ -10,11 +10,11 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.dynare import from_mod  # noqa: E402
 from dsgelab.foresight import News, perfect_foresight_with_expectation_errors  # noqa: E402
 
-RBC = dk.from_equations(
+RBC = dsg.from_equations(
     ["1/c = beta/c(+1)*(alpha*a(+1)*k(+1)**(alpha-1) + 1 - delta)",
      "c + k(+1) = a*k**alpha + (1-delta)*k",
      "a(+1) = 1 - rho + rho*a + e"],
@@ -25,13 +25,13 @@ P = dict(alpha=0.33, beta=0.99, delta=0.025, rho=0.9)
 
 def _ss():
     k = ((1 / P["beta"] - 1 + P["delta"]) / P["alpha"]) ** (1 / (P["alpha"] - 1))
-    return dk.steady_state(RBC, dict(k=k, a=1.0, c=k ** P["alpha"] - P["delta"] * k), P)
+    return dsg.steady_state(RBC, dict(k=k, a=1.0, c=k ** P["alpha"] - P["delta"] * k), P)
 
 
 def test_news_that_is_no_news_changes_nothing():
     ss = _ss()
     shocks = np.zeros((60, 1)); shocks[4, 0] = 0.01
-    plain = dk.perfect_foresight(RBC, ss, ss, params=P, T=60, shocks=shocks, tol=1e-12)
+    plain = dsg.perfect_foresight(RBC, ss, ss, params=P, T=60, shocks=shocks, tol=1e-12)
     same = perfect_foresight_with_expectation_errors(
         RBC, ss, ss, params=P, T=60, shocks=shocks, tol=1e-12,
         news=[News(period=10, shocks=shocks)])
@@ -48,10 +48,10 @@ def test_a_surprise_follows_the_old_plan_until_it_arrives():
     assert path["a"][10] == pytest.approx(a10, abs=1e-12)          # the surprise lands at 10
     # from date 10 on, the realised path is a fresh plan from the states reached there
     k0 = np.array([path["k"][10], a10])
-    fresh = dk.perfect_foresight(RBC, ss, ss, params=P, T=50, initial_states=k0, tol=1e-12)
+    fresh = dsg.perfect_foresight(RBC, ss, ss, params=P, T=50, initial_states=k0, tol=1e-12)
     assert np.max(np.abs(path.levels[10:] - fresh.levels)) < 1e-9
     # and agents who had known it all along would have moved earlier
-    known = dk.perfect_foresight(RBC, ss, ss, params=P, T=60, shocks=revised, tol=1e-12)
+    known = dsg.perfect_foresight(RBC, ss, ss, params=P, T=60, shocks=revised, tol=1e-12)
     assert abs(known["c"][0] - ss.values["c"]) > 1e-6
 
 
@@ -92,7 +92,7 @@ def test_exogenous_levels_and_deterministic_shocks_from_a_mod():
     ss = mf.steady_state()
     assert ss.values["SHK_x"] == 1.0
     shocks, k0 = mf.deterministic(20, ss)
-    path = dk.perfect_foresight(mf.model, ss, ss, params=mf.params, T=20, shocks=shocks,
+    path = dsg.perfect_foresight(mf.model, ss, ss, params=mf.params, T=20, shocks=shocks,
                                 initial_states=k0, tol=1e-12)
     # Dynare period t+1 is date t: x is 1 in period 1, 1.2 in periods 2 and 3
     assert np.allclose(path["SHK_x"][:5], [1.0, 1.2, 1.2, 1.0, 1.0])
@@ -116,12 +116,12 @@ def test_information_table_becomes_news():
 def test_osr_on_welfare_finds_the_closed_form():
     # y = (1-theta) z, r = theta z, and U = -(y^2 + w r^2)/2: welfare is maximised where
     # Var(y) + w Var(r) is minimised, at theta = 1/(1+w), whatever the discount factor.
-    rule = dk.from_equations(["y = z - r", "r = theta*z", "z(+1) = rho*z + e"],
+    rule = dsg.from_equations(["y = z - r", "r = theta*z", "z(+1) = rho*z + e"],
                              states=["z"], jumps=["y", "r"], shocks=["e"],
                              parameters=["theta", "rho", "beta"])
     p = dict(theta=0.0, rho=0.9, beta=0.96)
     w = 0.5
-    res = dk.osr(rule, p, rule_params=["theta"], objective=f"-(y**2 + {w}*r**2)/2",
+    res = dsg.osr(rule, p, rule_params=["theta"], objective=f"-(y**2 + {w}*r**2)/2",
                  discount="beta", cov={"e": 0.1}, guess=dict(z=0, y=0, r=0))
     assert res.params["theta"] == pytest.approx(1 / (1 + w), abs=1e-6)
     var_z = 0.01 / (1 - 0.81)

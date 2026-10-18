@@ -1,16 +1,22 @@
 # Validation against Dynare
 
-`dsgelab` is checked in three layers, and this folder holds the third.
+`dsgelab` is checked in three layers, and this folder holds the second.
 
 | Layer | Against what | Where |
 |---|---|---|
-| Answers known on paper | closed-form RBC, Taylor principle, lognormal risk correction | `../tests/` |
-| The model that motivated the package | `e50` of the paper, plus Dynare and MacroModelling.jl | `artigo-dinamico-gd/code/e71`, `e72` |
-| **Third-party models** | **Dynare's own examples** | **this folder** |
+| 1. Answers known on paper | closed forms and answers known analytically: closed-form RBC, Taylor principle, lognormal risk coefficient | `../tests/` |
+| **2. Models by other authors** | **Dynare's own examples and test files, one MacroModelling.jl calibration, and Heutel (2012)** | **this folder** |
+| 3. An applied model from an unpublished paper by the package's author | Dynare and MacroModelling.jl | not public, so it cannot be rerun from this repository |
 
-The first two layers have the same author as the package. In this one the models come from
+The first and third layers were set up by the package's author. In this one most models come from
 [dynare.org/resources](https://www.dynare.org/resources/) (the examples of Collard's tutorial and
-Johannes Pfeifer's collection), and the reference solver is Dynare.
+Johannes Pfeifer's collection), from Dynare's test suite and from Heutel's replication files, and
+the reference solvers are Dynare and MacroModelling.jl. A few `.mod` files were written here for
+the validation (`ramsey/nk_linear.mod`, `ramsey/rbc_labortax.mod`, `ramsey/nk_osr_planner.mod`,
+`estimation/unitroot.mod` and the three models in `diagnostics/`). Some features have no
+independent reference. The variance decomposition, pruning, announced parameter paths and the
+Blanchard–Kahn check rest on the test suite, and the autocorrelations and the second-order
+generalised impulse response have no test yet.
 
 ## Running everything
 
@@ -37,8 +43,8 @@ which the published validation was run. Since `pkg install -forge` would fetch t
 the script takes the versions, URLs and SHA-256 digests from the official index
 (github.com/gnu-octave/packages) and refuses a file whose digest does not match.
 
-The numbers in this file come from a run on Dynare 7.2 and Octave 11.3.0 on 12 October 2026, and
-every comparison also passed on Dynare 7.1 with the same printed numbers apart from the Heutel
+The numbers in this file come from a run on Dynare 7.2 and Octave 11.3.0 on 16 October 2026, which
+printed the same numbers as an earlier run on 12 October. Every comparison also passed on Dynare 7.1 with the same printed numbers apart from the Heutel
 errors, which changed in the last digit.
 
 `macromodelling/` is a Julia project. The `[compat]` section of its `Project.toml` pins
@@ -55,20 +61,20 @@ versioned here. The port and its validation are described in [`../docs/heutel.md
 ## How to run
 
 ```bash
-bash fetch.sh          # baixa os .mod (não versionados: são GPL, o pacote é MIT)
-bash run_dynare.sh     # roda cada um no Octave + Dynare, exporta out/<nome>.mat
-python compare.py      # confronta o dsgelab com o Dynare
+bash fetch.sh          # downloads the .mod files (not versioned: they are GPL, the package is MIT)
+bash run_dynare.sh     # runs each one in Octave + Dynare, exports out/<name>.mat
+python compare.py      # compares dsgelab with Dynare
 ```
 
 This needs GNU Octave and Dynare. `run_dynare.sh` looks for Dynare's `matlab/` directory in the
-usual places, and `DYNARE_MATLAB=/caminho` sets it explicitly.
+usual places, and `DYNARE_MATLAB=/path` sets it explicitly.
 
 ## Result
 
 ```
-  example1       e.e. 1.2e-14   IRFs 2.9e-14   momentos 2.6e-14   OK
-  example2       e.e. 2.1e-05   IRFs 4.3e-06   momentos 3.3e-06   OK  (limitado pelo e.e. do Dynare, resíduo 1e-06)
-  rbc_baseline   e.e. 0.0e+00   IRFs 2.3e-14   momentos 3.5e-14   OK
+  example1       s.s. 1.2e-14   IRFs 2.9e-14   moments 2.6e-14   OK
+  example2       s.s. 2.1e-05   IRFs 4.3e-06   moments 3.3e-06   OK  (limited by Dynare's s.s., residual 1e-06)
+  rbc_baseline   s.s. 0.0e+00   IRFs 2.3e-14   moments 3.5e-14   OK
 ```
 
 ## The models
@@ -94,49 +100,50 @@ enter the comparison of the models.
 
 ## Two conventions the comparison has to reconcile
 
-**Dating of the stock.** Dynare's `k` is the END-of-period stock. In `dsgelab`, `k` is the stock
-AVAILABLE in the period, which is Dynare's `k(-1)`. The two series differ by one period. The
+**Dating of the stock.** Dynare's `k` is the *end-of-period* stock. In `dsgelab`, `k` is the stock
+*available* in the period, which is Dynare's `k(-1)`. The two series differ by one period. The
 comparison shifts exactly those predetermined variables whose row of `Q` is zero, which are the
 ones that receive no innovation directly. Swapping the two datings gives a model that solves,
-satisfies Blanchard-Kahn and responds to shocks, yet is a different model, and only the dynamic
+satisfies Blanchard–Kahn and responds to shocks, yet is a different model, and only the dynamic
 comparison reveals the difference.
 
-**Orthogonalisation.** Dynare reports IRFs to ORTHOGONALISED impulses, in which the response to
+**Orthogonalisation.** Dynare reports IRFs to *orthogonalised* impulses, in which the response to
 shock *i* is the response to column *i* of the Cholesky factor of the covariance, and not to an
 impulse in *i* alone. With a diagonal covariance the two coincide. With the
 `var e, u = phi*0.009^2` of `example1` they do not. `dsgelab` provides `irf_impulse` for this case.
 
 ## What the validation found
 
-**In `example2`, Dynare's `steady` stops early.** Dynare's steady state leaves a residual of
-`1.05e-06` in the model equations, and `dsgelab`'s leaves `1.0e-44`. Everything derived from the
-steady state (linearisation, IRFs, moments) inherits that error, which accounts for the whole of
-the `3e-06` discrepancy in the table. When two programs disagree, the number that should be trusted
-is the one computed at the POINT that sets the equations to zero. `compare.py` therefore measures
-the residual at both points and forms its verdict from them.
+**In `example2`, Dynare's `steady` stops at its default tolerance.** Dynare's steady state leaves a
+residual of `1.05e-06` in the model equations, within the default `solve_tolf` of `eps^(1/3)`, about
+`6e-06`, and `dsgelab`'s leaves `1.0e-44`. Everything derived from the steady state (linearisation,
+IRFs, moments) inherits that error, which accounts for the discrepancies in the table, `2.1e-05` in
+the steady state, `4.3e-06` in the IRFs and `3.3e-06` in the moments. When two programs disagree,
+the residual of the equations at each program's point shows which point is closer to the solution.
+`compare.py` therefore measures the residual at both points and forms its verdict from them.
 
 An independent check is available because `example1` and `example2` are the same economy in
 different coordinates. Exponentiated, the `example2` steady state matches the levels of `example1`
 to `1e-15`.
 
-**An error in my port, which only the dynamics revealed.** In porting `RBC_baseline` I wrote
-`log_k = log(k)` where the `.mod` says `log_k = log(k)` with Dynare's CURRENT `k` in mind, which is
-the end-of-period stock and corresponds to `k(+1)` in the package's convention. The steady state
-matched exactly, while the IRF of `log_k` lagged by one period. This case is the reason the
-comparison covers trajectories and not only points.
+**An error in my port, which only the dynamics revealed.** In porting `RBC_baseline` I copied the
+`.mod`'s `log_k = log(k)` unchanged. In the `.mod`, `k` is Dynare's current `k`, the end-of-period
+stock, which corresponds to `k(+1)` in the package's convention, so the port took the log of the
+wrong period's stock. The steady state matched exactly, while the IRF of `log_k` lagged by one
+period. This case is the reason the comparison covers trajectories as well as points.
 
 ## Optimal policy: the Ramsey planner
 
 ```bash
-bash fetch.sh            # inclui mods/ramsey/, do conjunto de testes do Dynare 7.2
-bash run_ramsey.sh       # ramsey_model + stoch_simul(order=1) no Octave + Dynare
+bash fetch.sh            # includes mods/ramsey/, from Dynare 7.2's test suite
+bash run_ramsey.sh       # ramsey_model + stoch_simul(order=1) in Octave + Dynare
 python compare_ramsey.py
 ```
 
 ```
-nk_linear         e.e. 0.0e+00   IRFs 5.3e-15   (6 séries; modelo com 8 variáveis, 4 do planejador)   OK
-rbc_labortax      e.e. 5.0e-11   IRFs 4.9e-13   (8 séries; modelo com 11 variáveis, 6 do planejador)   OK
-nk_ramsey_model   e.e. 2.7e-12   IRFs 2.1e-14   (8 séries; modelo com 13 variáveis, 8 do planejador)   OK
+nk_linear         s.s. 0.0e+00   IRFs 5.3e-15   (6 series; model with 8 variables, 4 from the planner)   OK
+rbc_labortax      s.s. 5.0e-11   IRFs 4.9e-13   (8 series; model with 11 variables, 6 from the planner)   OK
+nk_ramsey_model   s.s. 2.7e-12   IRFs 2.1e-14   (8 series; model with 13 variables, 8 from the planner)   OK
 ```
 
 | Model | Origin | What it exercises |
@@ -167,24 +174,24 @@ levels.
 
 ```bash
 bash fetch.sh
-bash run_examples.sh       # strip_mod.py reduz cada .mod ao modelo; stoch_simul(order=1) igual para todos
+bash run_examples.sh       # strip_mod.py cuts each .mod down to the model; the same stoch_simul(order=1) for all
 python compare_import.py
 ```
 
 ```
-modelo         vars  aux    parâm.     e.e.     IRFs  momentos
+model          vars  aux    params     s.s.     IRFs   moments
 RBC_baseline     15    5   3.6e-16  1.1e-13  4.4e-14   4.9e-14  OK
 example1          6    5   0.0e+00  1.2e-14  1.7e-14   1.9e-14  OK
-example2          6    5   0.0e+00  2.1e-05  4.3e-06   3.3e-06  OK  (e.e. do Dynare com resíduo 1e-06)
+example2          6    5   0.0e+00  2.1e-05  4.3e-06   3.3e-06  OK  (Dynare's s.s. with residual 1e-06)
 Gali_2015        14    7   0.0e+00  0.0e+00  1.6e-14   7.5e-15  OK
 NK_baseline      28   16   1.8e-16  9.3e-14  5.9e-11   2.2e-11  OK
-              parâmetros que o .mod deixa ao MATLAB, tomados do Dynare: gammma1, Rbar, Lambdax, LambdaYd
-              ponto de partida do e.e. tomado do Dynare para 28 variável(is)
-agtrend          15    6   0.0e+00  3.9e-08  2.1e-07   2.3e-07  OK  (e.e. do Dynare com resíduo 4e-07)
+              parameters the .mod leaves to MATLAB, taken from Dynare: gammma1, Rbar, Lambdax, LambdaYd
+              s.s. starting point taken from Dynare for 28 variable(s)
+agtrend          15    6   0.0e+00  3.9e-08  2.1e-07   2.3e-07  OK  (Dynare's s.s. with residual 4e-07)
 example3          6    5   0.0e+00  8.3e-15  1.4e-14   2.2e-14  OK
-              ponto de partida do e.e. tomado do Dynare para 4 variável(is)
+              s.s. starting point taken from Dynare for 4 variable(s)
 fs2000           14    8   3.2e-16  9.2e-15  3.4e-13   3.4e-13  OK
-fs2000_nonstationary   11    6   0.0e+00  1.4e-08  1.5e-08   2.2e-08  OK  (e.e. do Dynare com resíduo 7e-08)
+fs2000_nonstationary   11    6   0.0e+00  1.4e-08  1.5e-08   2.2e-08  OK  (Dynare's s.s. with residual 7e-08)
 ```
 
 | Model | What the `.mod` reader has to handle |
@@ -202,7 +209,7 @@ whole steady state in a MATLAB file (`NK_baseline_steadystate.m`), and `example3
 in a MATLAB helper. A `.mod` reader does not execute MATLAB, so these parameters and these starting
 points are taken from Dynare. The steady state itself is solved by `dsgelab` and compared. The
 parameters that the `.mod` defines are read by `from_mod` and checked against Dynare's (column
-`parâm.`).
+`params`).
 
 **Unit root.** The price level of `Gali_2015` (`pi = p - p(-1)`) has a root of exactly 1. Dynare
 counts it as stable (`qz_criterium = 1 + 1e-6`). By default `dsgelab` does not, and it refuses the
@@ -213,47 +220,47 @@ convention, and `compare_import.py` uses that setting.
 
 ```bash
 bash fetch.sh
-bash run_policy.sh         # osr, discretionary_policy e evaluate_planner_objective no Dynare
-python compare_policy.py   # --sem-dynare pula a avaliação da perda do Dynare no ótimo do dsgelab
+bash run_policy.sh         # osr, discretionary_policy and evaluate_planner_objective in Dynare
+python compare_policy.py   # --no-dynare skips Dynare's evaluation of the loss at the dsgelab optimum
 ```
 
 ```
 OSR — osr_example.mod
-  perda do dsgelab no ótimo do Dynare   0.4268335923233252
-  perda reportada pelo Dynare           0.4268335923233251   desvio relativo 2.6e-16
-  ótimo do dsgelab                      0.4266626273124760   menor ou igual que o do Dynare
+  dsgelab loss at Dynare's optimum     0.4268335923233252
+  loss reported by Dynare              0.4268335923233251   relative deviation 2.6e-16
+  dsgelab optimum                      0.4266626273124760   smaller or equal than Dynare's
      gammax0     dsgelab     0.424427   Dynare     0.445744
      gammac0     dsgelab     1.563685   Dynare     1.686970
      gamma_y_    dsgelab    16.666667   Dynare    16.660559
      gamma_inf_  dsgelab     3.977354   Dynare     3.563333
-  perda do PRÓPRIO Dynare no ótimo do dsgelab 0.4266626273124778   desvio 4.3e-15
+  Dynare's OWN loss at dsgelab's optimum 0.4266626273124778   deviation 4.3e-15
 
-OSR sobre o bem-estar — nk_osr_planner.mod (planner_objective, ordem 2)
-  perda do dsgelab no ótimo do Dynare   0.0225969550620490
-  perda reportada pelo Dynare           0.0225969550620490   desvio relativo 1.5e-16
-  ótimo do dsgelab                      0.0225969550603055   menor ou igual que o do Dynare
+OSR on welfare — nk_osr_planner.mod (planner_objective, order 2)
+  dsgelab loss at Dynare's optimum     0.0225969550620490
+  loss reported by Dynare              0.0225969550620490   relative deviation 1.5e-16
+  dsgelab optimum                      0.0225969550603055   smaller or equal than Dynare's
      phi_pi      dsgelab     1.071929   Dynare     1.072218
      phi_u       dsgelab    -0.301073   Dynare    -0.301586
 
-Discrição — dennis_1.mod
-  IRFs (5 variáveis x 3 choques x 40)   desvio relativo máx 4.3e-08
-  bem-estar incondicional  dsgelab 100.2259173048   Dynare 100.2259172521   5.3e-10
-  bem-estar condicional    dsgelab 99.8889224747   Dynare 99.8889224138   6.1e-10
-     (com a primeira inovação da simulação do Dynare, que é o que ele usa; sem choque: 99.0953548618)
-  iterações de Dennis: 18
+Discretion — dennis_1.mod
+  IRFs (5 variables x 3 shocks x 40)   max relative deviation 4.3e-08
+  unconditional welfare    dsgelab 100.2259173048   Dynare 100.2259172521   5.3e-10
+  conditional welfare      dsgelab 99.8889224747   Dynare 99.8889224138   6.1e-10
+     (with the first innovation of Dynare's simulation, which is what it uses; without a shock: 99.0953548618)
+  Dennis iterations: 18
 
-Ramsey lido do .mod — nk_ramsey_model.mod
-  9 séries comparadas, multiplicadores incluídos (mesma numeração do Dynare)
-  estado estacionário  5.9e-12     IRFs de 1ª ordem  2.6e-14
-  bem-estar  incondicional -25.213284815613  Dynare -25.213284815578
-             condicional   -25.213284815613  Dynare -25.213284815580
-             multiplicadores zerados -25.213116382888  Dynare -25.213116382855   desvio relativo máx 1.4e-12
+Ramsey read from the .mod — nk_ramsey_model.mod
+  9 series compared, multipliers included (same numbering as Dynare)
+  steady state  5.9e-12     first-order IRFs  2.6e-14
+  welfare    unconditional -25.213284815613  Dynare -25.213284815578
+             conditional   -25.213284815613  Dynare -25.213284815580
+             zero multipliers -25.213116382888  Dynare -25.213116382855   max relative deviation 1.4e-12
 
-Bem-estar com capital — rbc_labortax.mod, ordem 2
-  incondicional -70.761476342807  Dynare -70.761476342831
-  condicional   -70.778245895834  Dynare -70.778245895855   desvio relativo máx 3.5e-13
+Welfare with capital — rbc_labortax.mod, order 2
+  unconditional -70.761476342807  Dynare -70.761476342831
+  conditional   -70.778245895834  Dynare -70.778245895855   max relative deviation 3.5e-13
 
-OSR: OK  OSR sobre o bem-estar: OK  discrição: OK  Ramsey do .mod: OK  bem-estar com capital: OK
+OSR: OK  OSR on welfare: OK  discretion: OK  Ramsey from the .mod: OK  welfare with capital: OK
 ```
 
 `from_mod` reads the three Dynare files without translation. The declarations `planner_objective`,
@@ -265,8 +272,8 @@ OSR: OK  OSR sobre o bem-estar: OK  discrição: OK  Ramsey do .mod: OK  bem-est
 gives Dynare's value to 2.6e-16. The `dsgelab` optimum has a **lower** loss, 0.4266626 against
 0.4268336, and three optimisers (BFGS, Nelder–Mead, Powell) reach it from the starting point of the
 `.mod` and from Dynare's optimum. Dynare itself, evaluated at the `dsgelab` point
-(`+osr/objective`), gives the same loss to 4e-15. Dynare's `csminwel` therefore stops early, along
-an almost flat direction. At the optimum `gamma_y_ = 16.667 = 1/|σ|`, so the rule fully offsets
+(`+osr/objective`), gives the same loss to 4e-15. Dynare's `csminwel` therefore stops, at its
+default tolerance, before the minimum, along an almost flat direction. At the optimum `gamma_y_ = 16.667 = 1/|σ|`, so the rule fully offsets
 the demand shock, which enters the IS curve with coefficient `σ = −0.06` on the interest rate. The
 third call to `osr` in the file uses `opt_algo=1`, which in Octave requires the `optim` package,
 and `run_policy.sh` removes that call from the copy.
@@ -286,22 +293,22 @@ constrained optimiser that in Octave depends on extra packages, and the file doe
 
 **The accuracy floor under discretion.** The IRFs agree to 4e-08 because Dynare stops Dennis's
 iteration at `sqrt(eps)`. `dsgelab` iterates to 1e-12 by default, and against Galí's closed form
-(2015, ch. 5) its error stays below 1e-12 (`tests/test_policy.py`).
+(2015, ch. 5) its largest error is 1.0e-12 (`tests/test_policy.py` requires less than 1e-10).
 
 ## Perfect foresight, with and without expectation errors
 
 ```bash
-bash fetch.sh                # mods/foresight/, de tests/deterministic_simulations do Dynare 7.2
+bash fetch.sh                # mods/foresight/, from Dynare 7.2's tests/deterministic_simulations
 bash run_foresight.sh
 python compare_foresight.py
 ```
 
 ```
-rbc_det1                    condição inicial (histval)             desvio relativo máx 1.1e-14 (Output)  OK
-rbc_det2                    choque no período 1                    desvio relativo máx 6.6e-15 (Capital)  OK
-rbc_det3                    choques antecipados, períodos 4 a 8    desvio relativo máx 8.0e-14 (Output)  OK
-pfwee                       erros de expectativa                   desvio relativo máx 2.8e-12 (c)  OK
-pfwee_constant_sim_length   idem, horizonte constante              desvio relativo máx 3.0e-12 (c)  OK
+rbc_det1                    initial condition (histval)            max relative deviation 1.1e-14 (Output)  OK
+rbc_det2                    shock in period 1                      max relative deviation 6.6e-15 (Capital)  OK
+rbc_det3                    anticipated shocks, periods 4 to 8     max relative deviation 8.0e-14 (Output)  OK
+pfwee                       expectation errors                     max relative deviation 2.8e-12 (c)  OK
+pfwee_constant_sim_length   idem, constant horizon                 max relative deviation 3.0e-12 (c)  OK
 ```
 
 `rbc_det1`–`3` validate `perfect_foresight` and `ModFile.deterministic` with an initial condition
@@ -337,7 +344,7 @@ in the `initval` of `pfwee`). `from_mod` carries it in the state `SHK_x`, with
 ```bash
 bash fetch.sh
 bash run_estimation.sh          # fs2000 (calib, mode, mh), unitroot, condfc
-python compare_estimation.py    # --sem-mh pula o Metropolis, que leva alguns minutos
+python compare_estimation.py    # --no-mh skips the Metropolis, which takes a few minutes
 ```
 
 Dynare's `fs2000.mod` is read by `from_mod` together with its priors and data. Two Dynare
@@ -353,14 +360,14 @@ conventions are reproduced.
 ## Occasionally binding constraints: OccBin
 
 ```bash
-bash fetch.sh                # mods/occbin/, de tests/occbin do Dynare 7.2
-bash run_occbin.sh           # escreve work_occbin/<nome>.mod e exporta out_occbin/<nome>.mat
+bash fetch.sh                # mods/occbin/, from Dynare 7.2's tests/occbin
+bash run_occbin.sh           # writes work_occbin/<name>.mod and exports out_occbin/<name>.mat
 python compare_occbin.py
 ```
 
 ```
-borrcon      80 períodos  por partes 2.2e-16  linear 2.2e-16  regimes 30/30  iterações 6  OK
-dynrbc      200 períodos  por partes 1.6e-15  linear 8.3e-16  regimes 169/169  iterações 99  OK
+borrcon      80 periods  piecewise 2.2e-16  linear 2.2e-16  regimes 30/30  iterations 6  OK
+dynrbc      200 periods  piecewise 1.6e-15  linear 8.3e-16  regimes 169/169  iterations 99  OK
 ```
 
 `borrcon.mod` has a borrowing constraint and surprise shocks in periods 10 and 30, with
@@ -375,28 +382,28 @@ the solver, because without it Dynare's simulator does not receive the shock seq
 ## Extended path
 
 ```bash
-bash fetch.sh                # mods/ep/, de tests/ep do Dynare 7.2
-bash run_ep.sh               # leva uns dez minutos: o burnside roda sete variantes
+bash fetch.sh                # mods/ep/, from Dynare 7.2's tests/ep
+bash run_ep.sh               # takes about ten minutes: burnside runs seven variants
 python compare_ep.py
 ```
 
 ```
 burnside.mod
-  EP                                  101 períodos  desvio máx 7.2e-12 (relativo 5.7e-13)  OK
-  EP estocástica, ordem 1             101 períodos  desvio máx 1.0e-11 (relativo 8.2e-13)  OK
-    idem, híbrida                     101 períodos  desvio máx 1.1e-11 (relativo 8.3e-13)  OK
-  EP estocástica, ordem 2             101 períodos  desvio máx 1.0e-11 (relativo 8.2e-13)  OK
-    idem, árvore cheia                101 períodos  desvio máx 1.0e-11 (relativo 8.2e-13)  OK
-    idem, híbrida                     101 períodos  desvio máx 1.0e-11 (relativo 8.2e-13)  OK
-    idem, híbrida, árvore cheia       101 períodos  desvio máx 1.0e-11 (relativo 8.2e-13)  OK
+  EP                                  101 periods  max deviation 7.2e-12 (relative 5.7e-13)  OK
+  stochastic EP, order 1              101 periods  max deviation 1.0e-11 (relative 8.2e-13)  OK
+    idem, hybrid                      101 periods  max deviation 1.1e-11 (relative 8.3e-13)  OK
+  stochastic EP, order 2              101 periods  max deviation 1.0e-11 (relative 8.2e-13)  OK
+    idem, full tree                   101 periods  max deviation 1.0e-11 (relative 8.2e-13)  OK
+    idem, hybrid                      101 periods  max deviation 1.0e-11 (relative 8.2e-13)  OK
+    idem, hybrid, full tree           101 periods  max deviation 1.0e-11 (relative 8.2e-13)  OK
 linearmodel0.mod
-  EP                                  201 períodos  desvio máx 2.0e-15 (relativo 3.8e-16)  OK
-  solução de primeira ordem do Dynare  200 períodos  desvio máx 3.1e-14 (relativo 5.9e-15)  OK
+  EP                                  201 periods  max deviation 2.0e-15 (relative 3.8e-16)  OK
+  Dynare's first-order solution       200 periods  max deviation 3.1e-14 (relative 5.9e-15)  OK
 ```
 
 The shocks are the ones Dynare drew, exported. The seven variants of `burnside.mod` differ from one
 another by `2e-4` to `2e-1` in the tree price, and each matches its counterpart in Dynare to
-`1e-11`. Two settings had to match. The first is the tolerance. Dynare stops at `1e-5` by default
+`1.1e-11` or less. Two settings had to match. The first is the tolerance. Dynare stops at `1e-5` by default
 and `run_ep.sh` asks for `1e-12`, so this tolerance is what limits the agreement. The second is the
 Hessian in the hybrid variants. With the numerical Hessian the second-order risk correction differs
 by `2e-7`, and with the exact one, `from_mod(..., derivatives="both")`, by `3e-10`. The variants
@@ -405,24 +412,24 @@ that ask for a fourth-order perturbation (`hybrid_order = 4`) are not compared.
 ## Trends and balanced growth
 
 ```bash
-bash fetch.sh                # mods/bgp/, de tests/bgp do Dynare 7.2
-bash run_bgp.sh              # avalia o bgpfun que o bgp.write do Dynare gera, em cinco pontos
+bash fetch.sh                # mods/bgp/, from Dynare 7.2's tests/bgp
+bash run_bgp.sh              # evaluates, at five points, the bgpfun that Dynare's bgp.write generates
 python compare_bgp.py
 ```
 
 ```
-o problema (bgp.write)
-  solow   resíduos em 5 pontos contra bgpfun: desvio máx 0.0e+00  OK
-  ramsey  resíduos em 5 pontos contra bgpfun: desvio máx 2.2e-16  OK
-  nk      resíduos em 5 pontos contra bgpfun: desvio máx 0.0e+00  OK
-a solução (asserções dos testes do Dynare)
-  solow   300 partidas: K/Y 2.8e-12, g_Y 2.6e-14, g_K 2.3e-14, gE 1.1e-14  OK
-  ramsey  fatores de crescimento contra 1.02: 1.3e-15  OK
-  nk      níveis e fatores contra 1: 2.0e-15  OK
+the problem (bgp.write)
+  solow   residuals at 5 points against bgpfun: max deviation 0.0e+00  OK
+  ramsey  residuals at 5 points against bgpfun: max deviation 2.2e-16  OK
+  nk      residuals at 5 points against bgpfun: max deviation 0.0e+00  OK
+the solution (assertions of Dynare's tests)
+  solow   300 starts: K/Y 2.8e-12, g_Y 2.6e-14, g_K 2.3e-14, gE 1.1e-14  OK
+  ramsey  growth factors against 1.02: 1.3e-15  OK
+  nk      levels and factors against 1: 2.0e-15  OK
 ```
 
 Dynare's tests solve the problem with MATLAB's `fsolve` from random points, and the Solow test is
-skipped in Octave. For that reason the comparison covers the PROBLEM, meaning the residual that
+skipped in Octave. For that reason the comparison covers the *problem*, meaning the residual that
 `bgp.write` writes, point by point, together with the tests' assertions about the solution. The
 level of a growing variable is not identified. A model in levels also has trivial paths (zero
 population or zero capital), which `balanced_growth` discards before restarting from another
@@ -432,8 +439,8 @@ point. The detrending of a `.mod` with `trend_var` and `var(deflator=)` is valid
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash
-python compare_diagnostics.py     # roda o Dynare por conta própria
-python compare_calibration.py     # lê macromodelling/calibration.json
+python compare_diagnostics.py     # runs Dynare on its own
+python compare_calibration.py     # reads macromodelling/calibration.json
 ```
 
 `compare_diagnostics.py` has three parts. Its first part runs `diagnose` against Dynare's
@@ -447,11 +454,11 @@ within its tolerance, `4e-6`, with the six digits it prints.
 
 `compare_calibration.py` checks the calibration equations against MacroModelling.jl on one
 RBC written in both programs, with `beta` pinned by `k/q = 2.5` (`k[ss] / q[ss] = 2.5 | β` in MacroModelling). `beta` and
-the steady state agree to `4e-15`, and the closed form arbitrates between them. To regenerate the
+the steady state agree to `4.4e-15`, and the closed form decides between them. To regenerate the
 `.json`, in a Julia project with MacroModelling and JSON3, run
 
 ```bash
-julia --project=<projeto> macromodelling/calibration.jl < /dev/null
+julia --project=<project> macromodelling/calibration.jl < /dev/null
 ```
 
 The `< /dev/null` is required. On first load, the PythonCall that MacroModelling uses waits for

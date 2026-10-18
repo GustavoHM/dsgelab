@@ -1,0 +1,45 @@
+name: site
+
+# Publishes site/ to GitHub Pages. In the repository settings, set
+# Pages > Build and deployment > Source to "GitHub Actions". GitHub Pages is
+# free only for public repositories, so the job is skipped while the
+# repository is private.
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      # The pages link to ../docs/*.md, which work in a clone but lie outside the
+      # published folder; the published copy points them at the files on GitHub.
+      - name: Point documentation links at the repository
+        run: |
+          mkdir -p _site && cp -r site/. _site/
+          blob="https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_SHA}/docs/"
+          sed -i "s|href=\"\.\./docs/|href=\"${blob}|g" _site/*.html
+          sed -i "s|href=\"\.\./\.\./docs/|href=\"${blob}|g" _site/pt-br/*.html
+          ! grep -n 'href="\.\./\(\.\./\)\?docs/' _site/*.html _site/pt-br/*.html
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v5

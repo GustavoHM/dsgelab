@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# run_ramsey.sh — roda os modelos de política ótima no Octave + Dynare e exporta oo_ para .mat.
+# run_ramsey.sh: runs the optimal policy models in Octave + Dynare and exports oo_ to .mat.
 #
-# Uso:  bash run_ramsey.sh
+# Usage:  bash run_ramsey.sh
 #
-# Três modelos: ramsey/nk_linear.mod e ramsey/rbc_labortax.mod, escritos aqui, e mods/ramsey/nk_ramsey_model.mod, do conjunto
-# de testes do próprio Dynare (baixado por fetch.sh). O .mod do Dynare roda SEM alteração; depois
-# dele, o stoch_simul é reexecutado com 40 períodos de IRF, porque o original pede irf=0. O
-# original não fixa a ordem e o Dynare usa 2 por omissão; a comparação é de 1ª ordem. O
-# ramsey_model já deixou M_ e options_ com o problema do planejador, e o stoch_simul o herda.
+# Three models: ramsey/nk_linear.mod and ramsey/rbc_labortax.mod, written here, and
+# mods/ramsey/nk_ramsey_model.mod, from Dynare's own test suite (downloaded by fetch.sh). Dynare's
+# .mod runs WITHOUT changes. After it, stoch_simul is rerun with 40 periods of IRF, because the
+# original asks for irf=0. The original does not set the order and Dynare uses 2 by default,
+# whereas the comparison is at first order. ramsey_model has already left M_ and options_ with the
+# planner's problem, and stoch_simul inherits it.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -19,11 +20,11 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 mkdir -p out
 for src in ramsey/nk_linear.mod ramsey/rbc_labortax.mod mods/ramsey/nk_ramsey_model.mod; do
-  [ -f "$src" ] || { echo "falta $src — rode fetch.sh"; exit 1; }
+  [ -f "$src" ] || { echo "missing $src, run fetch.sh"; exit 1; }
   m="$(basename "$src")"; base="${m%.mod}"
   echo ">>> $m"
   cp "$src" .
@@ -43,9 +44,9 @@ for src in ramsey/nk_linear.mod ramsey/rbc_labortax.mod mods/ramsey/nk_ramsey_mo
     ex.sigma_e      = M_.Sigma_e;
     ex.info         = info;
     save('-mat7-binary', 'out/${base}.mat', 'ex');
-    printf('gravado out/${base}.mat (info=%d)\n', info);
-  " > "out/${base}.log" 2>&1 || { echo "FALHOU $m — ver out/${base}.log"; tail -30 "out/${base}.log"; exit 1; }
+    printf('saved out/${base}.mat (info=%d)\n', info);
+  " > "out/${base}.log" 2>&1 || { echo "FAILED $m, see out/${base}.log"; tail -30 "out/${base}.log"; exit 1; }
   tail -1 "out/${base}.log"
   rm -rf "$m" "$base" "+$base" "${base}.log"
 done
-echo "pronto."
+echo "done."

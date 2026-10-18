@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dsgelab — replicações</title>
-<meta name="description" content="Artigos refeitos no dsgelab: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
+<meta name="description" content="Artigos replicados com o dsgelab: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
 <link rel="alternate" hreflang="en" href="https://gustavohm.github.io/dsgelab/replications.html">
 <link rel="alternate" hreflang="pt-BR" href="https://gustavohm.github.io/dsgelab/pt-br/replications.html">
 <link rel="alternate" hreflang="x-default" href="https://gustavohm.github.io/dsgelab/replications.html">
@@ -14,7 +14,7 @@
 
 <header class="hero">
   <div class="wrap">
-    <p class="lang"><a href="../replications.html" hreflang="en" lang="en">English</a> · <strong>Português</strong></p>
+    <p class="lang"><a href="../replications.html" hreflang="en" lang="en"><span aria-hidden="true">🌐</span> English</a> · <strong><span aria-hidden="true">🇧🇷</span> Português</strong></p>
     <h1>Replicações</h1>
     <p class="tag">Cada replicação parte de um artigo e da calibração que ele publica, e o código
     desta página confere um número do artigo. O que o sistema resolvido não reproduz fica registrado
@@ -35,40 +35,40 @@
 
 <section id="criterio"><div class="wrap">
   <h2>O que conta como replicação</h2>
-  <p class="lede">Conta como replicação a mesma equação, com a mesma calibração, confrontada com um
-  número publicado ou com uma solução fechada. O bloco de cada replicação é executado por
-  <code>tools/check_site_examples.py</code>.</p>
-  <p>Os exemplos de ensino do Dynare (Collard, Pfeifer) ficam na
-  <a href="./#validacao">tabela de validação</a> da página do pacote. São arquivos de manual, e lá a
-  comparação é feita contra a solução do Dynare, variável a variável.</p>
+  <p class="lede">Aqui, uma replicação usa as equações e a calibração do artigo e compara o
+  resultado com um número publicado ou com uma solução fechada. O bloco de cada replicação é
+  executado por <code>tools/check_site_examples.py</code>.</p>
+  <p>Os exemplos didáticos do Dynare (Collard, Pfeifer) ficam na
+  <a href="./#validacao">tabela de validação</a> da página do pacote. São arquivos de tutorial, e lá
+  a comparação é feita com a solução do Dynare, variável a variável.</p>
 </div></section>
 
 <section id="heutel"><div class="wrap">
   <h2>Heutel (2012), Review of Economic Dynamics</h2>
   <p>Garth Heutel, <em>How should environmental policy respond to business cycles? Optimal policy
   under persistent productivity shocks</em>, Review of Economic Dynamics 15, 244–264,
-  <a href="https://doi.org/10.1016/j.red.2011.05.002">10.1016/j.red.2011.05.002</a>. O porte está
-  em <code>dsgelab.examples.heutel</code> e em <a href="../../docs/heutel.md">docs/heutel.md</a>.
+  <a href="https://doi.org/10.1016/j.red.2011.05.002">10.1016/j.red.2011.05.002</a>. A implementação
+  está em <code>dsgelab.examples.heutel</code> e em <a href="../../docs/heutel.md">docs/heutel.md</a>.
   O sistema resolvido é o linear do código MATLAB do autor, e o Klein/QZ do pacote faz o papel do
   Anderson–Moore. O modelo não linear, que daria segunda ordem e previsão perfeita, não está neste
   exemplo.</p>
 
   <h3>Tabela 2 e o impulso de 1%</h3>
   <p>A Tabela 2, p. 251, traz α = 0,36, β = 0,98267, δ = 0,025, ρ = 0,95, σ<sub>ε</sub> = 0,007,
-  η = 0,9979, θ₁ = 0,05607, θ₂ = 2,8 e 1 − γ = 0,696. A prosa da p. 250 imprime β = 0,98627, e o
-  exemplo segue a tabela e os scripts. A seção 4.1 simula uma inovação de 1% e descreve o consumo
-  no máximo por volta do período 15. O capital, na mesma frase, fica «around period 40 (year 6)».
-  Num modelo trimestral o sexto ano é o horizonte 24. A série resolvida atinge o máximo do capital
-  no horizonte 25 e o do consumo no 15. Este sistema não produz o máximo no período 40, e o exemplo
+  η = 0,9979, θ₁ = 0,05607, θ₂ = 2,8 e 1 − γ = 0,696. O texto da p. 250 traz β = 0,98627, e o
+  exemplo segue a tabela e os scripts. A seção 4.1 simula uma inovação de 1% e descreve o pico do
+  consumo por volta do período 15 e, na frase seguinte, o pico do capital “around period 40
+  (year 6)”. Num modelo trimestral, o sexto ano corresponde ao horizonte 24. Na série resolvida,
+  o capital atinge o máximo no horizonte 25 e o consumo, no 15. Este sistema não produz o pico no período 40, e o exemplo
   não desloca a série para coincidir com ele.</p>
-  <p>A álgebra escalar do porte é traduzida dos arquivos MATLAB do Heutel, que não declaram licença,
-  e por isso o pacote não a distribui. Rodar <code>heutel.fetch()</code> uma vez baixa a cópia
-  pública do repositório da Georgia State University, confere cada arquivo contra o SHA-256 dos
-  arquivos com que o porte foi validado e grava a tradução num diretório de cache.</p>
+  <p>A álgebra escalar da implementação é traduzida dos arquivos MATLAB de Heutel, que não declaram
+  licença, e por isso o pacote não a distribui. Executado uma vez, <code>heutel.fetch()</code> baixa
+  a cópia pública do repositório da Georgia State University, confere cada arquivo com o SHA-256
+  dos arquivos com que a implementação foi validada e grava a tradução num diretório de cache.</p>
 <pre><code>import numpy as np
 from dsgelab.examples import heutel
 
-heutel.fetch()    # uma vez por máquina: baixa, confere e traduz os arquivos do Heutel
+heutel.fetch()    # uma vez por máquina: baixa, confere e traduz os arquivos de Heutel
 p = heutel.Params()
 assert p.alpha == 0.36 and p.beta == 0.98267 and p.delta == 0.025
 assert p.rho == 0.95 and p.sd == 0.007 and p.eta == 0.9979
@@ -89,11 +89,11 @@ assert int(np.argmax(irf["k"])) == 25
 print(ss["k"], ss["y"], ss["mu"], int(np.argmax(irf["k"])))</code></pre>
 
   <h3>Informação defasada, p. 262</h3>
-  <p>Com o governo escolhendo o instrumento antes de ver o estado, o artigo substitui a condição de
-  primeira ordem por τ<sub>t</sub> = d · y<sub>t−1</sub> e q<sub>t</sub> = d · y<sub>t−1</sub>. O
-  d que ele publica é 1,415 para o imposto e 0,658 para a quota. Os scripts trazem 1,4151 e
-  0,6580. No período do choque o produto defasado ainda está no estado estacionário, e o
-  instrumento não se move.</p>
+  <p>Quando o governo escolhe o instrumento antes de observar o estado, o artigo substitui a
+  condição de primeira ordem por τ<sub>t</sub> = d · y<sub>t−1</sub> e q<sub>t</sub> = d ·
+  y<sub>t−1</sub>. O artigo publica d = 1,415 para o imposto e 0,658 para a cota, e os scripts
+  trazem 1,4151 e 0,6580. Como o produto defasado ainda está no estado estacionário no período do
+  choque, o instrumento não se move nesse período.</p>
 <pre><code>tax = heutel.Params.source("tax_asym")
 quota = heutel.Params.source("quota_asym")
 assert round(tax.policy_slope, 3) == 1.415
@@ -108,10 +108,11 @@ assert abs(irf_q["q"][0]) &lt; 1e-10
 assert np.max(np.abs(irf_q["q"][1:] - quota.policy_slope * irf_q["y"][:-1])) &lt; 1e-10
 assert np.max(np.abs(irf_q["e"] - irf_q["q"])) &lt; 1e-10
 print(tax.policy_slope, quota.policy_slope)</code></pre>
-  <div class="note"><p>A calibração literal do planejador nos scripts, θ₂ = 0,1 e γ = 0,8, é a
-  sensibilidade da p. 258, e não produz estado estacionário admissível. Por isso
-  <code>heutel.solve("planner")</code> levanta <code>SteadyStateError</code>. O caso-base da
-  Tabela 2 pede <code>heutel.solve("planner", heutel.Params())</code>.</p></div>
+  <div class="note"><p>A calibração literal do planejador nos scripts, θ₂ = 0,1 e γ = 0,8, é o caso
+  de sensibilidade da p. 258 e não produz estado estacionário admissível, de modo que
+  <code>heutel.solve("planner")</code> levanta <code>heutel.SteadyStateError</code>, definida em
+  <code>dsgelab.examples.heutel</code> e distinta de <code>dsgelab.SteadyStateError</code>. Para o
+  caso-base da Tabela 2, chame <code>heutel.solve("planner", heutel.Params())</code>.</p></div>
 </div></section>
 
 <section id="crescimento"><div class="wrap">
@@ -121,21 +122,22 @@ print(tax.policy_slope, quota.policy_slope)</code></pre>
   k′ = αβ a k<sup>α</sup>, e a solução log-linear é P = [[α, 1], [0, ρ]], F = [α, 1]. A versão
   com vários setores, a mesma utilidade e a mesma depreciação, é Long e Plosser (1983, Journal of
   Political Economy). O exemplo é o caso de um setor.</p>
-  <p>No processo log a′ = ρ log a + ε, a correção de risco de segunda ordem sobre a tecnologia é
-  σ², o termo de Jensen que a aproximação de Schmitt-Grohé e Uribe (2004, Journal of Economic
-  Dynamics and Control) tem de devolver. O capital obedece à regra exata estado a estado, e a
-  correção dele é zero. As tabelas numéricas daquele artigo vêm de outro modelo.</p>
+  <p>No processo log a′ = ρ log a + ε, o coeficiente de segunda ordem sobre a tecnologia,
+  h<sub>σσ</sub>, é igual a σ², e a correção que ele acrescenta à regra, σ²/2, é o termo de Jensen
+  que a aproximação de Schmitt-Grohé e Uribe (2004, Journal of Economic Dynamics and Control) tem
+  de devolver. Como o capital obedece à regra exata em todos os estados, seu coeficiente é nulo. As
+  tabelas numéricas daquele artigo vêm de outro modelo.</p>
 <pre><code>import numpy as np
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import rbc
 
 model, params, guess = rbc.build()
-sol = dk.solve(model, params, guess=guess)
+sol = dsg.solve(model, params, guess=guess)
 exact = rbc.closed_form(params)
 assert np.allclose(sol.P, exact["P"]) and np.allclose(sol.F, exact["F"])
 
 sigma = 0.007
-so = dk.solve_second_order(sol, cov={"eps_a": sigma})
+so = dsg.solve_second_order(sol, cov={"eps_a": sigma})
 i_a = model.states.index("a")
 i_k = model.states.index("k")
 assert abs(so.h_ss[i_a] - sigma ** 2) &lt; 1e-8
@@ -145,27 +147,28 @@ print(sol.P, so.h_ss[i_a])</code></pre>
 
 <section id="taylor"><div class="wrap">
   <h2>Princípio de Taylor</h2>
-  <p>Em Clarida, Galí e Gertler (2000, Quarterly Journal of Economics 115, 147–180), o equilíbrio
-  sob a regra i = φ<sub>π</sub> π + φ<sub>x</sub> x é determinado quando φ<sub>π</sub> &gt; 1. O
-  exemplo é o modelo de três equações com φ<sub>π</sub> = 1,5, φ<sub>x</sub> = 0,125 e β = 0,99,
-  cujo equilíbrio é determinado. Com φ<sub>π</sub> = 0,8 o mesmo sistema é recusado. A fronteira
-  exata deste modelo, com φ<sub>x</sub> positivo, fica um pouco abaixo de 1, e 0,8 está do lado
-  indeterminado. O código confere esse limiar e não reproduz as tabelas de coeficientes estimados
-  do artigo.</p>
+  <p>Clarida, Galí e Gertler (2000, Quarterly Journal of Economics 115, 147–180) mostram que, sob
+  uma regra de juros prospectiva, o equilíbrio só é determinado se a resposta à inflação esperada
+  for maior que um. O exemplo usa uma versão contemporânea da regra,
+  i = φ<sub>π</sub> π + φ<sub>x</sub> x, no modelo de três equações com φ<sub>π</sub> = 1,5,
+  φ<sub>x</sub> = 0,125 e β = 0,99, cujo equilíbrio é determinado. Com φ<sub>π</sub> = 0,8 o mesmo
+  sistema é recusado com <code>BlanchardKahnError</code>. Nesta versão, um φ<sub>x</sub> positivo
+  põe a fronteira um pouco abaixo de 1, em cerca de 0,9875, e 0,8 está do lado indeterminado. O
+  código confere esse limiar e não reproduz a tabela de coeficientes estimados do artigo.</p>
 <pre><code>from dataclasses import replace
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import nk
 
 model, params, guess = nk.build()
 assert params.phi_pi == 1.5 and params.phi_x == 0.125 and params.beta == 0.99
-sol_nk = dk.solve(model, params, guess=guess)
+sol_nk = dsg.solve(model, params, guess=guess)
 assert sol_nk.klein.n_stable == model.n_states
 
 below = replace(params, phi_pi=0.8)
 try:
-    dk.solve(model, below, guess=guess)
+    dsg.solve(model, below, guess=guess)
     raised = False
-except dk.BlanchardKahnError:
+except dsg.BlanchardKahnError:
     raised = True
 assert raised
 print(sol_nk.klein.n_stable, raised)</code></pre>
@@ -178,11 +181,11 @@ print(sol_nk.klein.n_stable, raised)</code></pre>
     <tbody>
       <tr>
         <td>Smets e Wouters (2007), American Economic Review</td>
-        <td>O pacote tem o filtro de Kalman, a verossimilhança e a estimação bayesiana, e a replicação ainda não foi feita.</td>
+        <td>O pacote já tem a verossimilhança, o filtro de Kalman e a estimação bayesiana, mas a replicação ainda não foi feita.</td>
       </tr>
       <tr>
         <td>Schmitt-Grohé e Uribe (2003), pequena economia aberta</td>
-        <td>É o próximo modelo numérico da lista e ainda não está no pacote. O artigo de 2004, nesta página, entra só pelo termo σ² do AR(1) lognormal.</td>
+        <td>O modelo ainda não está no pacote. O artigo de 2004 aparece nesta página só pelo termo σ² do AR(1) lognormal.</td>
       </tr>
     </tbody>
   </table>

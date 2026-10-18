@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-# run_bgp.sh — o problema de crescimento balanceado que o Dynare monta (bgp.write), para
-# compare_bgp.py.
+# run_bgp.sh: the balanced-growth problem that Dynare sets up (bgp.write), for compare_bgp.py.
 #
-# Uso:  bash run_bgp.sh
+# Usage:  bash run_bgp.sh
 #
-# Os arquivos vêm de tests/bgp do Dynare 7.2 (fetch.sh). A cópia de trabalho para antes do bloco
-# verbatim do teste (que resolve com o fsolve do MATLAB, ausente ou diferente no Octave); depois
-# do pré-processamento, chama bgp.write(M_) e avalia a função gerada, bgpfun, em cinco pontos
-# fixos z = [níveis; fatores de crescimento]. Exporta para out_bgp/<nome>.mat os pontos e os
-# resíduos.
+# The files come from tests/bgp of Dynare 7.2 (fetch.sh). The working copy stops before the
+# test's verbatim block (which solves with MATLAB's fsolve, missing or different in Octave). After
+# preprocessing, it calls bgp.write(M_) and evaluates the generated function, bgpfun, at five fixed
+# points z = [levels; growth factors]. It exports the points and the residuals to
+# out_bgp/<name>.mat.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -20,7 +19,7 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 mkdir -p out_bgp work_bgp
 for m in solow-1 ramsey-1 nk-1; do
@@ -41,9 +40,9 @@ for m in solow-1 ramsey-1 nk-1; do
     end
     ex = struct(); ex.Z = Z; ex.F = F; ex.endo_names = M_.endo_names;
     save('-mat7-binary', '../out_bgp/${name}.mat', 'ex');
-    printf('gravado out_bgp/${name}.mat\n');
-  " > "../out_bgp/${name}.log" 2>&1 ) || { echo "FALHOU $m — ver out_bgp/${name}.log"; tail -15 "out_bgp/${name}.log"; continue; }
-  grep gravado "out_bgp/${name}.log" || tail -5 "out_bgp/${name}.log"
+    printf('saved out_bgp/${name}.mat\n');
+  " > "../out_bgp/${name}.log" 2>&1 ) || { echo "FAILED $m, see out_bgp/${name}.log"; tail -15 "out_bgp/${name}.log"; continue; }
+  grep saved "out_bgp/${name}.log" || tail -5 "out_bgp/${name}.log"
 done
 rm -rf work_bgp
-echo "pronto."
+echo "done."

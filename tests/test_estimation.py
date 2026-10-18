@@ -12,7 +12,7 @@ from scipy import stats
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.estimation import (EstimationProblem, maximum_likelihood,  # noqa: E402
                                 metropolis_hastings, model_probabilities, posterior_mode,
                                 prior_predictive, smc)
@@ -21,7 +21,7 @@ from dsgelab.kalman import (forecast, kalman_filter, kalman_smoother,  # noqa: E
 from dsgelab.priors import prior  # noqa: E402
 
 # y_t = mu + sigma u_t, u white noise: every density here is known in closed form.
-IID = dk.from_equations(["u(+1) = e", "y = mu + sigma*u"], states=["u"], jumps=["y"],
+IID = dsg.from_equations(["u(+1) = e", "y = mu + sigma*u"], states=["u"], jumps=["y"],
                         shocks=["e"], parameters=["mu", "sigma"])
 
 
@@ -49,11 +49,11 @@ def test_likelihood_of_iid_draws():
 
 
 def test_univariate_and_multivariate_filters_agree():
-    m = dk.from_equations(["a(+1) = 0.9*a + e1", "b(+1) = 0.5*b + 0.3*a + e2",
+    m = dsg.from_equations(["a(+1) = 0.9*a + e1", "b(+1) = 0.5*b + 0.3*a + e2",
                            "y1 = a + b", "y2 = a - 2*b"],
                           states=["a", "b"], jumps=["y1", "y2"], shocks=["e1", "e2"],
                           parameters=[])
-    sol = dk.solve(m, {}, guess=dict(a=0, b=0, y1=0, y2=0))
+    sol = dsg.solve(m, {}, guess=dict(a=0, b=0, y1=0, y2=0))
     sim = sol.to_levels(sol.simulate(periods=80, cov={"e1": 0.1, "e2": 0.2}, seed=1))
     data = {"y1": sim["y1"], "y2": sim["y2"]}
     sp = state_space(sol, ["y1", "y2"], cov={"e1": 0.1, "e2": 0.2}, measurement=0.01)
@@ -67,9 +67,9 @@ def test_univariate_and_multivariate_filters_agree():
 
 
 def test_smoother_reproduces_the_data_and_the_law_of_motion():
-    m = dk.from_equations(["a(+1) = 0.9*a + e", "y = 2 + a"], states=["a"], jumps=["y"],
+    m = dsg.from_equations(["a(+1) = 0.9*a + e", "y = 2 + a"], states=["a"], jumps=["y"],
                           shocks=["e"], parameters=[])
-    sol = dk.solve(m, {}, guess=dict(a=0, y=2))
+    sol = dsg.solve(m, {}, guess=dict(a=0, y=2))
     y = sol.to_levels(sol.simulate(periods=50, cov={"e": 0.1}, seed=2))["y"]
     sp = state_space(sol, ["y"], cov={"e": 0.1})
     sm = kalman_smoother(sp, {"y": y})
@@ -82,9 +82,9 @@ def test_smoother_reproduces_the_data_and_the_law_of_motion():
 def test_exact_diffuse_start_is_the_limit_of_a_vague_one():
     # Local level: x(+1) = x + e, y = x + n. A huge but finite initial variance kappa
     # gives log L(kappa) = log L_diffuse - 1/2 log(kappa) + o(1).
-    m = dk.from_equations(["x(+1) = x + e", "y = x"], states=["x"], jumps=["y"],
+    m = dsg.from_equations(["x(+1) = x + e", "y = x"], states=["x"], jumps=["y"],
                           shocks=["e"], parameters=[])
-    sol = dk.solve(m, {}, guess=dict(x=0, y=0), qz_criterium=1 + 1e-6)
+    sol = dsg.solve(m, {}, guess=dict(x=0, y=0), qz_criterium=1 + 1e-6)
     rng = np.random.default_rng(3)
     y = np.cumsum(0.1 * rng.standard_normal(40)) + 0.05 * rng.standard_normal(40)
     sp = state_space(sol, ["y"], cov={"e": 0.1}, measurement=0.05)
@@ -153,7 +153,7 @@ def test_metropolis_and_smc_recover_the_posterior_and_the_marginal():
 
 def test_prior_predictive_counts_indeterminacy():
     # Taylor principle: determinate iff phi > 1. Under phi ~ U(0, 2) half the draws are.
-    m = dk.from_equations(["pi = pi(+1)/phi + u", "u(+1) = 0.5*u + e", "i = phi*pi"],
+    m = dsg.from_equations(["pi = pi(+1)/phi + u", "u(+1) = 0.5*u + e", "i = phi*pi"],
                           states=["u"], jumps=["pi", "i"], shocks=["e"], parameters=["phi"])
     pb = EstimationProblem(model=m, data={"pi": np.zeros(5)}, params=dict(phi=1.5),
                            observables=["pi"], priors={"phi": ("uniform", 1.0, 2 / math.sqrt(12))},
@@ -170,9 +170,9 @@ def test_model_probabilities():
 
 
 def test_decompositions_and_forecast_are_consistent():
-    m = dk.from_equations(["a(+1) = 0.9*a + e1", "b(+1) = 0.5*b + e2", "y = 1 + a + b"],
+    m = dsg.from_equations(["a(+1) = 0.9*a + e1", "b(+1) = 0.5*b + e2", "y = 1 + a + b"],
                           states=["a", "b"], jumps=["y"], shocks=["e1", "e2"], parameters=[])
-    sol = dk.solve(m, {}, guess=dict(a=0, b=0, y=1))
+    sol = dsg.solve(m, {}, guess=dict(a=0, b=0, y=1))
     y = sol.to_levels(sol.simulate(periods=30, cov={"e1": 0.1, "e2": 0.1}, seed=4))["y"]
     sp = state_space(sol, ["y"], cov={"e1": 0.1, "e2": 0.1}, measurement=0.01)
     sm = kalman_smoother(sp, {"y": y})

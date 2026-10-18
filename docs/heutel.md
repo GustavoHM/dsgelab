@@ -3,15 +3,15 @@
 The module `dsgelab.examples.heutel` ports the first-order systems of the paper's six
 MATLAB replication files, whose public copy `validation/heutel/fetch.sh`
 downloads (see the end of this page).
-dsgelab's Klein/QZ takes the place of the Anderson–Moore solver, which the supplied files do not include.
-The installed package depends on NumPy and SciPy alone. MATLAB, Octave and Dynare are
+dsgelab's Klein/QZ takes the place of the Anderson–Moore solver, which the replication files do not include.
+The installed package depends on numpy and scipy alone. MATLAB, Octave and Dynare are
 needed only to repeat the independent validation.
 
 Source: Garth Heutel (2012), *How should environmental policy respond to business
 cycles? Optimal policy under persistent productivity shocks*, Review of Economic
-Dynamics 15, 244–264, DOI 10.1016/j.red.2011.05.002. The scripts come with a README dated
-23/05/2011 and carry the earlier title “Optimal Environmental Policy Under Economic
-Fluctuations”. The page numbers cited here are those of the published version of the paper, whose
+Dynamics 15, 244–264, DOI 10.1016/j.red.2011.05.002. The public replication files come with a
+`ReadMe.txt` dated 4 March 2011, which carries the paper's earlier title “Optimal Environmental
+Policy Under Economic Fluctuations”. The page numbers cited here are those of the published version of the paper, whose
 sha256 is in `validation/heutel/paper-source.json`.
 
 ## Usage
@@ -44,9 +44,9 @@ moments = sol.moments(cov={"eps_a": 0.007})
 The standard interface also works.
 
 ```python
-import dsgelab as dk
+import dsgelab as dsg
 model, params, guess = heutel.build("tax_asym")
-sol = dk.solve(model, params, guess=guess)
+sol = dsg.solve(model, params, guess=guess)
 ```
 
 `build` declares the system **already linearised**, in deviations with a zero steady
@@ -70,7 +70,8 @@ returns the defaults of each file, including the planner's different ones.
 The planner's literal calibration did not produce an admissible steady state
 in the procedures that were run. The bounded solver ends at the boundary
 μ≈1, with a maximum residual of ≈0.00965. Instead of accepting the output of `fsolve` without
-checking consumption, emissions, μ and the residuals, the port raises `SteadyStateError`.
+checking consumption, emissions, μ and the residuals, the port raises `heutel.SteadyStateError`,
+which is defined in `dsgelab.examples.heutel` and is distinct from `dsgelab.SteadyStateError`.
 A failure in these procedures does not prove that no steady state exists globally. For the
 Table 2 baseline, `heutel.solve("planner", heutel.Params())` solves while keeping the
 script's equations, and the numerical comparisons below use that explicit choice.
@@ -96,7 +97,7 @@ script's equations, and the numerical comparisons below use that explicit choice
 - `structural_system` returns the raw H matrix, in the file's order and coordinates,
   before the normalisation of λ that `build` performs.
 
-## Check against the supplied paper
+## Check against the published paper
 
 The PDF was checked at pp. 249–251 and 258 (equations, calibration and sensitivity).
 The literal port preserves the following material differences.
@@ -105,7 +106,8 @@ The literal port preserves the following material differences.
    θ₂=0.1 and 1−γ=0.2 themselves as a sensitivity case. The planner file therefore
    appears to have been saved with that sensitivity configured.
 2. Table 2 and the six scripts use β=0.98267, whereas the text on p. 250 prints 0.98627.
-   Following the table and the code, the port does not settle the discrepancy by assumption.
+   The port uses the value of the table and the code, 0.98267, without deciding which of the two
+   printed values is the misprint.
 3. The text, pp. 250–251, holds foreign emissions constant at three times
    steady-state domestic emissions. With x̄=4 ē/(1−η), this implies
    x̂ₜ=η x̂ₜ₋₁+((1−η)/4) êₜ. The scripts' matrices use `(1−η)` as the
@@ -116,8 +118,8 @@ The literal port preserves the following material differences.
    p. 251, explains that carbon units have to be made compatible with
    the units of the model. `Params()` already holds the scaled d₁ and d₂.
 
-Agreement with Dynare thus validates the transcription and the solution of the supplied
-systems. It does not establish that every published equation, the literal sensitivity
+Agreement with Dynare thus validates the transcription and the solution of the systems in
+the replication files. It does not establish that every published equation, the literal sensitivity
 calibration or every figure in the paper has been reproduced.
 
 ## Independent validation
@@ -126,7 +128,7 @@ calibration or every figure in the paper has been reproduced.
 Octave up to the construction of H, without depending on AIM. It exports levels and matrices,
 generates linear models from those matrices in Dynare and compares the steady state,
 the 100-period IRFs and the theoretical standard deviations of every variable.
-For the tax, the change of coordinate of λ is also computed directly in
+For the tax, the change of coordinates of λ is also computed directly in
 MATLAB from the original coefficients. The reference paths use a
 shock size and standard deviation of 0.01 in both solvers, with no HP filter.
 
@@ -146,7 +148,7 @@ python validation/heutel/validate.py
 
 The first uses Octave/Dynare references stored in `reference.json` and needs neither
 program installed. The second requires Octave and Dynare and reads the variables
-`OCTAVE` and `DYNARE_MATLAB`. The hashes of the supplied files are in `source-sha256.json`.
+`OCTAVE` and `DYNARE_MATLAB`. The hashes of the replication files are in `source-sha256.json`.
 The port's scalar algebra is not distributed with the package, because it is a translation of
 files that declare no licence. `heutel.fetch()` generates it on the user's machine.
 The function downloads the public copy (or reads the `.zip` or folder it is given), refuses
@@ -159,8 +161,8 @@ Heutel tests are skipped and `heutel.solve` raises `HeutelSourceMissing`, which 
 ## Limitations
 
 This port covers the steady state, first-order dynamics, IRFs, simulations and moments
-of the MATLAB systems. The Stata regressions are not ported. Nor does the port estimate
-the optimal slope of the rules, since the supplied files contain only a commented-out call
+of the MATLAB systems. The paper's regressions are not ported. Nor does the port estimate
+the optimal slope of the rules, since the replication files contain only a commented-out call
 to the function `IRFdiff`, which is missing from them. Random series that the originals drew
 without a seed are not reproduced either. The difference between the original asymmetric
 paths and the corrected ones is intentional and is checked through the policy equation.
@@ -175,8 +177,6 @@ dsgelab code. A public copy is held in Georgia State University's institutional 
 (scholarworks.gsu.edu, item `9a01aa68-89c0-4e66-b7bd-9f09606d259c`).
 `bash validation/heutel/fetch.sh` downloads the archive, checks its sha256 and extracts the
 `.m` files into `validation/heutel/original`, and `python validation/heutel/validate.py` then
-repeats the validation. The six `.m` files of the public copy are byte-for-byte identical to
-those the validation used, and `source-sha256.json` records their hashes. The public
-`ReadMe.txt` is an earlier version (4 March 2011) that describes only the MATLAB files.
-The version of 23 May 2011, which accompanied the supplied files, also describes the
-Stata ones.
+repeats the validation. `source-sha256.json` records the hashes of the six `.m` files, and
+`heutel.fetch()` refuses any file whose hash differs. The public `ReadMe.txt`, dated 4 March
+2011, describes only the MATLAB files.

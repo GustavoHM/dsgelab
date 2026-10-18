@@ -1,4 +1,4 @@
-# How these packages compare with the ones that already exist
+# Comparison with other DSGE packages
 
 This survey was carried out on 9 September 2026 and revised on 11 and 12 October 2026, after
 versions 0.3 and 0.4 of `dsgelab`, which brought optimal policy, full Bayesian estimation, the
@@ -17,13 +17,14 @@ Dynare as the reference. The CGE side has its own table, in the `cgelab` reposit
 | Mark | Meaning |
 |---|---|
 | **✅** | verified by me, by installing the package and inspecting the API or the code. In the `dsgelab` column, implemented and tested in the package's suite, with the external validation cited in the cell when there is one |
+| **○** | in the `dsgelab` column, implemented but not yet covered by a test in the package's suite |
 | **📄** | stated in the official documentation; I did **not** verify it in the code |
 | **❌** | tested here, and failed |
 | **—** | absent as far as I checked |
 | **?** | not checked |
 
-I installed and inspected `gEconpy` and `sequence-jacobian`. On the CGE side, I cloned and read the
-code of `pycge`, `PSLmodels/CGE` and `python-cge`. For `dolo`, `pydsge`, `econpizza` and `PyMacLab`
+I installed and inspected `gEconpy` (version 2.2.0) and `sequence-jacobian`. PyPI now has gEconpy
+2.4.0, and versions after 2.2.0 were not re-checked. On the CGE side, I cloned and read the code of `pycge`, `PSLmodels/CGE` and `python-cge`. For `dolo`, `pydsge`, `econpizza` and `PyMacLab`
 I read only the documentation, so a **📄** cell may be wrong without the table showing it.
 
 ---
@@ -45,33 +46,33 @@ filter, and obtaining the full third-order tensor still require **Dynare** or **
 | Declared analytic steady state | ✅ ‡ checked against the model's residual before use, and against Dynare on `fs2000` at 1e-16 | ✅ `STEADY_STATE` block | ? | ? | ? | 📄 | ✅ |
 | **1st-order perturbation** | ✅ Klein/QZ | ✅ | 📄 | 📄 | — | 📄 Klein | ✅ |
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
-| 3rd-order perturbation | ✅ ‡ cubic block and risk slope `g_ssk`, against the closed form of the AR(1) in logs. Without Dynare's full tensor or the stochastic steady state | — | 📄 | — | — | — | ✅ |
+| 3rd-order perturbation | ✅ ‡ cubic block and risk slope `g_ssk` and `h_ssk`, with `h_ssk` checked against the closed form of the AR(1) in logs. Without Dynare's full tensor or the stochastic steady state (planned for 0.7) | — | 📄 | — | — | — | ✅ |
 | Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
 | Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
 | Unit root accepted (`qz_criterium`) | ✅ ‡ optional; strict by default | ? | ? | ? | ? | ? | ✅ by default |
 | **Nonlinear perfect foresight** | ✅ stacked-time Newton | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 shooting | ? | ✅ |
-| ANNOUNCED parameter path | ✅ | ✅ `param_paths` | ? | ? | ? | ? | 📄 |
-| Announced path of INNOVATIONS | ✅ ‡ | ? | ? | ? | ? | ? | ✅ |
+| Announced parameter path | ✅ | ✅ `param_paths` | ? | ? | ? | ? | 📄 |
+| Announced path of innovations | ✅ ‡ | ? | ? | ? | ? | ? | ✅ |
 | Perfect foresight with expectation errors | ✅ ‡ against Dynare | ? | ? | ? | ? | ? | ✅ |
 | IRFs | ✅ | ✅ | ? | 📄 | 📄 | 📄 | ✅ |
 | Orthogonalised IRFs (Cholesky) | ✅ | ✅ `orthogonalize_shocks` | ? | ? | ? | ? | ✅ |
 | Moments via Lyapunov | ✅ | ✅ `stationary_covariance_matrix` | ? | ? | — | 📄 | ✅ |
-| Autocorrelations | ✅ | ✅ `autocorrelation_matrix` | ? | ? | — | 📄 | ✅ |
+| Autocorrelations | ○ | ✅ `autocorrelation_matrix` | ? | ? | — | 📄 | ✅ |
 | Variance decomposition | ✅ | ? | ? | ? | — | ? | ✅ |
 | Simulation with pruning | ✅ | — (1st order only) | ? | ? | — | ? | ✅ |
-| 2nd-order generalised impulse response | ✅ ‡ | — | ? | ? | — | ? | ✅ |
+| 2nd-order generalised impulse response | ○ ‡ | — | ? | ? | — | ? | ✅ |
 | Historical decomposition and conditional forecast | ✅ ‡ on the linear solution | ? | — | ? | — | — | ✅ |
-| **Optimal policy: Ramsey under commitment** | ✅ ‡ timeless, against Dynare at 5e-13 | — | — | — | — | — | ✅ |
+| **Optimal policy: Ramsey under commitment** | ✅ ‡ timeless, against Dynare, with IRFs to 5e-13 and the steady state to 5e-11 | — | — | — | — | — | ✅ |
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
-| 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare at 1e-12 | — | — | — | — | — | ✅ |
+| 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare, to 1.4e-12 under Ramsey and 3.5e-13 in an RBC with capital (6.1e-10 under discretion) | — | — | — | — | — | ✅ |
 | **Bayesian estimation** | ✅ ‡ mode, Laplace and Metropolis against Dynare on `fs2000`, SMC and maximum likelihood against the conjugate case, R-hat, ESS | ✅ via PyMC | — | 📄 with ZLB | — | — 📄 states it has none | ✅ |
-| Kalman filter / smoothing | ✅ ‡ filter with exact diffuse start and smoother, against Dynare (likelihood at 6e-12, smoother at 1e-15) | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
+| Kalman filter / smoothing | ✅ ‡ filter with exact diffuse start and smoother, against Dynare (likelihood at 6e-12, smoother at 8.4e-15) | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibration on targets** | ✅ joint, with bounds | ✅ parameters calibrated to target ratios | ? | ? | ? | ? | 📄 |
 | **Identification diagnostic for the calibration** | ✅ rank and null directions | ? | ? | ? | ? | ? | 📄 (model identification) |
 | Blanchard–Kahn | ✅ **enforced**, with margin | ✅ `check_bk_condition` | ? | ? | — | ? | ✅ reported |
-| **Self-verified order of accuracy** | ✅ orders 2, 3 and 4 | ? | ? | ? | ? | ? | — |
-| Export Dynare `.mod` | ✅ † round trip at 5e-14 | ✅ `make_mod_file` | 📄 | — | — | — | — |
+| **Order-of-accuracy check** (`accuracy()`) | ✅ orders 2, 3 and 4 | ? | ? | ? | ? | ? | — |
+| Export Dynare `.mod` | ✅ † round trip below 1e-13 | ✅ `make_mod_file` | 📄 | — | — | — | — |
 | **Read Dynare `.mod`** | ✅ ‡ nine Dynare `.mod` files read without porting | — | — | — | — | — | n/a |
 | Dependencies | numpy, scipy (sympy optional) | sympy, pytensor, PyMC, preliz | numpy, scipy, pandas (old pin) | dolo, numpy | **JAX** | numpy, scipy | — |
 | Installs today (Python 3.14) | ✅ | ✅ | ❌ fails: pins a pandas that does not build | ? | ? | ❌ the sdist has neither `setup.py` nor `pyproject.toml` | n/a |
@@ -113,7 +114,7 @@ on 11 October 2026.
 Since the survey of 9 September, `dsgelab` has come to derive FOCs from a declared Lagrangian, to
 solve at third order, to export to Dynare and MacroModelling.jl, to estimate by Bayesian methods and
 to solve by projection. When the Dynare exporter is checked, the package writes the `.mod`, Dynare
-solves it, and the two solutions agree to 5e-14. For each of the three items below, the scope of the
+solves it, and the two solutions differ by less than 1e-13. For each of the three items below, the scope of the
 feature is that of the test that validates it.
 
 * **Third order, with the risk slope.** ``g_kkk`` and ``h_kkk`` are checked by the order of
@@ -150,29 +151,34 @@ DSGE-VAR, plots and the declaration of trends in `from_equations`. The README li
 and the following section lists what Dynare offers that `dsgelab` does not yet. The points below are
 those that set it apart from the Python packages in the table.
 
-0. **From the agent's problem to the `.mod`, without manual porting.** The Lagrangian is declared,
+1. **From the agent's problem to the `.mod`, without manual porting.** The Lagrangian is declared,
    and the package derives the FOCs, solves the model and exports it to Dynare or to
-   MacroModelling.jl, translating the timing of stock variables. The round trip through Dynare, at
-   5e-14, checks this translation, which was the step where the manual port of `RBC_baseline` went
+   MacroModelling.jl, translating the timing of stock variables. The round trip through Dynare, below
+   1e-13, checks this translation, which was the step where the manual port of `RBC_baseline` went
    wrong (see [`validation/README.md`](../validation/README.md)). Conversely,
    `from_mod` reads the `.mod` without porting.
-1. **The same residual function serves perturbation, perfect foresight, the extended path and
+2. **The same residual function serves perturbation, perfect foresight, the extended path and
    projection.** I did not audit the code of the other packages and so do not claim that they lack
    this. It was the concrete problem in the repository that motivated the package, where the
    perturbation and the transition rested on different equations.
-2. **Second order, the third-order risk slope, OccBin and the extended path run in process,** without
+3. **Second order, the third-order risk slope, OccBin and the extended path run in process,** without
    calling out to Octave and Dynare. Of the five other packages compared, gEconpy does not solve at
    second order, and dolo and PyMacLab, which document it, did not install on Python 3.14.
-3. **The library runs its own checks.** Blanchard–Kahn is enforced, and the solution is refused when
-   the condition fails. The order of accuracy is measured, identities that the model does not impose
-   are treated as checks, the identification of the calibration is diagnosed by rank, and `diagnose`
-   reproduces the report of Dynare's `model_diagnostics`.
-4. **Two required dependencies, numpy and scipy.** The sympy package is optional, and only the
+4. **The library enforces some checks and provides others as calls.** Blanchard–Kahn is enforced,
+   and the solution is refused when the condition fails. The steady state is accepted on its
+   residual, whatever the solver's success flag says. The order of accuracy (`accuracy()`), the
+   identities that the model does not impose (`check_identity`) and the identification of the
+   calibration by rank (`target_jacobian`) are separate calls, and `diagnose` reproduces the report
+   of Dynare's `model_diagnostics`.
+5. **Two required dependencies, numpy and scipy.** The sympy package is optional, and only the
    symbolic front end imports it (text equations, derivation of FOCs, reading of `.mod` files,
-   exporters, Ramsey and OccBin). The package does not depend on PyMC, JAX or pytensor.
-5. **The external validations are scripts in [`validation/`](../validation/README.md) that anyone
+   exporters, Ramsey, discretionary policy, second-order welfare and OccBin). The package does not depend on PyMC, JAX or pytensor.
+6. **The external validations are scripts in [`validation/`](../validation/README.md) that anyone
    can run.** `validation/run_all.sh` runs them all against Dynare 7.2 and MacroModelling.jl, with
-   pinned versions, on `.mod` files taken from Dynare's own examples and tests. Third order and
+   pinned versions, on `.mod` files taken from Dynare's own examples and tests and on a few written
+   in this repository (`nk_linear.mod`, `rbc_labortax.mod` and `nk_osr_planner.mod` in
+   `validation/ramsey/`, `validation/estimation/unitroot.mod` and the three models in
+   `validation/diagnostics/`). Third order and
    projection, which Dynare does not compute in the same form, are checked against closed forms in
    the test suite.
 
@@ -188,8 +194,8 @@ same model for MacroModelling.jl, without a round-trip check.
 The table above compares `dsgelab` with Python packages, and this section extends the comparison to
 what exists in any language. The list of items was checked against the subsystems and function files
 of Dynare 7.1 (`lib/dynare/matlab/`) and against the list of exported functions of
-MacroModelling.jl, in the versions then installed on this machine, and validation now runs on Dynare
-7.2. Since 11 October 2026 the goal has been to cover **all** of this list by 1.0, and the *Version*
+MacroModelling.jl, in the versions installed at the time of the survey, and validation now runs on
+Dynare 7.2. Since 11 October 2026 the goal has been to cover **all** of this list by 1.0, and the *Version*
 column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arrived or will arrive.
 
 | Item | Who has it | Status in `dsgelab` | Version |
@@ -207,9 +213,9 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | **Read `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **done**: `from_mod`, nine Dynare `.mod` files | 0.4 |
 | Arbitrary lags and leads | 📄 Dynare, 📄 MacroModelling | **done**, in the `.mod` and in `from_equations`, with every auxiliary listed | 0.4 |
 | Occasionally binding constraints | ✅ Dynare (`+occbin`) | **done**: `occbin_simulate`, with one and two constraints at 2e-15 and regime histories identical to Dynare's | 0.4 |
-| Extended path | ✅ Dynare (`extended_path`) | **done**, deterministic and stochastic (sparse and full tree, order-2 hybrid), at 1e-11 from Dynare | 0.4 |
+| Extended path | ✅ Dynare (`extended_path`) | **done**, deterministic and stochastic (sparse and full tree, order-2 hybrid), within 1.1e-11 of Dynare | 0.4 |
 | Declared analytic steady state | ✅ Dynare (`steady_state_model`), ✅ gEconpy | **done**, checked against the model before use and refused as Dynare refuses it | 0.4 |
-| Calibration equations in the model | ✅ MacroModelling | **done**, against MacroModelling at 4e-15 | 0.4 |
+| Calibration equations in the model | ✅ MacroModelling | **done**, against MacroModelling at 4.4e-15 | 0.4 |
 | Homotopy | ✅ Dynare (`homotopy_setup`) | **done**, with adaptive step, and reaches the closed form where direct Newton fails | 0.4 |
 | Declared trends and balanced growth | ✅ Dynare (`trend_var`, `deflator`, `+bgp`) | **done**: detrending with Dynare's check, and the `bgp.write` problem, with the same residuals that Dynare generates | 0.4 |
 | Model diagnostics | ✅ Dynare (`model_diagnostics`) | **done**: `diagnose`, same report as Dynare on a deliberately broken model | 0.4 |
@@ -226,7 +232,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 
 ## Sources
 
-- [gEconpy](https://github.com/jessegrabowski/gEconpy), installed (2.2.0) and inspected
+- [gEconpy](https://github.com/jessegrabowski/gEconpy), installed (2.2.0) and inspected, with later versions not re-checked
 - [sequence-jacobian](https://github.com/shade-econ/sequence-jacobian), installed and inspected
 - [dolo](https://github.com/EconForge/dolo.py) and [its documentation](https://www.econforge.org/dolo.py/)
 - [pydsge](https://github.com/gboehl/pydsge) and [its docs](https://pydsge.readthedocs.io/en/latest/index.html)

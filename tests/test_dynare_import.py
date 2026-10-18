@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.dynare import DynareImportError, from_mod  # noqa: E402
 from dsgelab.examples import rbc  # noqa: E402
 from dsgelab.export import to_dynare  # noqa: E402
@@ -22,13 +22,13 @@ def test_round_trip_through_the_exporter():
     Dynare's series -- the stock decided at t -- which is this package's k(+1).
     """
     model, params, guess = rbc.build_symbolic()
-    ss = dk.steady_state(model, guess, params)
-    sol = dk.solve(model, params, steady=ss)
+    ss = dsg.steady_state(model, guess, params)
+    sol = dsg.solve(model, params, steady=ss)
     text = to_dynare(model, params, steady=ss, cov={"eps_a": 0.007})
 
     mf = from_mod(text)
     ss2 = mf.steady_state()
-    sol2 = dk.solve(mf.model, mf.params, steady=ss2)
+    sol2 = dsg.solve(mf.model, mf.params, steady=ss2)
     for v in ("k", "c", "a"):
         assert abs(ss2.values[v] - ss.values[v]) < 1e-12
 
@@ -80,7 +80,7 @@ def test_features_and_the_neoclassical_closed_form():
     ss = mf.steady_state()
     k = ((1 / 0.99 - 1 + 0.025) / 0.33) ** (1 / (0.33 - 1))
     assert ss.values["k"] == pytest.approx(k, rel=1e-12)
-    sol = dk.solve(mf.model, mf.params, steady=ss)
+    sol = dsg.solve(mf.model, mf.params, steady=ss)
     irf = sol.irf("e", size=0.01, periods=10, levels=True)
     assert irf["a"][0] == pytest.approx(0.01, rel=1e-12)  # Dynare dating: a_0 = e_0
     assert irf["a"][1] == pytest.approx(0.009, rel=1e-12)
@@ -107,7 +107,7 @@ def test_leads_beyond_one_and_shocks_inside_equations():
     assert "LEAD1_x" in mf.auxiliary and mf.auxiliary["LEAD1_x"] == ("lead", "x")
     ss = mf.steady_state()
     assert ss.values["x"] == pytest.approx(-2.0)
-    sol = dk.solve(mf.model, mf.params, steady=ss)
+    sol = dsg.solve(mf.model, mf.params, steady=ss)
     irf = sol.irf("u", size=0.1, periods=40, levels=True, percent=False)
     # x_t = 0.5 E_t x_{t+2} + exp(u_t) z_t - 1 with z_t = 0.5 z_{t-1} + u_t: at first order
     # z_t = 0.1 * 0.5^t and x_t - x* = sum_j 0.5^j z_{t+2j} = z_t / (1 - 0.5 * 0.25)
@@ -132,9 +132,9 @@ def test_steady_state_operator_and_unit_root():
     mf = from_mod(text)
     assert mf.linear and mf.steady_operators == ["y"]
     ss = mf.steady_state()
-    with pytest.raises(dk.BlanchardKahnError):
-        dk.solve(mf.model, mf.params, steady=ss)          # the price level has a unit root
-    sol = dk.solve(mf.model, mf.params, steady=ss, qz_criterium=1 + 1e-6)
+    with pytest.raises(dsg.BlanchardKahnError):
+        dsg.solve(mf.model, mf.params, steady=ss)          # the price level has a unit root
+    sol = dsg.solve(mf.model, mf.params, steady=ss, qz_criterium=1 + 1e-6)
     irf = sol.irf("e", size=1.0, periods=30, percent=False)
     assert np.max(np.abs(np.cumsum(irf["pi"]) - irf["p"])) < 1e-12
 

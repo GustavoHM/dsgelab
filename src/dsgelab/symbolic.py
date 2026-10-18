@@ -275,9 +275,10 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
     equations : sequence of str
         One per declared variable. ``"lhs = rhs"`` is read as ``lhs - rhs``.
         ``x(+1)`` is the next period. A lag ``x(-k)`` or a lead ``x(+k)`` with
-        ``k >= 2`` is accepted and carried by an auxiliary variable --
-        ``LAGk_x``, a state, or ``LEADk_x``, a jump -- each with its own
-        equation, listed in ``model.auxiliary``. What is predetermined is still
+        ``k >= 2`` is accepted and carried by auxiliary variables, each with its
+        own equation and listed in ``model.auxiliary``: a lag ``x(-k)`` by the
+        states ``LAG1_x`` ... ``LAGk_x``, a lead ``x(+k)`` by the jumps
+        ``LEAD1_x`` ... ``LEAD{k-1}_x``, so that ``y(+2)`` becomes ``LEAD1_y(+1)``. What is predetermined is still
         declared in one place: the lag of a jump is a new state with its own
         transition, never a reclassification of the jump.
     states, jumps, shocks, parameters : sequence of str

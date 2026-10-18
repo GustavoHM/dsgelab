@@ -6,10 +6,10 @@ deviations. That branch is where a scaling bug hides -- a model that scales by
 name rather than by level multiplies a mean-zero variable by ``(1 + yhat)``
 around zero and annihilates the shock without any error.
 
-It also has a determinacy region with an economic meaning: the Taylor principle.
-``phi_pi > 1`` gives a unique equilibrium and ``phi_pi < 1`` gives a continuum,
-which makes it a real test of the Blanchard-Kahn machinery rather than a
-formality.
+It also has a determinacy region with an economic meaning, close to the Taylor
+principle: with the default ``phi_x = 0.125`` the equilibrium is unique for
+``phi_pi`` above about 0.9875 and indeterminate below, so the example tests the
+Blanchard-Kahn machinery on both sides of the boundary.
 """
 
 from __future__ import annotations

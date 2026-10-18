@@ -1,8 +1,9 @@
 # The `dsgelab` site
 
 A static page in two languages, to be published at <https://gustavohm.github.io/dsgelab/>. It uses
-no Jekyll, no build and no CDN dependency, only HTML pages, `style.css` and a thirty-line syntax
-highlighter. It opens in a browser straight from disk and publishes to GitHub Pages without any extra step.
+no Jekyll, no build and no CDN dependency, only HTML pages, `style.css` and a short syntax
+highlighter (`highlight.js`). It opens in a browser straight from disk, and the workflow described
+under *Publishing* puts it on GitHub Pages.
 
 ```
 site/
@@ -26,43 +27,15 @@ version has to be made in the other as well. The citation section differs on pur
 
 ## Publishing
 
-GitHub Pages can serve the site by any of three routes.
+`.github/workflows/pages.yml` publishes the site to GitHub Pages on every push to `main` that
+changes `site/`, and on demand from the Actions tab. It needs *Settings → Pages → Build and
+deployment → Source* set to *GitHub Actions*. GitHub Pages is free only for public repositories,
+so the job is skipped while the repository is private.
 
-**1. A `docs/` folder in the repository.** Copy `site/` to `docs/` at the root and, under
-*Settings → Pages*, choose *Deploy from a branch*, branch `main`, folder `/docs`.
-
-```bash
-# Settings → Pages → Deploy from a branch, branch main, folder /docs
-# after copying site/ to docs/ at the repository root.
-cp -r site docs
-```
-
-**2. A `gh-pages` branch.**
-
-```bash
-git subtree push --prefix site origin gh-pages
-```
-
-**3. Two packages, one site.** Publish a `docs/` holding `docs/dsgelab/` and the other package's folder side
-by side, with an `index.html` at the root linking to both.
-
-## Documentation links before publishing
-
-The site links to `../docs/*.md` (`../../docs/*.md` in the `pt-br/` pages). Those links work in a cloned repository and **do not** work on a
-published page, because GitHub Pages does not serve anything outside the published folder. Either of two changes fixes this.
-
-- **Point to GitHub.** Replace `../docs/` with the URL of the files in the repository.
-
-```bash
-sed -i '' 's|href="../docs/|href="https://github.com/GustavoHM/dsgelab/blob/main/docs/|g' \
-  site/index.html site/replications.html
-sed -i '' 's|href="../../docs/|href="https://github.com/GustavoHM/dsgelab/blob/main/docs/|g' \
-  site/pt-br/index.html site/pt-br/replications.html
-```
-
-- **Take the documentation along.** Copy `docs/` into the published folder. GitHub Pages
-  serves `.md` files as plain text instead of rendering them as HTML. To get rendered pages, convert them first (`pandoc`,
-  `mkdocs`) or rewrite the links to GitHub, which takes fewer steps.
+The pages link to `../docs/*.md` (`../../docs/*.md` from `pt-br/`). Those links work in a clone,
+but GitHub Pages serves nothing outside the published folder. The workflow therefore publishes a
+copy of `site/` in which they point to the same files on GitHub, at the commit being published,
+and it fails if any link to `docs/` is left relative.
 
 ## Adapting
 
@@ -81,8 +54,8 @@ per page, because the examples form a sequence in which each block uses what the
 python tools/check_site_examples.py
 ```
 
-Run it after editing an example. An example that does not run invites the reader to copy broken
-code and suggests that the documentation is not checked, which makes it worse than no example at all.
+Run it after editing an example. An example that does not run gives the reader broken code to copy
+and shows that the documentation went unchecked.
 
 Blocks marked `class="plain"` (shell lines, syntax illustrations and excerpts that depend on
 the user's data) are skipped on purpose. The mark is what declares them non-executable.

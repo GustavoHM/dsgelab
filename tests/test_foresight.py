@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import rbc
 
 
@@ -15,11 +15,11 @@ def test_transition_matches_the_exact_policy():
     the residual fell -- is what makes this a test.
     """
     model, p, guess = rbc.build()
-    ss = dk.steady_state(model, guess, p)
+    ss = dsg.steady_state(model, guess, p)
     k_bar = ss["k"]
     k0 = 0.5 * k_bar
 
-    path = dk.perfect_foresight(model, ss, ss, params=p, T=150,
+    path = dsg.perfect_foresight(model, ss, ss, params=p, T=150,
                                 initial_states=[k0, 1.0])
     assert path.converged
     assert path.residual < 1e-10
@@ -37,14 +37,14 @@ def test_announced_parameter_path_differs_from_a_surprise():
     import dataclasses
 
     model, p, guess = rbc.build()
-    ss0 = dk.steady_state(model, guess, p)
+    ss0 = dsg.steady_state(model, guess, p)
     p1 = dataclasses.replace(p, beta=0.985)
-    ss1 = dk.steady_state(model, guess, p1)
+    ss1 = dsg.steady_state(model, guess, p1)
 
     T = 120
-    surprise = dk.perfect_foresight(model, ss0, ss1, params=p1, T=T)
+    surprise = dsg.perfect_foresight(model, ss0, ss1, params=p1, T=T)
     schedule = [p] * 10 + [p1] * (T + 1 - 10)
-    announced = dk.perfect_foresight(model, ss0, ss1, params=schedule, T=T)
+    announced = dsg.perfect_foresight(model, ss0, ss1, params=schedule, T=T)
 
     assert surprise.converged and announced.converged
     # Consumption jumps on impact in both, but by different amounts: under the
@@ -56,9 +56,9 @@ def test_announced_parameter_path_differs_from_a_surprise():
 def test_boundary_conditions_are_counted_correctly():
     """States pinned at the start, jumps at the end; the interior is free."""
     model, p, guess = rbc.build()
-    ss = dk.steady_state(model, guess, p)
+    ss = dsg.steady_state(model, guess, p)
     k0 = 0.8 * ss["k"]
-    path = dk.perfect_foresight(model, ss, ss, params=p, T=80, initial_states=[k0, 1.0])
+    path = dsg.perfect_foresight(model, ss, ss, params=p, T=80, initial_states=[k0, 1.0])
     assert path["k"][0] == pytest.approx(k0, rel=1e-14)
     assert path["a"][0] == pytest.approx(1.0, rel=1e-14)
     assert path["c"][-1] == pytest.approx(ss["c"], rel=1e-9)

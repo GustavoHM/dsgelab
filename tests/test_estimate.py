@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab import Model
 
 
@@ -13,7 +13,7 @@ def _ar1(rho=0.8):
 
     model = Model(states=["y"], jumps=[], shocks=["e"], equations=equations, name="ar1")
     params = {"rho": rho}
-    sol = dk.solve(model, params, guess={"y": 0.0})
+    sol = dsg.solve(model, params, guess={"y": 0.0})
     return model, params, sol
 
 
@@ -31,7 +31,7 @@ def test_kalman_matches_the_conditional_ar1_likelihood():
     innov = y[1:] - rho * y[:-1]
     hand = -0.5 * ((T - 1) * np.log(2 * np.pi * sigma ** 2) + np.sum(innov ** 2) / sigma ** 2)
     Y = y.reshape(-1, 1)
-    got = dk.log_likelihood(sol, Y, np.array([[1.0]]), np.array([[1e-16]]), np.array([[sigma ** 2]]))
+    got = dsg.log_likelihood(sol, Y, np.array([[1.0]]), np.array([[1e-16]]), np.array([[sigma ** 2]]))
     # The filter also prices the first observation from the stationary law, so the
     # two differ by that one term and must agree on the rest to a fraction of a nat.
     assert got == pytest.approx(hand, rel=0, abs=3.0)
@@ -44,7 +44,7 @@ def test_posterior_mode_of_rho_on_a_simulated_ar1():
     levels = sol.to_levels(sim)
     noise = rng.normal(0.0, 1e-4, size=levels["y"].shape)
     data = {"y": levels["y"] + noise}
-    result = dk.estimate(
+    result = dsg.estimate(
         model, data, params=params, free={"rho": 0.5},
         priors={"rho": ("normal", 0.7, 0.2)},
         guess={"y": 0.0}, observables=["y"], measurement=1e-8,

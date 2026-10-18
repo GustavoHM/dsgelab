@@ -92,9 +92,9 @@ def calibrate(model: Model, params: Params, *, free: Mapping[str, float],
         depreciation rate inside the unit interval; a clip inside the objective
         would flatten the residual and stall the solver on the boundary.
     warm_start : bool
-        Reuse the previous steady state as the next guess. Worth an order of
-        magnitude in a sweep, and harmless: the accepted solution is still judged
-        on its own residual.
+        Reuse the previous steady state as the next guess, which shortens each
+        solve in a sweep. The accepted solution is still judged on its own
+        residual.
     """
     names = list(free)
     x0 = np.array([float(free[k]) for k in names])

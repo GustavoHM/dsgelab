@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-import dsgelab as dk
+import dsgelab as dsg
 from dsgelab.examples import rbc
 
 sympy = pytest.importorskip("sympy")
@@ -13,18 +13,18 @@ from dsgelab.symbolic import SymbolicError, from_equations  # noqa: E402
 def test_symbolic_and_callable_models_agree():
     m1, p1, g1 = rbc.build()
     m2, p2, g2 = rbc.build_symbolic()
-    s1 = dk.solve(m1, p1, guess=g1)
-    s2 = dk.solve(m2, p2, guess=g2)
+    s1 = dsg.solve(m1, p1, guess=g1)
+    s2 = dsg.solve(m2, p2, guess=g2)
     assert np.max(np.abs(s1.P - s2.P)) < 1e-8
     assert np.max(np.abs(s1.F - s2.F)) < 1e-8
-    assert dk.compare_irfs(s1, s2, "eps_a")["worst"] < 1e-6
+    assert dsg.compare_irfs(s1, s2, "eps_a")["worst"] < 1e-6
 
 
 def test_exact_derivatives_are_used_and_beat_finite_differences():
     """The symbolic model carries analytic derivatives, so it matches the closed form better."""
     m2, p2, g2 = rbc.build_symbolic()
     assert m2.jacobian_fn is not None and m2.hessian_fn is not None
-    s2 = dk.solve(m2, p2, guess=g2)
+    s2 = dsg.solve(m2, p2, guess=g2)
     cf = rbc.closed_form(p2)
     assert np.max(np.abs(s2.P - cf["P"])) < 1e-12       # exact, not 1e-9
     assert np.max(np.abs(s2.F - cf["F"])) < 1e-12
@@ -32,8 +32,8 @@ def test_exact_derivatives_are_used_and_beat_finite_differences():
 
 def test_second_order_with_exact_hessian():
     m2, p2, g2 = rbc.build_symbolic()
-    s2 = dk.solve(m2, p2, guess=g2)
-    so = dk.solve_second_order(s2, cov={"eps_a": 0.007})
+    s2 = dsg.solve(m2, p2, guess=g2)
+    so = dsg.solve_second_order(s2, cov={"eps_a": 0.007})
     assert so.h_ss[m2.states.index("a")] == pytest.approx(0.007 ** 2, rel=1e-10)
     assert all(2.9 < o < 3.1 for o in so.accuracy()["implied_order"])
 
@@ -47,13 +47,13 @@ def test_undeclared_name_is_rejected():
 
 def test_lags_and_leads_are_carried_by_listed_auxiliaries():
     import numpy as np
-    import dsgelab as dk
+    import dsgelab as dsg
     m = from_equations(["a(+1) = 1.2*a - 0.35*a(-1) + eps_a", "y = a + 0.5*a(-2) + 0.25*y(+2)"],
                        states=["a"], jumps=["y"], shocks=["eps_a"], parameters=[])
     assert m.states == ["a", "LAG1_a", "LAG2_a"] and m.jumps == ["y", "LEAD1_y"]
     assert m.auxiliary == {"LAG1_a": ("lag", "a"), "LAG2_a": ("lag", "a"),
                            "LEAD1_y": ("lead", "y")}
-    sol = dk.solve(m, {}, guess={v: 0.0 for v in m.names})
+    sol = dsg.solve(m, {}, guess={v: 0.0 for v in m.names})
     assert np.allclose(sol.P, [[1.2, -0.35, 0], [1, 0, 0], [0, 1, 0]], atol=1e-14)
     # y_t = sum_j 0.25^j (a_{t+2j} + 0.5 a_{t+2j-2}), from the AR(2) path of a
     a = sol.irf("eps_a", periods=80, percent=False)["a"]

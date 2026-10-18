@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# run_dynare.sh — roda cada .mod de referência no GNU Octave + Dynare e exporta oo_ para .mat.
+# run_dynare.sh: runs each reference .mod in GNU Octave + Dynare and exports oo_ to .mat.
 #
-# Uso:  bash run_dynare.sh [nome.mod ...]      (sem argumentos: todos os de mods/)
+# Usage:  bash run_dynare.sh [name.mod ...]      (no arguments: all of those in mods/)
 #
-# Cada .mod traz as suas próprias opções de `stoch_simul` — um filtra com HP, outro simula 2000
-# períodos. Para que a comparação seja de MODELOS e não de opções de relatório, o `stoch_simul` é
-# reexecutado aqui com a MESMA configuração para todos: ordem 1, 40 períodos de IRF, momentos
-# TEÓRICOS (periods=0) e sem filtro. É a única forma de os três ficarem na mesma régua.
+# Each .mod carries its own `stoch_simul` options. One filters with HP, another simulates 2000
+# periods. So that the comparison is between MODELS and not between reporting options,
+# `stoch_simul` is rerun here with the SAME configuration for all: order 1, 40 periods of IRF,
+# THEORETICAL moments (periods=0) and no filter. This is the only way to put the three on the
+# same yardstick.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -18,7 +19,7 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
     [ -d "$c" ] && DYNARE_MATLAB="$c" && break
   done
 fi
-[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: diretório matlab/ do Dynare não encontrado. Defina DYNARE_MATLAB."; exit 1; }
+[ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 MODS=("$@")
 if [ ${#MODS[@]} -eq 0 ]; then
@@ -35,7 +36,7 @@ for m in "${MODS[@]}"; do
     pkg load statistics datatypes;
     addpath '$DYNARE_MATLAB';
     dynare $m noclearall nograph;
-    % mesma régua para todos os modelos, seja qual for o stoch_simul do .mod
+    % same yardstick for every model, whatever the stoch_simul of the .mod
     options_.order = 1; options_.irf = 40; options_.periods = 0;
     options_.hp_filter = 0; options_.nograph = 1; options_.noprint = 1;
     options_.nomoments = 0; options_.nocorr = 0;
@@ -52,9 +53,9 @@ for m in "${MODS[@]}"; do
       ex.order_var = oo_.dr.order_var; ex.nstatic = M_.nstatic;
       ex.npred = M_.npred; ex.nboth = M_.nboth; ex.nfwrd = M_.nfwrd; end
     save('-mat7-binary', 'out/${base}.mat', 'ex');
-    printf('gravado out/${base}.mat (info=%d)\n', info);
-  " > "out/${base}.log" 2>&1 || { echo "FALHOU $m — ver out/${base}.log"; tail -20 "out/${base}.log"; exit 1; }
+    printf('saved out/${base}.mat (info=%d)\n', info);
+  " > "out/${base}.log" 2>&1 || { echo "FAILED $m, see out/${base}.log"; tail -20 "out/${base}.log"; exit 1; }
   tail -1 "out/${base}.log"
-  rm -rf "$m" "$base" "+$base"     # o .mod copiado e o que o pré-processador do Dynare gera
+  rm -rf "$m" "$base" "+$base"     # the copied .mod and what Dynare's preprocessor generates
 done
-echo "pronto."
+echo "done."

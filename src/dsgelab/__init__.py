@@ -10,11 +10,11 @@ cannot drift apart into two models that merely look alike.
 
 Quick start::
 
-    import dsgelab as dk
+    import dsgelab as dsg
     from dsgelab.examples import rbc
 
     model, params, guess = rbc.build()
-    sol = dk.solve(model, params, guess=guess)
+    sol = dsg.solve(model, params, guess=guess)
     print(sol.summary())
     irf = sol.irf("eps_a", size=0.01, periods=40)
 
@@ -59,7 +59,7 @@ from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",

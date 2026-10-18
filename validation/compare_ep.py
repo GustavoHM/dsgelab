@@ -1,22 +1,23 @@
-"""compare_ep.py — trajetória estendida, determinística e estocástica, contra o Dynare.
+"""compare_ep.py: extended path, deterministic and stochastic, against Dynare.
 
-Os arquivos são de tests/ep do Dynare 7.2, lidos por `dsgelab.from_mod`; os choques são os que o
-Dynare usou, exportados por run_ep.sh.
+The files come from tests/ep of Dynare 7.2, read by `dsgelab.from_mod`. The shocks are the ones
+Dynare used, exported by run_ep.sh.
 
-  burnside.mod      Burnside (1998), 100 períodos, as sete variantes do teste que não pedem
-                    perturbação de ordem 4: EP; EP estocástica de ordem 1 e 2 (três nós de
-                    Gauss-Hermite), na árvore esparsa e na cheia; e as híbridas de ordem 2, que
-                    somam a correção de risco de segunda ordem onde a árvore para de se ramificar
-  linearmodel0.mod  modelo linear com dois choques, 200 períodos: a EP e a solução de primeira
-                    ordem do próprio Dynare (num modelo linear, as duas coincidem)
+  burnside.mod      Burnside (1998), 100 periods, the seven variants of the test that do not ask
+                    for an order-4 perturbation: EP, stochastic EP of order 1 and 2 (three
+                    Gauss-Hermite nodes) on the sparse and on the full tree, and the order-2
+                    hybrids, which add the second-order risk correction where the tree stops
+                    branching
+  linearmodel0.mod  linear model with two shocks, 200 periods: the EP and Dynare's own
+                    first-order solution (in a linear model the two coincide)
 
-Compara-se toda variável endógena em todos os períodos. As híbridas usam a hessiana exata
-(`from_mod(..., derivatives="both")`); a tolerância de Newton é 1e-13, abaixo da do Dynare
-(1e-12, que run_ep.sh impõe), e é essa que limita a concordância.
+Every endogenous variable is compared in every period. The hybrids use the exact Hessian
+(`from_mod(..., derivatives="both")`). The Newton tolerance is 1e-13, below Dynare's (1e-12,
+which run_ep.sh imposes), and Dynare's is the one that limits the agreement.
 
-Pré-requisitos:
+Prerequisites:
     bash fetch.sh
-    bash run_ep.sh            # exporta out_ep/<nome>.mat e escreve work_ep/<nome>.mod
+    bash run_ep.sh            # exports out_ep/<name>.mat and writes work_ep/<name>.mod
 """
 from __future__ import annotations
 
@@ -33,12 +34,12 @@ TOL = 1e-10
 
 BURNSIDE = [
     ("ep0", "EP", dict(order=0)),
-    ("sep1", "EP estocástica, ordem 1", dict(order=1)),
-    ("sep1h", "  idem, híbrida", dict(order=1, hybrid=True)),
-    ("sep2", "EP estocástica, ordem 2", dict(order=2)),
-    ("sep2full", "  idem, árvore cheia", dict(order=2, tree="full")),
-    ("sep2h", "  idem, híbrida", dict(order=2, hybrid=True)),
-    ("sep2hfull", "  idem, híbrida, árvore cheia", dict(order=2, tree="full", hybrid=True)),
+    ("sep1", "stochastic EP, order 1", dict(order=1)),
+    ("sep1h", "  idem, hybrid", dict(order=1, hybrid=True)),
+    ("sep2", "stochastic EP, order 2", dict(order=2)),
+    ("sep2full", "  idem, full tree", dict(order=2, tree="full")),
+    ("sep2h", "  idem, hybrid", dict(order=2, hybrid=True)),
+    ("sep2hfull", "  idem, hybrid, full tree", dict(order=2, tree="full", hybrid=True)),
 ]
 
 
@@ -46,7 +47,7 @@ def _load(name):
     from scipy.io import loadmat
     f = HERE / "out_ep" / f"{name}.mat"
     if not f.exists():
-        sys.exit(f"falta {f}: rode bash run_ep.sh")
+        sys.exit(f"missing {f}: run bash run_ep.sh")
     return loadmat(f, simplify_cells=True)["ex"]
 
 
@@ -55,8 +56,8 @@ def _report(label, ours, theirs, names, offset=0):
               for j, v in enumerate(names))
     scale = max(float(np.max(np.abs(theirs))), 1.0)
     ok = err / scale < TOL
-    print(f"  {label:34s} {theirs.shape[0]:4d} períodos  desvio máx {err:.1e} "
-          f"(relativo {err / scale:.1e})  {'OK' if ok else 'DIVERGE'}")
+    print(f"  {label:34s} {theirs.shape[0]:4d} periods  max deviation {err:.1e} "
+          f"(relative {err / scale:.1e})  {'OK' if ok else 'DIVERGE'}")
     return ok
 
 
@@ -79,7 +80,7 @@ def main() -> int:
     r = extended_path(mf.model, mf.steady_state(), mf.params, ex["e"][:200], tol=1e-13)
     print("linearmodel0.mod")
     ok &= _report("EP", r, ex["ep0"], names)
-    ok &= _report("solução de primeira ordem do Dynare", r, ex["linear"], names, offset=1)
+    ok &= _report("Dynare's first-order solution", r, ex["linear"], names, offset=1)
     return 0 if ok else 1
 
 

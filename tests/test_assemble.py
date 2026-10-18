@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("sympy")
 
-import dsgelab as dk  # noqa: E402
+import dsgelab as dsg  # noqa: E402
 from dsgelab.blocks import FOCError, Problem, assemble  # noqa: E402
 
 
@@ -32,7 +32,7 @@ def test_decentralised_economy_is_the_planners():
     c = k ** 0.36 * (1 - 0.36 * 0.99)
     guess = dict(kh=k, a=1, c=c, lm_1=-1 / c, kf=k, nf=1, w=(1 - 0.36) * k ** 0.36,
                  r=0.36 * k ** (0.36 - 1))
-    sol = dk.solve(m, p, guess=guess)
+    sol = dsg.solve(m, p, guess=guess)
     ik, ia = m.states.index("kh"), m.states.index("a")
     assert np.allclose(sol.P[np.ix_([ik, ia], [ik, ia])], [[0.36, 1], [0, 0.95]], atol=1e-12)
     blocks = {o[0] for o in m.assembly["origin"]}
