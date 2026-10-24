@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dsgelab — replications</title>
-<meta name="description" content="Papers rerun in dsgelab: Heutel (2012), stochastic growth with a closed-form solution, and the Taylor principle. Every block on this page is executed.">
+<meta name="description" content="Papers rerun in dsgelab: Heutel (2012), stochastic growth, the Taylor principle, thirteen central-bank models and four published-model files from DSGE_mod compared with Dynare. Every Python block on this page is executed.">
 <link rel="alternate" hreflang="en" href="https://gustavohm.github.io/dsgelab/replications.html">
 <link rel="alternate" hreflang="pt-BR" href="https://gustavohm.github.io/dsgelab/pt-br/replications.html">
 <link rel="alternate" hreflang="x-default" href="https://gustavohm.github.io/dsgelab/replications.html">
@@ -28,6 +28,8 @@
   <li><a href="#heutel">Heutel (2012)</a></li>
   <li><a href="#growth">Stochastic growth</a></li>
   <li><a href="#taylor">Taylor principle</a></li>
+  <li><a href="#central-banks">Central-bank models</a></li>
+  <li><a href="#dsge-mod">DSGE_mod models</a></li>
   <li><a href="#queue">Not on this page</a></li>
 </ul></div></nav>
 
@@ -40,7 +42,10 @@
   <code>tools/check_site_examples.py</code>.</p>
   <p>Dynare's teaching examples (Collard, Pfeifer) are in the
   <a href="./#validation">validation table</a> on the package page. They are tutorial files, and the
-  comparison there is against Dynare's solution, variable by variable.</p>
+  comparison there is against Dynare's solution, variable by variable. The
+  <a href="#central-banks">central-bank models</a> and <a href="#dsge-mod">DSGE_mod models</a>
+  sections follow the same method, with Dynare's solution as the reference. Their numbers come from
+  scripts that need Dynare and are not run by <code>tools/check_site_examples.py</code>.</p>
 </div></section>
 
 <section id="heutel"><div class="wrap">
@@ -87,6 +92,9 @@ assert np.max(np.abs(gap)) &lt; 1e-10        # resources along the impulse
 assert int(np.argmax(irf["c"])) == 15
 assert int(np.argmax(irf["k"])) == 25
 print(ss["k"], ss["y"], ss["mu"], int(np.argmax(irf["k"])))</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">heutel.fetch()</span>
+PosixPath('/Users/gustavo/.cache/dsgelab/heutel/_heutel_algebra.py')
+27.790469708009216 3.2921268752463644 0.03478924941257644 25</code></pre>
 
   <h3>Lagged information, p. 262</h3>
   <p>When the government chooses the instrument before it observes the state, the paper replaces the
@@ -108,6 +116,7 @@ assert abs(irf_q["q"][0]) &lt; 1e-10
 assert np.max(np.abs(irf_q["q"][1:] - quota.policy_slope * irf_q["y"][:-1])) &lt; 1e-10
 assert np.max(np.abs(irf_q["e"] - irf_q["q"])) &lt; 1e-10
 print(tax.policy_slope, quota.policy_slope)</code></pre>
+<pre class="output" data-label="Output"><code>1.4151 0.658</code></pre>
   <div class="note"><p>The planner's literal calibration in the scripts, θ₂ = 0.1 and γ = 0.8, is
   the sensitivity case of p. 258, and it does not produce an admissible steady state, so
   <code>heutel.solve("planner")</code> raises <code>heutel.SteadyStateError</code>, which is
@@ -143,6 +152,8 @@ i_k = model.states.index("k")
 assert abs(so.h_ss[i_a] - sigma ** 2) &lt; 1e-8
 assert abs(so.h_ss[i_k]) &lt; 1e-8
 print(sol.P, so.h_ss[i_a])</code></pre>
+<pre class="output" data-label="Output"><code>[[0.36 1.  ]
+ [0.   0.95]] 4.900000024890194e-05</code></pre>
 </div></section>
 
 <section id="taylor"><div class="wrap">
@@ -173,6 +184,88 @@ except dsg.BlanchardKahnError:
     raised = True
 assert raised
 print(sol_nk.klein.n_stable, raised)</code></pre>
+<pre class="output" data-label="Output"><code>2 True</code></pre>
+</div></section>
+
+<section id="central-banks"><div class="wrap">
+  <h2>Central-bank models</h2>
+  <p>The Macroeconomic Model Data Base (MMB,
+  <a href="https://www.macromodelbase.com">macromodelbase.com</a>) keeps its models in Dynare, and
+  its replication toolbox Rep-MMB holds 148 of them. Thirteen, built or used at central banks and
+  at the IMF, are read by <code>dsg.from_mod</code> as they are, from 9 to 361 variables. Dynare
+  7.2 solves the same file at first order, and the columns give the largest deviation between
+  the two programs in the steady state, in the IRFs of every variable to every shock (40
+  periods) and in the theoretical standard deviations. The scripts are in
+  <code>validation/mmb/</code>, and
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md">validation/README.md</a>
+  explains how each column is measured.</p>
+<pre><code class="plain">bash validation/mmb/fetch.sh        # 13 .mod files at a fixed Rep-MMB commit, checked by SHA-256
+bash validation/mmb/run_dynare.sh   # needs Octave and Dynare
+python validation/mmb/compare.py</code></pre>
+  <table>
+    <thead><tr><th>Model</th><th>Variables</th><th>Steady state</th><th>IRFs</th><th>Moments</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>BRA_SAMBA08 <span style="color:var(--muted)">(SAMBA, Banco Central do Brasil)</span></td><td class="num">41</td><td class="num">0.0e+00</td><td class="num">6.6e-13</td><td class="num">3.8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>EAUS_NAWM08 <span style="color:var(--muted)">(NAWM, ECB; Coenen, McAdam and Straub 2008)</span></td><td class="num">226</td><td class="num">4.8e-06</td><td class="num">6.8e-05</td><td class="num">7.0e-05</td><td class="ok">OK*</td></tr>
+      <tr><td>EA_SWW14 <span style="color:var(--muted)">(ECB; Smets, Warne and Wouters 2014)</span></td><td class="num">50</td><td class="num">1.0e-37</td><td class="num">5.6e-13</td><td class="num">6.5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_SW07 <span style="color:var(--muted)">(Smets and Wouters 2007)</span></td><td class="num">41</td><td class="num">2.3e-38</td><td class="num">2.5e-13</td><td class="num">5.3e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_DNGS15 <span style="color:var(--muted)">(New York Fed; Del Negro, Giannoni and Schorfheide 2015)</span></td><td class="num">38</td><td class="num">0.0e+00</td><td class="num">1.4e-12</td><td class="num">5.1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_FRB03 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board; Levin, Wieland and Williams 2003)</span></td><td class="num">279</td><td class="num">0.0e+00</td><td class="num">6.6e-10</td><td class="num">1.8e-09</td><td class="ok">OK</td></tr>
+      <tr><td>US_FRB08 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board, February 2008)</span></td><td class="num">361</td><td class="num">0.0e+00</td><td class="num">5.8e-10</td><td class="num">1.7e-09</td><td class="ok">OK</td></tr>
+      <tr><td>CL_MS07 <span style="color:var(--muted)">(Banco Central de Chile; Medina and Soto 2007)</span></td><td class="num">124</td><td class="num">0.0e+00</td><td class="num">3.2e-10</td><td class="num">2.6e-10</td><td class="ok">OK</td></tr>
+      <tr><td>UK_SM11 <span style="color:var(--muted)">(Bank of England; Harrison, Thomas and de Weymarn 2008)</span></td><td class="num">123</td><td class="num">0.0e+00</td><td class="num">2.6e-11</td><td class="num">5.2e-11</td><td class="ok">OK</td></tr>
+      <tr><td>EA_ALSV06 <span style="color:var(--muted)">(Riksbank; Adolfson, Laséen, Lindé and Villani, reduced version)</span></td><td class="num">9</td><td class="num">0.0e+00</td><td class="num">1.3e-13</td><td class="num">1.5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>EACZ_GEM03 <span style="color:var(--muted)">(GEM, IMF; Laxton and Pesenti 2003)</span></td><td class="num">239</td><td class="num">6.8e-13</td><td class="num">1.1e-11</td><td class="num">1.2e-08</td><td class="ok">OK</td></tr>
+      <tr><td>HK_FP13 <span style="color:var(--muted)">(Hong Kong; Funke and Paetz 2013)</span></td><td class="num">47</td><td class="num">0.0e+00</td><td class="num">3.9e-11</td><td class="num">6.3e-09</td><td class="ok">OK</td></tr>
+      <tr><td>CA_LS07 <span style="color:var(--muted)">(Canada; Lubik and Schorfheide 2007)</span></td><td class="num">12</td><td class="num">0.0e+00</td><td class="num">9.6e-15</td><td class="num">1.1e-14</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* Dynare's steady state for the NAWM leaves a
+  residual of <code>5e-06</code> in the equations, and the one dsgelab finds leaves
+  <code>9e-14</code>. The IRFs and moments inherit Dynare's residual, which is why their deviation
+  stays near <code>7e-05</code>. In the other twelve models the
+  largest deviation is <code>1.2e-08</code>. <code>US_SW07</code> and <code>US_FRB08</code> declare
+  parameters that the file never assigns (three and one), and the comparison takes their values
+  from Dynare.</p>
+  <p>Eleven other Rep-MMB models from central banks and official institutions were tried, and
+  <code>from_mod</code> does not yet read or solve them. Among them are SIGMA (Federal Reserve) and
+  the AWM (ECB), which declare a parameter twice, and ToTEM (Bank of Canada) and QUEST III
+  (European Commission), which take parameters or the steady state from MATLAB files. The full
+  list is in <code>validation/README.md</code>.</p>
+</div></section>
+
+<section id="dsge-mod"><div class="wrap">
+  <h2>Published-model files from DSGE_mod</h2>
+  <p>Johannes Pfeifer's <a href="https://github.com/JohannesPfeifer/DSGE_mod">DSGE_mod</a> collection
+  provides tractable Dynare replication files for published models. Four are read by
+  <code>dsg.from_mod</code> and solved at first order, with Dynare 7.2 as the independent reference.
+  The columns give the largest deviation in the steady state, in every variable's orthogonalised
+  IRFs to every live shock (40 periods), and in unfiltered theoretical standard deviations. The
+  scripts are in <code>validation/dsge_mod/</code>; sources are fixed at commit
+  <code>26c21f79e4c6a6b19b18e6330edc5b23489907a4</code> and checked by SHA-256.</p>
+<pre><code class="plain">bash validation/dsge_mod/fetch.sh
+bash validation/dsge_mod/run_dynare.sh   # needs Octave and Dynare
+python validation/dsge_mod/compare.py</code></pre>
+  <table>
+    <thead><tr><th>Model</th><th>Variables</th><th>Steady state</th><th>IRFs</th><th>Moments</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Aguiar–Gopinath (2007) <span style="color:var(--muted)">(Mexico benchmark)</span></td><td class="num">21</td><td class="num">3.5e-16</td><td class="num">1.1e-12</td><td class="num">4.6e-13</td><td class="ok">OK</td></tr>
+      <tr><td>Ghironi–Melitz (2005) <span style="color:var(--muted)">(financial autarky)</span></td><td class="num">35</td><td class="num">3.1e-08</td><td class="num">2.2e-07</td><td class="num">1.8e-07</td><td class="ok">OK*</td></tr>
+      <tr><td>Hansen (1985) <span style="color:var(--muted)">(indivisible labor)</span></td><td class="num">9</td><td class="num">3.1e-16</td><td class="num">1.9e-14</td><td class="num">1.5e-14</td><td class="ok">OK</td></tr>
+      <tr><td>Smets–Wouters (2007) <span style="color:var(--muted)">(.mod calibration)</span></td><td class="num">40</td><td class="num">6.9e-15</td><td class="num">9.8e-14</td><td class="num">5.8e-13</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* Dynare's steady state for Ghironi–Melitz leaves a
+  residual of <code>2e-08</code>, which the IRF and moment differences inherit. Its MATLAB helper
+  supplies <code>fx</code> and <code>fx_</code>; those values and the initial steady-state guess are
+  taken from Dynare. Three declared but unused parameters of Smets–Wouters also come from Dynare.</p>
+  <p>The scope is deliberately narrower than a full paper replication. Aguiar–Gopinath uses the
+  Mexico/Table 4 shock calibration and compares the detrended system, not reconstructed nonstationary
+  levels or the paper's filtered-moment table. Hansen uses the file's default indivisible-labor case
+  and unfiltered theoretical moments, not its simulated HP-filtered Table 1. Smets–Wouters is solved
+  at the supplied calibration; its Bayesian estimation is not rerun. The equations and calibrations
+  are unchanged, and the two small working-copy adaptations are documented in
+  <code>validation/README.md</code>.</p>
 </div></section>
 
 <section id="queue"><div class="wrap">
@@ -182,7 +275,7 @@ print(sol_nk.klein.n_stable, raised)</code></pre>
     <tbody>
       <tr>
         <td>Smets and Wouters (2007), American Economic Review</td>
-        <td>The package has the likelihood, the Kalman filter and Bayesian estimation, and the replication has not been done yet.</td>
+        <td>The MMB and DSGE_mod files are compared with Dynare in the <a href="#central-banks">central-bank models</a> and <a href="#dsge-mod">DSGE_mod models</a> sections, at their supplied calibrations. The package has the likelihood, the Kalman filter and Bayesian estimation, and the replication of the paper's estimates has not been done yet.</td>
       </tr>
       <tr>
         <td>Schmitt-Grohé and Uribe (2003), small open economy</td>

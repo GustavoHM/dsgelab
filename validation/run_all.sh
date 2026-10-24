@@ -45,6 +45,12 @@ step "Dynare: Ramsey"        bash run_ramsey.sh
 step "compare_ramsey.py"     "$PYTHON" compare_ramsey.py
 step "Dynare: .mod files read" bash run_examples.sh
 step "compare_import.py"     "$PYTHON" compare_import.py
+step "MMB: fetch"            bash mmb/fetch.sh
+step "Dynare: MMB models"    bash mmb/run_dynare.sh
+step "mmb/compare.py"        "$PYTHON" mmb/compare.py
+step "DSGE_mod: fetch"       bash dsge_mod/fetch.sh
+step "Dynare: DSGE_mod"      bash dsge_mod/run_dynare.sh
+step "dsge_mod/compare.py"   "$PYTHON" dsge_mod/compare.py
 step "Dynare: policy"        bash run_policy.sh
 step "compare_policy.py"     "$PYTHON" compare_policy.py
 step "Dynare: perfect foresight" bash run_foresight.sh

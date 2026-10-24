@@ -216,6 +216,120 @@ counts it as stable (`qz_criterium = 1 + 1e-6`). By default `dsgelab` does not, 
 model with `BlanchardKahnError`. `solve(..., qz_criterium=1 + 1e-6)` reproduces Dynare's
 convention, and `compare_import.py` uses that setting.
 
+## Central-bank models from the Macroeconomic Model Data Base
+
+The Macroeconomic Model Data Base (MMB, [macromodelbase.com](https://www.macromodelbase.com))
+collects models in Dynare, and its replication toolbox Rep-MMB
+([github.com/AlexMeyer-Gohde/Rep-MMB](https://github.com/AlexMeyer-Gohde/Rep-MMB)) holds 148 of
+them at the commit `fetch.sh` uses. The folder
+`mmb/` reads thirteen of them with `from_mod`, as they are, and compares them with Dynare in the
+same way as `compare_import.py`. The set covers models built or used at the Banco Central do
+Brasil, the ECB, the Federal Reserve, the Banco Central de Chile, the Bank of England, the
+Riksbank and the IMF, from 9 to 361 variables.
+
+```bash
+bash mmb/fetch.sh          # 13 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
+bash mmb/run_dynare.sh     # ../strip_mod.py and the same stoch_simul(order=1) for all
+python mmb/compare.py
+```
+
+```
+model         vars  aux    params     s.s.     IRFs   moments
+BRA_SAMBA08     41   38   0.0e+00  0.0e+00  6.6e-13   3.8e-13  OK
+CA_LS07         12   10   0.0e+00  0.0e+00  9.6e-15   1.1e-14  OK
+CL_MS07        124   70   9.0e-14  0.0e+00  3.2e-10   2.6e-10  OK
+EACZ_GEM03     239  100   3.9e-16  6.8e-13  1.1e-11   1.2e-08  OK
+             s.s. starting point taken from Dynare for 2 variable(s)
+EAUS_NAWM08    226  127   0.0e+00  4.8e-06  6.8e-05   7.0e-05  OK  (Dynare's s.s. with residual 5e-06)
+EA_ALSV06        9   12   0.0e+00  0.0e+00  1.3e-13   1.5e-13  OK
+EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
+HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
+UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
+US_DNGS15       38   33   0.0e+00  0.0e+00  1.4e-12   5.1e-13  OK
+US_FRB03       279  365   0.0e+00  0.0e+00  6.6e-10   1.8e-09  OK
+US_FRB08       361  335   2.2e-16  0.0e+00  5.8e-10   1.7e-09  OK
+             parameters the .mod leaves undefined, taken from Dynare: bpnca30
+US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
+             parameters the .mod leaves undefined, taken from Dynare: ccs, cinvs, crdpi
+```
+
+| Model | Origin |
+|---|---|
+| `BRA_SAMBA08` | SAMBA, Banco Central do Brasil |
+| `EAUS_NAWM08` | New Area-Wide Model, ECB (Coenen, McAdam and Straub, 2008), euro area and United States |
+| `EA_SWW14` | Smets, Warne and Wouters (2014), ECB |
+| `US_SW07` | Smets and Wouters (2007) |
+| `US_DNGS15` | Del Negro, Giannoni and Schorfheide (2015), Federal Reserve Bank of New York |
+| `US_FRB03`, `US_FRB08` | FRB/US, Federal Reserve Board, linearised with rational expectations (2003 version of Levin, Wieland and Williams, and February 2008 version) |
+| `CL_MS07` | Medina and Soto (2007), Banco Central de Chile |
+| `UK_SM11` | Harrison, Thomas and de Weymarn (2008), Bank of England, in the version estimated by Barriel and Millard |
+| `EA_ALSV06` | Adolfson, Laséen, Lindé and Villani, Riksbank, in the MMB's reduced version |
+| `EACZ_GEM03` | Global Economy Model, IMF (Laxton and Pesenti, 2003), euro area and Czech Republic |
+| `HK_FP13`, `CA_LS07` | Funke and Paetz (2013) for Hong Kong, Lubik and Schorfheide (2007) for Canada |
+
+**What differs from `compare_import.py`.** The steady-state error is relative, and absolute for
+values below 1. Several of these models have variables whose steady state is zero, and the
+relative error of `compare_import.py` (denominator floored at 1e-8) would measure their rounding.
+In `EACZ_GEM03` the output gaps are 7e-13 in `dsgelab` and 0 in Dynare, which the relative error
+reports as 7e-05. In both scripts, a variable whose largest response is below 1e-9 of the
+model's largest response is left out of the IRF column. Price and wage dispersion do not move at
+first order, and in `EAUS_NAWM08` the wage dispersion `EA_SI` responds with 6e-11 in both
+programs, against responses of order 1e4 in other variables. This rule leaves the output of
+`compare_import.py` unchanged.
+
+**What limits the comparison.** In `EAUS_NAWM08`, Dynare's steady state leaves a residual of
+5e-06, and the one `dsgelab` finds leaves 9e-14. The IRFs and moments inherit that residual, as
+in `example2`. `EACZ_GEM03` declares an innovation (`interest_`) that no equation uses. Dynare 7
+refuses the file unless it runs with `nostrict`, which drops the innovation, and `run_dynare.sh`
+passes that option for this model only. The parameters listed as taken from Dynare are declared
+and never assigned in the `.mod`.
+
+**What the set leaves out.** Eleven other Rep-MMB models from central banks and official
+institutions were tried, and `from_mod` does not yet read or solve them. `G2_SIGMA08` (Federal
+Reserve), `EA_AWM05` (ECB) and `CA_BMZ12` (Bank of Canada) declare a parameter twice, `ESREA_FIMOD12` stops on an expression the reader does not parse, and
+`US_CMR14` uses `@#for`. `CA_ToTEM10` (Bank of Canada), `DEREA_GEAR16` (Bundesbank),
+`EA_GNSS10` (Banca d'Italia), `EA_QUEST3` (European Commission) and `FI_AINO16` (Bank of
+Finland) take parameters or the steady state from MATLAB files, and the steady state of
+`GPM6_IMF13` does not converge from the file's starting point.
+
+## Published-model files from DSGE_mod
+
+Johannes Pfeifer's [DSGE_mod](https://github.com/JohannesPfeifer/DSGE_mod) collection supplies
+tractable Dynare replication files for published models. Four are compared here at first order,
+using Dynare 7.2 as the independent reference. The source is fixed at commit
+`26c21f79e4c6a6b19b18e6330edc5b23489907a4`, and every downloaded file is checked by SHA-256.
+The GPL source files are fetched rather than versioned in this MIT package.
+
+```bash
+bash dsge_mod/fetch.sh
+bash dsge_mod/run_dynare.sh
+python dsge_mod/compare.py
+```
+
+```
+model                    vars  aux    params     s.s.     IRFs   moments
+Aguiar_Gopinath_2007       21    7   0.0e+00  3.5e-16  1.1e-12   4.6e-13  OK
+Ghironi_Melitz_2005        35    8   0.0e+00  3.1e-08  2.2e-07   1.8e-07  OK
+Hansen_1985                 9    3   0.0e+00  3.1e-16  1.9e-14   1.5e-14  OK
+Smets_Wouters_2007_45      40   27   0.0e+00  6.9e-15  9.8e-14   5.8e-13  OK
+```
+
+| Model | Source exercise and scope |
+|---|---|
+| `Aguiar_Gopinath_2007` | Aguiar and Gopinath (2007), Mexico benchmark and Table 4 shock calibration. The detrended system is compared; reconstruction of nonstationary levels and the paper's filtered-moment table are not. |
+| `Ghironi_Melitz_2005` | Ghironi and Melitz (2005), financial autarky. Dynare's steady state leaves a residual of `2e-08`, which the IRF and moment differences inherit. Its MATLAB steady-state file supplies `fx` and `fx_`; those values and the initial guess are taken from Dynare. |
+| `Hansen_1985` | Hansen (1985), the file's default indivisible-labor economy. The comparison uses unfiltered theoretical moments, not the paper's simulated HP-filtered Table 1. |
+| `Smets_Wouters_2007_45` | Smets and Wouters (2007), at the calibration in the `.mod`. Three declared but unused parameters come from Dynare. The Bayesian estimation and the original paper's estimated results are not replicated. |
+
+`prepare.py` makes two explicit source-specific working copies. For Aguiar–Gopinath it selects the
+Mexico/Table 4 shock block and omits interleaved MATLAB plotting code; for Hansen it adds semicolons
+to the macro-processor title assignments so the lightweight statement reader sees the following
+`var` block separately. Neither changes equations, parameters or shock values. The other two files
+are read directly.
+
+These comparisons validate the supplied model systems against Dynare. They do not claim to reproduce
+every table, figure, robustness exercise or estimation in the papers.
+
 ## Discretion, optimal simple rules and welfare
 
 ```bash

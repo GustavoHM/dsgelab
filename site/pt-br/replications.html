@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dsgelab — replicações</title>
-<meta name="description" content="Artigos replicados com o dsgelab: Heutel (2012), o crescimento estocástico com solução fechada e o princípio de Taylor. Cada bloco desta página é executado.">
+<meta name="description" content="Artigos replicados com o dsgelab: Heutel (2012), crescimento estocástico, princípio de Taylor, treze modelos de bancos centrais e quatro modelos publicados do DSGE_mod comparados com o Dynare. Cada bloco Python desta página é executado.">
 <link rel="alternate" hreflang="en" href="https://gustavohm.github.io/dsgelab/replications.html">
 <link rel="alternate" hreflang="pt-BR" href="https://gustavohm.github.io/dsgelab/pt-br/replications.html">
 <link rel="alternate" hreflang="x-default" href="https://gustavohm.github.io/dsgelab/replications.html">
@@ -28,6 +28,8 @@
   <li><a href="#heutel">Heutel (2012)</a></li>
   <li><a href="#crescimento">Crescimento estocástico</a></li>
   <li><a href="#taylor">Princípio de Taylor</a></li>
+  <li><a href="#bancos-centrais">Modelos de bancos centrais</a></li>
+  <li><a href="#dsge-mod">Modelos do DSGE_mod</a></li>
   <li><a href="#fila">Fora desta página</a></li>
 </ul></div></nav>
 
@@ -40,7 +42,10 @@
   executado por <code>tools/check_site_examples.py</code>.</p>
   <p>Os exemplos didáticos do Dynare (Collard, Pfeifer) ficam na
   <a href="./#validacao">tabela de validação</a> da página do pacote. São arquivos de tutorial, e lá
-  a comparação é feita com a solução do Dynare, variável a variável.</p>
+  a comparação é feita com a solução do Dynare, variável a variável. As seções
+  <a href="#bancos-centrais">modelos de bancos centrais</a> e <a href="#dsge-mod">modelos do
+  DSGE_mod</a> seguem o mesmo método, com a solução do Dynare como referência. Seus números vêm de
+  scripts que precisam do Dynare e que <code>tools/check_site_examples.py</code> não executa.</p>
 </div></section>
 
 <section id="heutel"><div class="wrap">
@@ -87,6 +92,9 @@ assert np.max(np.abs(gap)) &lt; 1e-10        # recursos ao longo do impulso
 assert int(np.argmax(irf["c"])) == 15
 assert int(np.argmax(irf["k"])) == 25
 print(ss["k"], ss["y"], ss["mu"], int(np.argmax(irf["k"])))</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">heutel.fetch()</span>
+PosixPath('/Users/gustavo/.cache/dsgelab/heutel/_heutel_algebra.py')
+27.790469708009216 3.2921268752463644 0.03478924941257644 25</code></pre>
 
   <h3>Informação defasada, p. 262</h3>
   <p>Quando o governo escolhe o instrumento antes de observar o estado, o artigo substitui a
@@ -108,6 +116,7 @@ assert abs(irf_q["q"][0]) &lt; 1e-10
 assert np.max(np.abs(irf_q["q"][1:] - quota.policy_slope * irf_q["y"][:-1])) &lt; 1e-10
 assert np.max(np.abs(irf_q["e"] - irf_q["q"])) &lt; 1e-10
 print(tax.policy_slope, quota.policy_slope)</code></pre>
+<pre class="output" data-label="Saída"><code>1.4151 0.658</code></pre>
   <div class="note"><p>A calibração literal do planejador nos scripts, θ₂ = 0,1 e γ = 0,8, é o caso
   de sensibilidade da p. 258 e não produz estado estacionário admissível, de modo que
   <code>heutel.solve("planner")</code> levanta <code>heutel.SteadyStateError</code>, definida em
@@ -143,6 +152,8 @@ i_k = model.states.index("k")
 assert abs(so.h_ss[i_a] - sigma ** 2) &lt; 1e-8
 assert abs(so.h_ss[i_k]) &lt; 1e-8
 print(sol.P, so.h_ss[i_a])</code></pre>
+<pre class="output" data-label="Saída"><code>[[0.36 1.  ]
+ [0.   0.95]] 4.900000024890194e-05</code></pre>
 </div></section>
 
 <section id="taylor"><div class="wrap">
@@ -172,6 +183,87 @@ except dsg.BlanchardKahnError:
     raised = True
 assert raised
 print(sol_nk.klein.n_stable, raised)</code></pre>
+<pre class="output" data-label="Saída"><code>2 True</code></pre>
+</div></section>
+
+<section id="bancos-centrais"><div class="wrap">
+  <h2>Modelos de bancos centrais</h2>
+  <p>O Macroeconomic Model Data Base (MMB,
+  <a href="https://www.macromodelbase.com">macromodelbase.com</a>) guarda seus modelos em Dynare,
+  e sua caixa de replicação, o Rep-MMB, reúne 148 deles. Treze, construídos ou usados em bancos
+  centrais e no FMI, são lidos por <code>dsg.from_mod</code> sem alteração, de 9 a 361 variáveis.
+  O Dynare 7.2 resolve o mesmo arquivo em primeira ordem, e as colunas dão o maior desvio entre os
+  dois programas no estado estacionário, nas IRFs de cada variável a cada choque (40 períodos) e
+  nos desvios-padrão teóricos. Os scripts estão em <code>validation/mmb/</code>, e o
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md">validation/README.md</a>
+  explica como cada coluna é medida.</p>
+<pre><code class="plain">bash validation/mmb/fetch.sh        # 13 arquivos .mod num commit fixo do Rep-MMB, conferidos por SHA-256
+bash validation/mmb/run_dynare.sh   # precisa do Octave e do Dynare
+python validation/mmb/compare.py</code></pre>
+  <table>
+    <thead><tr><th>Modelo</th><th>Variáveis</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>BRA_SAMBA08 <span style="color:var(--muted)">(SAMBA, Banco Central do Brasil)</span></td><td class="num">41</td><td class="num">0,0e+00</td><td class="num">6,6e-13</td><td class="num">3,8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>EAUS_NAWM08 <span style="color:var(--muted)">(NAWM, BCE; Coenen, McAdam e Straub 2008)</span></td><td class="num">226</td><td class="num">4,8e-06</td><td class="num">6,8e-05</td><td class="num">7,0e-05</td><td class="ok">OK*</td></tr>
+      <tr><td>EA_SWW14 <span style="color:var(--muted)">(BCE; Smets, Warne e Wouters 2014)</span></td><td class="num">50</td><td class="num">1,0e-37</td><td class="num">5,6e-13</td><td class="num">6,5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_SW07 <span style="color:var(--muted)">(Smets e Wouters 2007)</span></td><td class="num">41</td><td class="num">2,3e-38</td><td class="num">2,5e-13</td><td class="num">5,3e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_DNGS15 <span style="color:var(--muted)">(Fed de Nova York; Del Negro, Giannoni e Schorfheide 2015)</span></td><td class="num">38</td><td class="num">0,0e+00</td><td class="num">1,4e-12</td><td class="num">5,1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>US_FRB03 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board; Levin, Wieland e Williams 2003)</span></td><td class="num">279</td><td class="num">0,0e+00</td><td class="num">6,6e-10</td><td class="num">1,8e-09</td><td class="ok">OK</td></tr>
+      <tr><td>US_FRB08 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board, fevereiro de 2008)</span></td><td class="num">361</td><td class="num">0,0e+00</td><td class="num">5,8e-10</td><td class="num">1,7e-09</td><td class="ok">OK</td></tr>
+      <tr><td>CL_MS07 <span style="color:var(--muted)">(Banco Central de Chile; Medina e Soto 2007)</span></td><td class="num">124</td><td class="num">0,0e+00</td><td class="num">3,2e-10</td><td class="num">2,6e-10</td><td class="ok">OK</td></tr>
+      <tr><td>UK_SM11 <span style="color:var(--muted)">(Bank of England; Harrison, Thomas e de Weymarn 2008)</span></td><td class="num">123</td><td class="num">0,0e+00</td><td class="num">2,6e-11</td><td class="num">5,2e-11</td><td class="ok">OK</td></tr>
+      <tr><td>EA_ALSV06 <span style="color:var(--muted)">(Riksbank; Adolfson, Laséen, Lindé e Villani, versão reduzida)</span></td><td class="num">9</td><td class="num">0,0e+00</td><td class="num">1,3e-13</td><td class="num">1,5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>EACZ_GEM03 <span style="color:var(--muted)">(GEM, FMI; Laxton e Pesenti 2003)</span></td><td class="num">239</td><td class="num">6,8e-13</td><td class="num">1,1e-11</td><td class="num">1,2e-08</td><td class="ok">OK</td></tr>
+      <tr><td>HK_FP13 <span style="color:var(--muted)">(Hong Kong; Funke e Paetz 2013)</span></td><td class="num">47</td><td class="num">0,0e+00</td><td class="num">3,9e-11</td><td class="num">6,3e-09</td><td class="ok">OK</td></tr>
+      <tr><td>CA_LS07 <span style="color:var(--muted)">(Canadá; Lubik e Schorfheide 2007)</span></td><td class="num">12</td><td class="num">0,0e+00</td><td class="num">9,6e-15</td><td class="num">1,1e-14</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* O estado estacionário do Dynare para o NAWM deixa
+  um resíduo de <code>5e-06</code> nas equações, e o que o dsgelab encontra deixa
+  <code>9e-14</code>. As IRFs e os momentos herdam o resíduo do Dynare, e por isso o desvio deles
+  fica perto de <code>7e-05</code>. Nos outros doze modelos, o maior
+  desvio é <code>1,2e-08</code>. O <code>US_SW07</code> e o <code>US_FRB08</code> declaram
+  parâmetros que o arquivo nunca atribui (três e um), e a comparação toma os valores do Dynare.</p>
+  <p>Outros onze modelos do Rep-MMB, de bancos centrais e instituições oficiais, foram testados, e o
+  <code>from_mod</code> ainda não os lê ou não os resolve. Entre eles estão o SIGMA (Federal
+  Reserve) e o AWM (BCE), que declaram um parâmetro duas vezes, e o ToTEM (Banco do Canadá) e o
+  QUEST III (Comissão Europeia), que tomam parâmetros ou o estado estacionário de arquivos MATLAB.
+  A lista completa está no <code>validation/README.md</code>.</p>
+</div></section>
+
+<section id="dsge-mod"><div class="wrap">
+  <h2>Modelos publicados do DSGE_mod</h2>
+  <p>A coleção <a href="https://github.com/JohannesPfeifer/DSGE_mod">DSGE_mod</a>, de Johannes
+  Pfeifer, oferece arquivos de replicação tratáveis em Dynare para modelos publicados. Quatro são
+  lidos por <code>dsg.from_mod</code> e resolvidos em primeira ordem, com o Dynare 7.2 como
+  referência independente. As colunas dão o maior desvio no estado estacionário, nas IRFs
+  ortogonalizadas de cada variável a cada choque ativo (40 períodos) e nos desvios-padrão teóricos
+  sem filtro. Os scripts estão em <code>validation/dsge_mod/</code>; as fontes ficam fixas no commit
+  <code>26c21f79e4c6a6b19b18e6330edc5b23489907a4</code> e são conferidas por SHA-256.</p>
+<pre><code class="plain">bash validation/dsge_mod/fetch.sh
+bash validation/dsge_mod/run_dynare.sh   # precisa do Octave e do Dynare
+python validation/dsge_mod/compare.py</code></pre>
+  <table>
+    <thead><tr><th>Modelo</th><th>Variáveis</th><th>Estado estacionário</th><th>IRFs</th><th>Momentos</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>Aguiar–Gopinath (2007) <span style="color:var(--muted)">(caso-base do México)</span></td><td class="num">21</td><td class="num">3,5e-16</td><td class="num">1,1e-12</td><td class="num">4,6e-13</td><td class="ok">OK</td></tr>
+      <tr><td>Ghironi–Melitz (2005) <span style="color:var(--muted)">(autarquia financeira)</span></td><td class="num">35</td><td class="num">3,1e-08</td><td class="num">2,2e-07</td><td class="num">1,8e-07</td><td class="ok">OK*</td></tr>
+      <tr><td>Hansen (1985) <span style="color:var(--muted)">(trabalho indivisível)</span></td><td class="num">9</td><td class="num">3,1e-16</td><td class="num">1,9e-14</td><td class="num">1,5e-14</td><td class="ok">OK</td></tr>
+      <tr><td>Smets–Wouters (2007) <span style="color:var(--muted)">(calibração do .mod)</span></td><td class="num">40</td><td class="num">6,9e-15</td><td class="num">9,8e-14</td><td class="num">5,8e-13</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">* O estado estacionário do Dynare para
+  Ghironi–Melitz deixa resíduo de <code>2e-08</code>, herdado pelas diferenças das IRFs e dos
+  momentos. Seu auxiliar MATLAB fornece <code>fx</code> e <code>fx_</code>; esses valores e o ponto
+  inicial do estado estacionário vêm do Dynare. Três parâmetros declarados, mas não utilizados, de
+  Smets–Wouters também vêm do Dynare.</p>
+  <p>O escopo é deliberadamente mais estreito que a replicação integral dos artigos. Aguiar–Gopinath
+  usa a calibração de choques do México/Tabela 4 e compara o sistema estacionarizado, não os níveis
+  não estacionários reconstruídos nem a tabela de momentos filtrados do artigo. Hansen usa o caso de
+  trabalho indivisível, padrão do arquivo, e momentos teóricos sem filtro, não a Tabela 1 simulada e
+  filtrada por HP. Smets–Wouters é resolvido na calibração fornecida; a estimação bayesiana não é
+  refeita. Equações e calibrações permanecem inalteradas, e as duas pequenas adaptações das cópias de
+  trabalho estão documentadas no <code>validation/README.md</code>.</p>
 </div></section>
 
 <section id="fila"><div class="wrap">
@@ -181,7 +273,7 @@ print(sol_nk.klein.n_stable, raised)</code></pre>
     <tbody>
       <tr>
         <td>Smets e Wouters (2007), American Economic Review</td>
-        <td>O pacote já tem a verossimilhança, o filtro de Kalman e a estimação bayesiana, mas a replicação ainda não foi feita.</td>
+        <td>Os arquivos do MMB e do DSGE_mod são comparados com o Dynare nas seções <a href="#bancos-centrais">modelos de bancos centrais</a> e <a href="#dsge-mod">modelos do DSGE_mod</a>, nas calibrações fornecidas. O pacote já tem a verossimilhança, o filtro de Kalman e a estimação bayesiana, e a replicação das estimativas do artigo ainda não foi feita.</td>
       </tr>
       <tr>
         <td>Schmitt-Grohé e Uribe (2003), pequena economia aberta</td>

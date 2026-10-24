@@ -41,6 +41,14 @@ validation/out_identification/
 validation/work_identification/
 validation/out_filtered/
 validation/work_filtered/
+validation/mmb/mods/
+validation/mmb/out/
+validation/mmb/work/
+validation/dsge_mod/original/
+validation/dsge_mod/mods/
+validation/dsge_mod/out/
+validation/dsge_mod/work/
+validation/dsge_mod/prepared/
 # the Python environment CondaPkg builds for validation/macromodelling
 validation/macromodelling/.CondaPkg/
 validation/macromodelling/Manifest.toml

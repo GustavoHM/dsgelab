@@ -41,6 +41,17 @@ Work toward milestone 0.6 (identification, moments and data).
   one with correlated shocks and one with a unit root, with both filters. Covariances and
   autocorrelations agree within 1e-13, except in example2, where Dynare's steady state
   leaves a residual of 1e-6 and the difference is 5e-6.
+- `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
+  `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
+  They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions
+  (up to 361 variables), Smets and Wouters (2007) and the New York Fed model of Del Negro,
+  Giannoni and Schorfheide (2015). All thirteen agree within 1e-04, and twelve within 2e-08. The
+  `.mod` files come from a fixed Rep-MMB commit, checked by SHA-256, and are not versioned.
+- `validation/dsge_mod/`: four published-model files from Johannes Pfeifer's DSGE_mod —
+  Aguiar–Gopinath (2007), Ghironi–Melitz (2005), Hansen (1985) and Smets–Wouters (2007) — read
+  by `from_mod` and compared with Dynare 7.2 at first order. The largest IRF deviation is
+  2.2e-07, in Ghironi–Melitz, whose Dynare steady state leaves a residual of 2e-08. Sources
+  are pinned by commit and SHA-256; the site documents the scope and limits of each comparison.
 
 ## 0.5.0 — 2026-10-18
 
