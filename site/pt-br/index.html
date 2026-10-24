@@ -94,6 +94,11 @@ print(sol.summary())
 irf = sol.irf("eps_a", size=0.01, periods=40)     # desvios em %
 mom = sol.moments(cov={"eps_a": 0.007})           # dp, correlações, autocorrelações
 dec = sol.variance_decomposition(cov={"eps_a": 0.007})</code></pre>
+<pre class="output" data-label="Saída"><code>rbc: 2 states, 1 jumps, 1 shocks
+  steady-state residual : 8.882e-16
+  linearisation residual: 8.882e-16
+  Blanchard-Kahn        : 2 stable roots for 2 states -- OK
+  largest stable root   : 0.950000</code></pre>
 
   <h3>2. Declarar o seu próprio modelo</h3>
   <p>O modelo é declarado com três listas de nomes e uma função, e as variáveis são acessadas por
@@ -126,6 +131,17 @@ sol_meu = solve(meu, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
 
 sol_meu.P                     # transição dos estados
 sol_meu.accuracy()            # a ordem implícita tem de dar ~2</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">sol_meu.P</span>
+[[0.36 1]
+ [0 0.95]]
+<span class="out-expr">sol_meu.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [9.333e-05, 2.339e-05, 5.856e-06],
+  'ratios': [3.99, 3.995],
+  'implied_order': [1.996, 1.998],
+  'exact': False
+}</code></pre>
   <p>Quando as variáveis são lidas de um vetor pela posição, trocar um índice por outro não produz
   mensagem de erro, e o programa resolve, sem aviso, um modelo diferente do pretendido. Com cada
   variável lida pelo nome, essa troca deixa de ser possível.</p>
@@ -145,6 +161,8 @@ simbolico = from_equations(
 sol_sim = dsg.solve(simbolico, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
 
 dsg.compare_irfs(sol_meu, sol_sim, "eps_a")["worst"]   # os dois são o mesmo modelo</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">dsg.compare_irfs(sol_meu, sol_sim, "eps_a")["worst"]</span>
+1.182e-10</code></pre>
   <p>A jacobiana e a hessiana do resíduo saem <em>exatas</em>, por diferenciação simbólica. A
   solução de segunda ordem é construída sobre a hessiana, e uma diferença finita de segunda ordem
   divide pelo quadrado do passo, de modo que uma hessiana numérica conserva cerca de metade dos
@@ -158,6 +176,26 @@ so.mean_correction()      # média ergódica, em forma fechada
 so.ergodic_mean()         # a mesma coisa, em nível
 so.accuracy()             # a ordem implícita tem de dar ~3
 so.simulate(periods=5000, seed=1)   # podada, por padrão</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">so.g_ss, so.h_ss</span>
+([2.292e-12], [-4.139e-12 4.9e-05])
+<span class="out-expr">so.mean_correction()</span>
+{'k': 0.0005888, 'a': 0.0002513, 'c': 0.0005888}
+<span class="out-expr">so.ergodic_mean()</span>
+{'k': 0.1996, 'a': 1, 'c': 0.3604}
+<span class="out-expr">so.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [4.785e-07, 6.005e-08, 7.522e-09],
+  'ratios': [7.968, 7.984],
+  'implied_order': [2.994, 2.997],
+  'exact': False
+}
+<span class="out-expr">so.simulate(periods=5000, seed=1)</span>
+{
+  'k': [-0.01659 -0.005077 0.01319 ... 0.02349 0.02659 0.04175],
+  'a': [0.0009341 0.01505 0.006866 ... 0.01805 0.03195 0.03259],
+  'c': [-0.005077 0.01319 0.01163 ... 0.02659 0.04175 0.04791]
+}</code></pre>
   <p>Uma simulação de primeira ordem mantém, <em>por construção</em>, a média dos estados no estado
   estacionário. Quando o deslocamento das regras de decisão é grande, ela pode errar a magnitude e
   também o <em>sinal</em> de um efeito sobre a média, e o ordenamento de políticas pelo bem-estar depende
@@ -178,6 +216,10 @@ anunciada = dsg.perfect_foresight(meu, ss0, ss1, params=cronograma, T=T)
 
 surpresa["k"], anunciada["k"]              # níveis, (T+1,)
 anunciada["c"][0] != surpresa["c"][0]      # o anúncio aparece no impacto</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">surpresa["k"], anunciada["k"]</span>
+([0.1995 0.1985 0.1981 ... 0.1979 0.1979 0.1979], [0.1995 0.1995 0.1995 ... 0.1979 0.1979 0.1979])
+<span class="out-expr">anunciada["c"][0] != surpresa["c"][0]</span>
+True</code></pre>
   <p>A transição é resolvida pelo método de Newton com os períodos empilhados (<em>stacked
   time</em>), sobre a mesma função de resíduos que a perturbação lineariza. Uma surpresa entra como
   mudança em <code>terminal</code> com parâmetros constantes, e um cronograma legal conhecido de
@@ -207,6 +249,18 @@ um = dsg.target_jacobian(meu, P(), free=["beta", "alpha"], targets=["k"],
                          guess={"k": 0.2, "a": 1.0, "c": 0.36})
 um["identified"]           # False: dois parâmetros, um alvo
 um["null_directions"]      # a direção que nenhum alvo enxerga</code></pre>
+<pre class="output" data-label="Saída"><code>calibration:
+  beta = 0.98912
+  delta = 0.025
+targets (achieved vs wanted):
+  ky 10  vs 10   (-2.31e-13%)
+  iy 0.25  vs 0.25   (-2.44e-13%)
+<span class="out-expr">ident["identified"]</span>
+True
+<span class="out-expr">um["identified"]</span>
+False
+<span class="out-expr">um["null_directions"]</span>
+[[-0.387 0.9221]]</code></pre>
   <p>A razão capital-produto e a participação do investimento determinam β e δ em conjunto. Em forma
   fechada, δ = iy/ky = 0,025 e β = 1/(α/ky + 1 − δ) = 0,98912, que é o que <code>calibrate</code>
   devolve. Avaliada nessa solução, <code>target_jacobian</code> informa que os dois alvos
@@ -225,6 +279,18 @@ dsg.check_slack(sol, {"c_positivo": lambda v: v["c"]}, size=-0.5)   # ao longo d
 dsg.steady_state_invariance(                    # uma invariância que é teorema do modelo
     lambda v: dsg.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
     [0.5, 0.8, 0.95], ["k", "c"])["ok"]         # k não depende da persistência</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">dsg.blanchard_kahn_report(sol)["margin"]</span>
+1.856
+<span class="out-expr">dsg.check_slack(sol, {"c_positivo": lambda v: v["c"]}, size=-0.5)</span>
+{
+  'detail': {'eps_a:c_positivo': {'min': 0.1127, 'argmin': 2, 'ok': True}},
+  'worst': 0.1127,
+  'ok': True
+}
+<span class="out-expr">dsg.steady_state_invariance(                    # uma invariância que é teorema do modelo</span>
+    lambda v: dsg.steady_state(meu, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
+    [0.5, 0.8, 0.95], ["k", "c"])["ok"]
+True</code></pre>
 
 
   <h3>8. Derivar as condições de primeira ordem (CPOs) do problema declarado</h3>
@@ -250,6 +316,11 @@ derivado = dsg.from_equations(
     foc["equations"] + ["log(a(+1)) = rho*log(a) + eps_a"],
     states=["k", "a"], jumps=foc["jumps"], shocks=["eps_a"],
     parameters=["alpha", "beta", "delta", "rho"])</code></pre>
+<pre class="output" data-label="Saída"><code>lm_1 + 1/c                                                    # FOC for control c
+lm_1 - lm_2                                                   # FOC for control i
+lm_2 - beta*lm_2(+1) + beta*delta*lm_2(+1) - a(+1)*alpha*beta*lm_1(+1)*k(+1)**alpha/k(+1)  # Euler equation for state k
+c + i - a*k**alpha                                            # constraint 1: c + i = a*k**alpha
+k(+1) - i - k*(1 - delta)                                     # constraint 2: k(+1) = (1-delta)*k + i</code></pre>
   <p>A equação de Euler de cada estado sai da derivada do lagrangiano do período seguinte em relação
   ao estado herdado. Condições de transversalidade, restrições de desigualdade e problemas cuja
   condição intertemporal não tem essa forma ficam a cargo do modelador. O pacote deriva as condições
@@ -262,6 +333,37 @@ derivado = dsg.from_equations(
 to.g_kkk, to.h_kkk        # os termos cúbicos
 to.accuracy()             # a ordem implícita tem de dar ~4
 to.simulate(periods=5000, seed=1)    # podada em três camadas</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">to.g_kkk, to.h_kkk</span>
+([[[[0.3779 -0.2304]
+   [-0.2304 6.34e-06]]
+
+  [[-0.2304 6.34e-06]
+   [6.34e-06 2.401e-05]]]], [[[[0.3779 -0.2304]
+   [-0.2304 -7.182e-06]]
+
+  [[-0.2304 -7.182e-06]
+   [-7.182e-06 -5.727e-05]]]
+
+
+ [[[0 0]
+   [0 -1.607e-08]]
+
+  [[0 -1.607e-08]
+   [-1.607e-08 0.04988]]]])
+<span class="out-expr">to.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [3.868e-09, 2.438e-10, 1.553e-11],
+  'ratios': [15.87, 15.7],
+  'implied_order': [3.988, 3.973],
+  'exact': False
+}
+<span class="out-expr">to.simulate(periods=5000, seed=1)</span>
+{
+  'k': [-0.0166 -0.005081 0.01319 ... 0.02347 0.02657 0.04173],
+  'a': [0.0009326 0.01505 0.006865 ... 0.01804 0.03194 0.03259],
+  'c': [-0.005081 0.01319 0.01163 ... 0.02657 0.04173 0.0479]
+}</code></pre>
   <div class="note"><p><strong>A terceira ordem deste pacote cobre o bloco cúbico e a inclinação
   do risco.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são verificados pela
   ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por dezesseis. Os
@@ -283,6 +385,8 @@ texto = dsg.to_dynare(simbolico, P(), steady=ss_sim, cov={"eps_a": 0.007},
 jl = dsg.to_macromodelling(simbolico, P(), cov={"eps_a": 0.007}, path="modelo.jl")
 
 "predetermined_variables k;" in texto     # a convenção temporal é traduzida automaticamente</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">"predetermined_variables k;" in texto</span>
+True</code></pre>
   <p>No dsgelab o estado em <em>t</em> é o <em>disponível</em> em <em>t</em>. No Dynare a variável
   predeterminada é a <em>decidida</em> em <em>t</em>. Uma conversão manual tem de traduzir uma
   convenção na outra. O exportador faz essa tradução e também escreve os processos exógenos um
@@ -305,6 +409,8 @@ r = dsg.solve(nk, pn, steady=ss_nk).irf("e", size=1.0, percent=False)
 
 x_lag = np.r_[0.0, r["x"][:-1]]
 abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() < 1e-12   # regra de metas</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() &lt; 1e-12</span>
+True</code></pre>
   <p>As condições do planejador são derivadas simbolicamente das equações do setor privado, e a
   função devolve um <code>Model</code> comum, com os multiplicadores e as suas defasagens como
   variáveis. A perspectiva é a atemporal, a mesma do <code>ramsey_model</code> do Dynare. No modelo
@@ -334,6 +440,10 @@ ot = dsg.osr(regra, dict(pn, phi_pi=1.5, phi_u=0.0), rule_params=["phi_pi", "phi
             weights={"pi": 1.0, "x": 0.25}, cov={"e": 0.01},
             guess=dict(u=0, x=0, pi=0, i=0))
 ot.loss < ot.initial_loss</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">w_disc &lt; w_comp &lt; 0</span>
+True
+<span class="out-expr">ot.loss &lt; ot.initial_loss</span>
+True</code></pre>
   <p>A política discricionária segue o algoritmo de Dennis (2007), o mesmo do
   <code>discretionary_policy</code> do Dynare, e reproduz a solução fechada de Galí para o modelo
   novo-keynesiano. A regra simples minimiza a perda
@@ -359,6 +469,10 @@ surpresa = dsg.perfect_foresight_with_expectation_errors(       # só se sabe em
 
 antecipada["c"][0] != ss_pf.values["c"]      # o consumo reage ao anúncio
 abs(surpresa["c"][0] - ss_pf.values["c"]) < 1e-12   # e não reage ao que ninguém sabe</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">antecipada["c"][0] != ss_pf.values["c"]</span>
+True
+<span class="out-expr">abs(surpresa["c"][0] - ss_pf.values["c"]) &lt; 1e-12</span>
+True</code></pre>
   <p>Um choque antecipado (um objeto <code>News</code>) é uma nova trajetória esperada de choques e
   parâmetros, com um novo estado estacionário terminal, e a cada um os agentes replanejam a partir
   dos estados já realizados. O método é o do
@@ -382,6 +496,12 @@ cadeia = dsg.metropolis_hastings(pb, moda, draws=1500, chains=2, seed=1)
 abs(moda.values["rho"] - 0.8) < 0.1
 max(cadeia.rhat().values()) < 1.05
 abs(cadeia.log_marginal_mhm() - moda.laplace) < 0.5</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">abs(moda.values["rho"] - 0.8) &lt; 0.1</span>
+True
+<span class="out-expr">max(cadeia.rhat().values()) &lt; 1.05</span>
+True
+<span class="out-expr">abs(cadeia.log_marginal_mhm() - moda.laplace) &lt; 0.5</span>
+True</code></pre>
   <p>O <code>EstimationProblem</code> junta o modelo, os dados, as distribuições a priori e os
   observáveis. Essas distribuições seguem as do Dynare, definidas por média e desvio-padrão. Os
   observáveis podem estar em nível ou em log, ter erro de medida e ter dados faltantes. A partir do
@@ -409,6 +529,10 @@ ob = dsg.occbin_simulate(credito, pc, {"u": {2: 0.06}}, periods=40,
 
 ob.binding["folga"].any()                                   # a renda alta afrouxa o limite
 max(abs(ob.piecewise["lam"][ob.binding["folga"]])) &lt; 1e-14  # e o multiplicador vai a zero</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ob.binding["folga"].any()</span>
+True
+<span class="out-expr">max(abs(ob.piecewise["lam"][ob.binding["folga"]])) &lt; 1e-14</span>
+True</code></pre>
   <p>Cada regime é linearizado no estado estacionário de referência, com o seu resíduo como
   constante. Dadas as datas em que cada restrição vale, a trajetória segue regras que variam no
   tempo, calculadas de trás para a frente, e a conjectura inicial sobre essas datas é revista pela regra do
@@ -431,6 +555,8 @@ ep = dsg.extended_path(arvore, ss_a, pa, sorteio, horizon=60)                 # 
 sep = dsg.extended_path(arvore, ss_a, pa, sorteio, horizon=60, order=1,       # risco do próximo período
                        cov=[[0.0348**2]])
 bool((sep["y"][1:] &gt; ep["y"][1:]).all())       # com theta &lt; 0, o risco encarece a árvore</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">bool((sep["y"][1:] &gt; ep["y"][1:]).all())</span>
+True</code></pre>
   <p>A cada período chega o choque, calculam-se os estados a que ele leva e os agentes resolvem um
   problema não linear que alcança o estado estacionário <code>horizon</code> períodos depois. Com
   <code>order</code> &gt; 0 os choques dos próximos períodos são integrados por quadratura de
@@ -458,6 +584,12 @@ rbc_h = dsg.from_equations(
     states=["k"], jumps=["c"], shocks=[], parameters=["alpha", "beta", "delta"])
 ss_h = dsg.steady_state(rbc_h, dict(k=30, c=2), dict(alpha=0.33, beta=0.99, delta=0.9),
                        homotopy={"delta": (0.02, 0.9)})   # a conjectura inicial serve para delta = 0,02</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">rbc_cal.auxiliary</span>
+{'LAG1_q': ('lag', 'q')}
+<span class="out-expr">abs(ss_cal.calibrated["beta"] - 1/(0.33/10 + 1 - 0.025)) &lt; 1e-12</span>
+True
+<span class="out-expr">dsg.diagnose(rbc_cal, ss_cal.params, ss_cal.values)["ok"]</span>
+True</code></pre>
   <p>Um estado estacionário em forma fechada (<code>steady_state_model</code>, aqui ou num
   <code>.mod</code>) só é usado depois de conferido com as equações, e é recusado, como no
   Dynare, se não as zera. <code>dsg.assemble</code> junta os problemas de vários agentes e as condições de
@@ -484,6 +616,10 @@ solow = dsg.from_equations(
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
+True</code></pre>
   <p>Num <code>.mod</code> escrito em níveis, as variáveis declaradas com <code>trend_var</code> e
   <code>var(deflator=)</code> são destendenciadas como no Dynare, e uma equação que continue
   dependendo do nível da tendência é recusada. <code>balanced_growth</code> calcula os fatores de
@@ -503,6 +639,24 @@ bad.identified                                      # False
 bad["moments"].rank, bad["moments"].required        # (2, 3)
 bad["moments"].dependent                            # [('r1', 'r2')]
 print(bad.summary())</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ident.identified</span>
+True
+<span class="out-expr">bad.identified</span>
+False
+<span class="out-expr">bad["moments"].rank, bad["moments"].required</span>
+(2, 3)
+<span class="out-expr">bad["moments"].dependent</span>
+[('r1', 'r2')]
+Local identification of 3 parameters from 1 observable (y)
+  moments (Iskrev 2010)                    rank 2 of 3: NOT identified  (condition 22.5)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2
+  spectrum (Qu and Tkachenko 2012)         rank 2 of 3: NOT identified  (condition 2.22e+15)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2
+  minimal system (Komunjer and Ng 2011)    rank 4 of 5: NOT identified  (condition 1.06e+13)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2</code></pre>
   <p><code>identification</code> verifica, num ponto, se a distribuição das séries observadas
   determina os parâmetros livres, com os três critérios do comando <code>identification</code> do
   Dynare: as derivadas dos momentos (Iskrev), do espectro (Qu e Tkachenko) e de um espaço de
@@ -520,6 +674,10 @@ hp = s_rbc.moments(cov={"eps_a": 0.007}, lags=1, hp_filter=1600)
 bp = s_rbc.moments(cov={"eps_a": 0.007}, bandpass=(6, 32))
 plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]   # 0,034, 0,013, 0,012
 hp["autocorr"][1]["c"]                                                        # 0,84</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]</span>
+(0.03432, 0.01261, 0.01216)
+<span class="out-expr">hp["autocorr"][1]["c"]</span>
+0.8422</code></pre>
   <p><code>hp_filter</code> dá os momentos do ciclo de Hodrick–Prescott e <code>bandpass</code> os
   dos ciclos entre duas durações, como o <code>stoch_simul</code> do Dynare os calcula, a partir da
   densidade espectral da solução. Os mesmos argumentos valem para <code>covariance</code> e

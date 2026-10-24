@@ -53,6 +53,13 @@ Work toward milestone 0.6 (identification, moments and data).
   2.2e-07, in Ghironi–Melitz, whose Dynare steady state leaves a residual of 2e-08. Sources
   are pinned by commit and SHA-256; the site documents the scope and limits of each comparison.
 
+### Changed
+
+- The site shows, under each example, what it prints and the value of each expression on a line
+  of its own. `tools/check_site_examples.py --write` writes that output, and the check fails
+  when the page no longer matches the code. Table cells wrap their text, so the comparison
+  table no longer runs off the page.
+
 ## 0.5.0 — 2026-10-18
 
 The roadmap's milestone 0.5, the public release. No new solver features.
