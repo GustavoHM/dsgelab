@@ -78,7 +78,10 @@ def show(value) -> str:
         frame, series = pd.DataFrame, pd.Series
     except ImportError:                       # dsgelab does not depend on pandas
         frame = series = ()
-    if isinstance(value, (bool, np.bool_)):
+    if isinstance(value, Path):
+        # Cache roots and path flavours differ between the reader's machine and CI.
+        text = f"Path({value.name!r})"
+    elif isinstance(value, (bool, np.bool_)):
         text = str(bool(value))
     elif isinstance(value, numbers.Integral):
         text = str(int(value))
@@ -124,7 +127,14 @@ def execute(src: str, ns: dict, label: str) -> str:
 
 
 def same(a: str, b: str) -> bool:
-    """Equal text, and numbers equal to a tolerance; runs of white space count as one."""
+    """Equal text, and numbers equal to a tolerance; runs of white space count as one.
+
+    Condition numbers can change substantially with the BLAS/LAPACK implementation without
+    changing the identified rank. Check the rest of that diagnostic, but not its exact value.
+    """
+    condition = r"(condition\s+)" + NUMBER.pattern
+    a = re.sub(condition, r"\1<platform-dependent>", a)
+    b = re.sub(condition, r"\1<platform-dependent>", b)
     a, b = " ".join(a.split()), " ".join(b.split())
     if NUMBER.split(a) != NUMBER.split(b):
         return False
