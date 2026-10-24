@@ -598,6 +598,60 @@ when the moments have full rank. In kim2 the columns of `phi` and `theta` are co
 error, and a regression of `alph` on both measures that error: Dynare finds a cosine of 0.79 for
 the pair and `dsgelab` keeps `theta` alone, at 0.72, because the second regressor only adds noise.
 
+## Method of moments
+
+```bash
+bash fetch.sh
+bash run_mom.sh                  # first-order GMM and SMM, eight cases
+python compare_mom.py
+```
+
+```
+case            differences at Dynare's estimate (est.: own optimum; checked for SMM_e5)
+  anscho_GMM_0    data 2.5e-16  model 1.4e-14  est. 0.0e+00  Q 2.4e-14  s.e. 2.1e-08  J 2.4e-14  OK
+  anscho_SMM_0    data 2.5e-16  model 1.5e-14  est. 0.0e+00  Q 2.2e-14  s.e. 3.5e-09  J 2.2e-14  OK
+  anscho_GMM_4    data 2.5e-16  model 1.1e-14  est. 9.2e-01  Q 1.9e-15  s.e. skip  J 1.9e-15  OK
+  anscho_SMM_4    data 2.5e-16  model 9.6e-15  est. 8.1e-01  Q 1.2e-14  s.e. skip  J 1.2e-14  OK
+  anscho_GMM_d1   data 2.0e-16  model 2.3e-14  est. 7.9e-01  Q 5.2e-14  s.e. skip  J 5.1e-14  OK
+  anscho_SMM_d1   data 2.0e-16  model 2.4e-14  est. 6.5e-01  Q 1.3e-13  s.e. skip  J 1.3e-13  OK
+  anscho_GMM_e5   data 2.0e-16  model 4.3e-14  est. 2.8e-02  Q 2.1e-13  s.e. skip  J 2.1e-13  OK
+  anscho_SMM_e5   data 2.0e-16  model 1.1e-14  est. 2.3e-06  Q 2.3e-14  s.e. 4.9e-05  J 2.3e-14  OK
+```
+
+The model is An and Schorfheide (2007), from Dynare 7.2's `method_of_moments` tests. The cases
+cover GMM and SMM at the starting point and after optimization, two datasets and eight or five
+estimated parameters, including shock standard deviations and a shock correlation. SMM uses the
+same shock series as Dynare. Data and model moments, the objective and J are compared at Dynare's
+estimate, with Dynare's exported final weighting matrix. The estimate column is diagnostic:
+`csminwel` and `scipy.optimize.least_squares` can stop at different local optima. In the
+well-conditioned five-parameter SMM case, the complete estimates agree to `2.3e-6` and the
+standard errors to `4.9e-5`.
+
+For `c = 1 + 1/simulation_multiple`, the SMM covariance has a factor `c` and J a factor `1/c`.
+Dynare 7.2 omits `c` from its standard errors and multiplies J by `c`. The comparison therefore
+multiplies Dynare's standard errors by `sqrt(c)` and divides its J by `c^2`. Standard errors are
+checked in the two starting-point cases and in the complete five-parameter SMM estimation.
+
+### IRF matching and external targets
+
+```bash
+bash run_irf.sh                  # Dynare's frequentist RBC example, initial point and estimation
+python compare_irf.py
+```
+
+```
+  rbc_irf_0  data 0.0e+00  model 3.4e-14  W 0.0e+00  Q 2.9e-16  H 2.9e-06  s.e. 0.0e+00  est. 0.0e+00  OK
+  rbc_irf_5  data 0.0e+00  model 5.7e-15  W 0.0e+00  Q 1.7e-14  H 2.0e-05  s.e. 6.6e-05  est. 1.3e-05  OK
+```
+
+The example exercises sparse targets, vector expansion, the `varobs`/MATLAB ordering and diagonal
+weights. The comparison checks data and model IRFs, W, Q and the Hessian of Q/2 at the same point;
+the complete estimates differ by `1.3e-5` and the standard errors by `6.6e-5`. At the initial point
+Dynare reports imaginary standard errors from an indefinite Hessian; `dsgelab` reports `NaN` instead.
+The unit tests also cover cross-weights, correlated shocks, a non-diagonal external covariance and
+local projections. On 120,000 simulated AR(1) observations, the local projections recover the
+model's responses through horizon 10 to `0.012` in absolute error, with their joint HAC covariance.
+
 ## Filtered moments
 
 ```bash

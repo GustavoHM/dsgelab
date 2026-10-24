@@ -105,6 +105,8 @@ examples in English and Portuguese.
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
 | Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
+| First-order GMM, SMM and frequentist IRF matching, with `.mod` blocks and external target covariance | `method_of_moments`, `irf_matching`, the `ModFile` methods |
+| Observed-shock local projections with joint HAC covariance across variables and horizons | `local_projection` |
 | Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
@@ -203,8 +205,8 @@ impulse response, announced parameter paths and the Blanchard–Kahn check, and 
 MacroModelling.jl has no round trip. The checks come in three layers.
 
 The first layer is the test suite (`pytest`), which compares the output with answers known
-analytically. It has 148 tests. Of these, 65 need the `symbolic` extra (sympy) and 15 the
-Heutel files from `heutel.fetch()`, and without those files a run gives 137 passed and 11
+analytically. The full suite currently has 179 tests. Some need the `symbolic` extra (sympy)
+or the Heutel files from `heutel.fetch()`; tests requiring unavailable optional files are
 skipped. Among the closed forms it checks are the following.
 
 - The RBC with log utility and full depreciation has the solution `P = [[α, 1], [0, ρ]]` and
@@ -234,8 +236,9 @@ runs Dynare's own example and test `.mod` files in Octave with Dynare, thirteen 
 four published-model files from Johannes Pfeifer's DSGE_mod, and one calibration in
 MacroModelling.jl. Each result is compared with `dsgelab`'s, for steady states, impulse
 responses, moments, optimal policy, perfect foresight, estimation, OccBin, the extended path,
-balanced growth, identification and diagnostics. The same folder checks the port of Heutel (2012) against
-Heutel's own code. `bash validation/run_all.sh` runs all of it, and CI runs it weekly.
+balanced growth, identification, diagnostics, GMM/SMM and IRF matching. The same folder checks
+the port of Heutel (2012) against Heutel's own code. `bash validation/run_all.sh` runs all of
+it, and CI runs it weekly.
 
 The third layer is one comparison on an applied model from an unpublished paper by the author.
 That model is not public, so the comparison cannot be rerun from the repository. Of the three
@@ -259,20 +262,23 @@ planned.
 - **Identification is local, at one point.** Dynare's repetition of the analysis over draws
   from the prior (`prior_mc`), its identification strength from the information matrix and its
   plots are not reproduced.
-- **No global sensitivity or method of moments** (Dynare's `+gsa`, `+mom`).
+- **No global sensitivity analysis** (Dynare's `+gsa`).
+- **The method-of-moments routes are first order.** IRF matching is frequentist, and MATLAB
+  `irf_matching_file` transformations are not executed; pass an explicit Python `transform=`
+  instead.
 - **Global methods are limited** to Chebyshev collocation with up to three states. There is no
   value or time iteration, endogenous grid, sparse grid, or Tauchen/Rouwenhorst discretisation.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
 - **No plotting.** Results are arrays and dictionaries, and plotting is left to the user.
 - **The extended path's hybrid correction stops at second order.**
 - **Trends can be declared only in a `.mod` file.** `from_equations` does not accept them yet.
-- **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul`,
-  `estimation` or `identification` are skipped, and their options are not applied
-  (`ModFile.identification` takes them as arguments). In the
-  model block, the constructs the reader cannot translate (`@#include`, `@#for`, `varexo_det`,
-  leads of a shock, `expectation`, `diff`, `adl`, external functions) are refused with an
-  error that quotes the line containing them. Coverage is validated on the Dynare examples and
-  tests listed in `validation/`.
+- **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul` and
+  `estimation` are skipped, and their options are not applied. The dedicated routes
+  `ModFile.identification`, `ModFile.method_of_moments` and `ModFile.irf_matching` read their
+  respective blocks and accept explicit arguments. In the model block, the constructs the
+  reader cannot translate (`@#include`, `@#for`, `varexo_det`, leads of a shock, `expectation`,
+  `diff`, `adl`, external functions) are refused with an error that quotes the line containing
+  them. Coverage is validated on the Dynare examples and tests listed in `validation/`.
 
 ## Related package
 

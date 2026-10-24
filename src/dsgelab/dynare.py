@@ -63,6 +63,8 @@ if TYPE_CHECKING:
     from .extended_path import ExtendedPath
     from .foresight import News
     from .identification import Identification
+    from .irf_matching import IRFMatchingResult
+    from .moment_estimation import MomentsResult
     from .kalman import Data
     from .occbin import OccbinModel, OccbinResult
 
@@ -162,7 +164,8 @@ _BLOCKS = {"occbin_constraints", "homotopy_setup", "osr_params_bounds", "model",
            "estimated_params", "estimated_params_init", "estimated_params_bounds",
            "estimated_params_remove", "observation_trends", "optim_weights", "homotopy_setup",
            "conditional_forecast_paths", "irf_calibration", "moment_calibration", "verbatim",
-           "filter_initial_state", "matched_moments", "deterministic_trends",
+           "filter_initial_state", "matched_moments", "matched_irfs", "matched_irfs_weights",
+           "deterministic_trends",
            "occbin_constraints", "model_replace", "model_remove", "perfect_foresight_controlled_paths",
            "shock_groups", "init2shocks", "generate_irfs", "epilogue", "pac_target_info",
            "heteroskedastic_shocks", "steady_state_model", "planner_objective_block"}
@@ -369,6 +372,103 @@ def _numeric(sympy, text: str, env: Mapping[str, float], funcs):
     return float(expr)
 
 
+def _numeric_vector(sympy, text: str, env: Mapping, funcs) -> list[float]:
+    """Read the numeric vectors used by matched_irfs, including MATLAB ranges."""
+    t = text.strip()
+    if t.startswith("(") and t.endswith(")"):
+        t = t[1:-1].strip()
+    if t in env and not np.isscalar(env[t]):
+        return [float(v) for v in np.asarray(env[t], dtype=float).ravel()]
+    bracketed = t.startswith("[") and t.endswith("]")
+    if bracketed:
+        t = t[1:-1].strip()
+    parts, cur, depth = [], "", 0
+    for ch in t + (" " if bracketed or "," not in t else ","):
+        depth += ch == "("
+        depth -= ch == ")"
+        if depth == 0 and (ch == "," or (ch.isspace() and (bracketed or "," not in t))):
+            if cur.strip():
+                parts.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    if not parts:
+        parts = [t]
+    out: list[float] = []
+    for part in parts:
+        bare = part[1:-1].strip() if part.startswith("(") and part.endswith(")") else part
+        if bare in env and not np.isscalar(env[bare]):
+            out.extend(float(v) for v in np.asarray(env[bare], dtype=float).ravel())
+            continue
+        bits = part.split(":")
+        if len(bits) in (2, 3):
+            nums = [_numeric(sympy, b, env, funcs) for b in bits]
+            start, stop = nums[0], nums[-1]
+            step = nums[1] if len(bits) == 3 else 1.0
+            if step == 0:
+                raise ValueError("a MATLAB range cannot have zero step")
+            count = max(0, int(math.floor((stop - start) / step)) + 1)
+            out.extend(start + i * step for i in range(count))
+        else:
+            out.append(_numeric(sympy, part, env, funcs))
+    return out
+
+
+def _read_irf_blocks(body, weight_body, sympy, env, funcs):
+    """Translate matched_irfs and matched_irfs_weights into numeric dictionaries."""
+    entries, cur = [], None
+    for st in body:
+        keyword, _, rest = st.partition(" ")
+        keyword, rest = keyword.strip(), rest.strip()
+        if keyword == "var":
+            cur = dict(variable=rest, shock=None, periods=None, values=None, weights=[1.0])
+            entries.append(cur)
+        elif cur is None or keyword not in ("varexo", "periods", "values", "weights"):
+            raise DynareImportError(f"matched_irfs: cannot read {st!r}")
+        elif keyword == "varexo":
+            cur["shock"] = rest
+        else:
+            cur[keyword] = _numeric_vector(sympy, rest, env, funcs)
+    for e in entries:
+        if e["shock"] is None or e["periods"] is None or e["values"] is None:
+            raise DynareImportError("matched_irfs: every var needs varexo, periods and values")
+        for key in ("values", "weights"):
+            # Dynare's preprocessor pads a shorter vector with its last entry;
+            # matched_irfs_blocks only sees the expanded vector.
+            if 0 < len(e[key]) < len(e["periods"]):
+                e[key] += [e[key][-1]] * (len(e["periods"]) - len(e[key]))
+            if len(e[key]) != len(e["periods"]):
+                raise DynareImportError(f"matched_irfs: periods and {key} have different lengths")
+    crosses, cur = [], {}
+    for st in weight_body:
+        keyword, _, rest = st.partition(" ")
+        keyword, rest = keyword.strip(), rest.strip()
+        if keyword not in ("var", "varexo", "periods", "weights"):
+            raise DynareImportError(f"matched_irfs_weights: cannot read {st!r}")
+        if keyword == "weights":
+            cur["weights"] = _numeric_vector(sympy, rest, env, funcs)
+            crosses.append(cur)
+            cur = {}
+            continue
+        count = cur.get("_counts", {}).get(keyword, 0) + 1
+        cur.setdefault("_counts", {})[keyword] = count
+        if count > 2:
+            raise DynareImportError("matched_irfs_weights: only two IRFs per entry")
+        value = rest if keyword in ("var", "varexo") else _numeric_vector(sympy, rest, env, funcs)
+        cur[f"{keyword}{count}"] = value
+    if cur:
+        raise DynareImportError("matched_irfs_weights: entry without weights")
+    for e in crosses:
+        if len(e["periods1"]) != len(e["periods2"]):
+            raise DynareImportError("matched_irfs_weights: horizons have different lengths")
+        if len(e["weights"]) == 1 and len(e["periods1"]) > 1:
+            e["weights"] *= len(e["periods1"])
+        if len(e["weights"]) != len(e["periods1"]):
+            raise DynareImportError("matched_irfs_weights: horizons and weights differ")
+        e.pop("_counts", None)
+    return entries, crosses
+
+
 # -------------------------------------------------------------------- result
 @dataclass
 class ModFile:
@@ -419,6 +519,10 @@ class ModFile:
     trends: dict = field(default_factory=dict)
     varobs: list = field(default_factory=list)
     estimation_options: dict = field(default_factory=dict)
+    matched_moments: list = field(default_factory=list)
+    matched_irfs: list = field(default_factory=list)
+    matched_irfs_weights: list = field(default_factory=list)
+    mom_options: dict = field(default_factory=dict)
     program: dict = field(default_factory=dict, repr=False)
 
     def full_guess(self, values: Mapping[str, float] | None = None) -> dict:
@@ -662,6 +766,112 @@ class ModFile:
         kw.update(kwargs)
         return identification(self.model, params, **kw)
 
+    def method_of_moments(self, data: Data, method: str = "GMM", *,
+                          moments: Sequence[str] | None = None, **kwargs: Any) -> MomentsResult:
+        """:func:`dsgelab.method_of_moments` of the ``estimated_params``, on ``varobs``.
+
+        The estimated names, their starting values and their bounds come from
+        ``estimated_params`` (a missing starting value is the calibration, as with
+        ``estimated_params_init(use_calibration)``), the moments from the
+        ``matched_moments`` block, and the steady state from the file. ``kwargs``
+        go to :func:`~dsgelab.method_of_moments` and override anything.
+        """
+        from .moment_estimation import method_of_moments
+
+        if not self.estimated:
+            raise DynareImportError("this .mod has no estimated_params block")
+        if not self.varobs:
+            raise DynareImportError("this .mod has no varobs")
+        moments = list(moments if moments is not None else self.matched_moments)
+        if not moments:
+            raise DynareImportError("no matched_moments block: pass moments=")
+        sd = {e: float(np.sqrt(self.cov[i, i])) for i, e in enumerate(self.exogenous)}
+        S = np.array(self.cov, dtype=float)
+        start, bounds = {}, {}
+        for e in self.estimated:
+            if e["kind"] == "param":
+                cal = self.params.get(e["target"], np.nan)
+            elif e["kind"] == "stderr":
+                cal = sd.get(e["target"], np.nan)
+            else:
+                i, j = (self.exogenous.index(x) for x in e["target"])
+                cal = S[i, j] / np.sqrt(S[i, i] * S[j, j]) if S[i, i] * S[j, j] > 0 else 0.0
+            start[e["name"]] = e["init"] if np.isfinite(e["init"]) else cal
+            lo = e["lower"] if np.isfinite(e["lower"]) else -np.inf
+            hi = e["upper"] if np.isfinite(e["upper"]) else np.inf
+            bounds[e["name"]] = (lo, hi)
+        cov = np.zeros((len(self.model.shocks),) * 2)
+        order = [self.model.shocks.index(e) for e in self.exogenous]
+        cov[np.ix_(order, order)] = S
+        kw: dict[str, Any] = dict(params=dict(self.params), free=start, bounds=bounds,
+                                  observables=list(self.varobs), moments=moments,
+                                  method=method, cov=cov,
+                                  steady_fn=lambda p: self.steady_state(params=p))
+        kw.update(kwargs)
+        return method_of_moments(self.model, data, **kw)
+
+    def irf_matching(self, *, targets: Sequence[Sequence] | None = None,
+                     **kwargs: Any) -> IRFMatchingResult:
+        """:func:`dsgelab.irf_matching` from this file's estimation and IRF blocks.
+
+        The frequentist first-order command is supported. ``kwargs`` override the
+        imported targets, weighting and options; external targets can therefore
+        replace the block without changing the model.
+        """
+        from .irf_matching import _targets, irf_matching
+
+        if not self.estimated:
+            raise DynareImportError("this .mod has no estimated_params block")
+        if any(e["prior"] is not None for e in self.estimated):
+            raise DynareImportError("Bayesian IRF matching is not supported; use a frequentist block")
+        if self.mom_options.get("order", "1") not in ("", "1"):
+            raise DynareImportError("IRF matching currently supports order=1 only")
+        if self.mom_options.get("irf_matching_file") and "transform" not in kwargs:
+            raise DynareImportError("a MATLAB irf_matching_file is not executed; pass transform=")
+        sd = {e: float(np.sqrt(self.cov[i, i])) for i, e in enumerate(self.exogenous)}
+        S = np.array(self.cov, dtype=float)
+        start, bounds = {}, {}
+        for e in self.estimated:
+            if e["kind"] == "param":
+                cal = self.params.get(e["target"], np.nan)
+            elif e["kind"] == "stderr":
+                cal = sd.get(e["target"], np.nan)
+            else:
+                i, j = (self.exogenous.index(x) for x in e["target"])
+                cal = S[i, j] / np.sqrt(S[i, i] * S[j, j]) if S[i, i] * S[j, j] > 0 else 0.0
+            start[e["name"]] = e["init"] if np.isfinite(e["init"]) else cal
+            bounds[e["name"]] = (e["lower"] if np.isfinite(e["lower"]) else -np.inf,
+                                 e["upper"] if np.isfinite(e["upper"]) else np.inf)
+        cov = np.zeros((len(self.model.shocks),) * 2)
+        order = [self.model.shocks.index(e) for e in self.exogenous]
+        cov[np.ix_(order, order)] = S
+        if targets is None:
+            rows = []
+            for entry in self.matched_irfs:
+                rows += [(entry["variable"], entry["shock"], h, v, w)
+                         for h, v, w in zip(entry["periods"], entry["values"], entry["weights"])]
+            targets = rows
+        if not targets:
+            raise DynareImportError("no matched_irfs block: pass targets=")
+        canonical, _, diagonal, _ = _targets(targets, self.model, self.varobs)
+        W = np.diag(diagonal)
+        where = {(v, e, h): i for i, (v, e, h, _) in enumerate(canonical)}
+        for cross in self.matched_irfs_weights:
+            for h1, h2, w in zip(cross["periods1"], cross["periods2"], cross["weights"]):
+                key1 = (cross["var1"], cross["varexo1"], int(h1))
+                key2 = (cross["var2"], cross["varexo2"], int(h2))
+                if key1 not in where or key2 not in where:
+                    raise DynareImportError("a matched_irfs_weights entry names no declared target")
+                i, j = where[key1], where[key2]
+                W[i, j] = W[j, i] = w
+        kw: dict[str, Any] = dict(params=dict(self.params), free=start, bounds=bounds,
+                                  observables=list(self.varobs), cov=cov, weighting=W,
+                                  relative_irf=("relative_irf" in self.mom_options and
+                                                self.mom_options["relative_irf"] in ("", "1", "true")),
+                                  steady_fn=lambda p: self.steady_state(params=p))
+        kw.update(kwargs)
+        return irf_matching(self.model, targets, **kw)
+
     def steady_state(self, guess: Mapping[str, float] | None = None,
                      params: dict[str, float] | None = None, *,
                      analytic: bool = False, **kwargs: Any) -> SteadyState:
@@ -834,7 +1044,10 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
     ssm, initval, shocks, histval_body = [], [], [], []
     planner_text, policy_cmd, policy_opts = None, None, {}
     osr_params_list, weights_body, bounds_body = [], [], []
-    estim_body, varobs, estim_opts = [], [], {}
+    estim_body, varobs, estim_opts, mom_opts = [], [], {}, {}
+    matched_body: list[str] = []
+    irf_body: list[str] = []
+    irf_weights_body: list[str] = []
     homotopy_body = []
     deflators: dict = {}
     trend_vars: dict = {}
@@ -844,8 +1057,8 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
     i = 0
     while i < len(stmts):
         st = stmts[i]
-        word = re.match(r"[A-Za-z_]\w*", st)
-        word = word.group(0) if word else ""
+        word_match = re.match(r"[A-Za-z_]\w*", st)
+        word = word_match.group(0) if word_match else ""
         head, opts = _head(st)
         if head in _BLOCKS and head == word:
             j = i + 1
@@ -874,6 +1087,14 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
                 bounds_body = body
             elif head == "estimated_params":
                 estim_body = body
+            elif head == "matched_moments":
+                matched_body = [" ".join(b.split()) for b in body]
+            elif head == "matched_irfs":
+                irf_body = [] if "overwrite" in _csv(opts) else irf_body
+                irf_body += [" ".join(b.split()) for b in body]
+            elif head == "matched_irfs_weights":
+                irf_weights_body = [] if "overwrite" in _csv(opts) else irf_weights_body
+                irf_weights_body += [" ".join(b.split()) for b in body]
             elif head == "homotopy_setup":
                 homotopy_body = body
             elif head == "occbin_constraints":
@@ -914,6 +1135,8 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
             varobs += _declared(st, "varobs")
         elif word == "estimation":
             estim_opts = _options(st[len(word):])
+        elif word == "method_of_moments":
+            mom_opts = _options(st[len(word):])
         elif word in ("occbin_setup", "occbin_solver"):
             occbin_opts.update(_options(st[len(word):]))
         elif word == "osr":
@@ -943,12 +1166,15 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
     # Dynare passes an assignment to an undeclared name through as MATLAB; the
     # examples use it for a constant read in the shocks block (example1's phi).
     pvals: dict[str, float] = {p_: float("nan") for p_ in params}
-    matlab: dict[str, float] = {}
+    matlab: dict[str, Any] = {}
     for pname, expr in param_text:
         try:
             val = _numeric(sympy, expr, {**matlab, **pvals}, funcs)
         except Exception:
-            val = float("nan")
+            try:
+                val = _numeric_vector(sympy, expr, {**matlab, **pvals}, funcs)
+            except Exception:
+                val = float("nan")
         (pvals if pname in pvals else matlab)[pname] = val
 
     # --- model equations (an OccBin equation has variants, tagged bind=/relax=)
@@ -1220,9 +1446,13 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
         bounds[parts[0]] = (_numeric(sympy, parts[1], env_all, funcs),
                             _numeric(sympy, parts[2], env_all, funcs))
 
+    matched_irfs, matched_irfs_weights = _read_irf_blocks(
+        irf_body, irf_weights_body, sympy, env_all, funcs)
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    estimated=estimated, varobs=varobs, estimation_options=estim_opts,
+                   matched_moments=matched_body, matched_irfs=matched_irfs,
+                   matched_irfs_weights=matched_irfs_weights, mom_options=mom_opts,
                    homotopy=homotopy, occbin=occbin, surprise=surprise,
                    trends=dict(deflators=dict(deflators), trend_vars=dict(trend_vars)),
                    program=program,

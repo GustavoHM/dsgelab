@@ -33,6 +33,9 @@ from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
 from .bgp import BalancedGrowth, balanced_growth
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .identification import Identification, IdentificationCheck, identification
+from .irf_matching import IRFMatchingResult, irf_matching
+from .local_projection import LocalProjectionResult, local_projection
+from .moment_estimation import MomentsResult, method_of_moments
 from .foresight import News, TransitionPath, perfect_foresight, perfect_foresight_with_expectation_errors
 from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
@@ -81,6 +84,8 @@ __all__ = [
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",
+    "method_of_moments", "MomentsResult", "irf_matching", "IRFMatchingResult",
+    "local_projection", "LocalProjectionResult",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance", "diagnose",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",

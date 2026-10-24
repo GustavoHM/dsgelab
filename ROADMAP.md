@@ -240,7 +240,13 @@ warning that lasts at least one minor version. The public API is what is in `__a
   from the information matrix and its plots are left out.
 - [ ] **Global sensitivity**, covering the stability and determinacy region in the parameter space
   and Monte Carlo filtering. The reference is Dynare's `+gsa`.
-- [ ] **Method of moments** (GMM, SMM and IRF matching). Validation against Dynare's `+mom`.
+- [x] **Method of moments** (GMM, SMM and IRF matching), at first order. Validated against
+  Dynare 7.2's `+mom` in eight GMM/SMM cases and two IRF-matching cases (24 October 2026).
+  IRF matching is frequentist and accepts external targets, including local projections or
+  event studies, with their joint covariance. `local_projection` supplies observed-shock IRFs
+  and a joint HAC covariance; on simulated AR(1) data it recovers the model's IRFs in population
+  (Plagborg-Møller and Wolf, 2021). Bayesian IRF matching and MATLAB transformation files are
+  left out; Python transformations are accepted explicitly.
 - [ ] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`).
 - [x] **Filtered theoretical moments** (Hodrick–Prescott and band-pass), with `hp_filter` and
   `bandpass` in `moments`, `covariance` and `variance_decomposition`. Validated against Dynare's

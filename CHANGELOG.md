@@ -30,6 +30,21 @@ Work toward milestone 0.6 (identification, moments and data).
   and `as2007` from its tests and on `fs2000`. Ranks, sensitive, dependent and weak
   parameters are Dynare's under both tolerances, and the derivatives of the moments and the
   spectrum agree within 2e-8.
+- `method_of_moments` and `ModFile.method_of_moments`: first-order GMM and SMM with
+  identity, diagonal or Newey--West optimal weighting, iterated stages, standard errors and
+  Hansen's J test. SMM uses fixed simulation draws and applies the `1 + 1/simulation_multiple`
+  variance correction. `matched_moments` and `estimated_params` are read from the `.mod`.
+- `irf_matching` and `ModFile.irf_matching`: frequentist first-order IRF matching with sparse
+  targets, full or diagonal weights, correlated shocks and the inverse Hessian covariance.
+  External targets carry their joint covariance; its inverse is the default efficient weight.
+  The importer reads `matched_irfs` and `matched_irfs_weights`, including numeric ranges and
+  vector expansion. MATLAB `irf_matching_file` scripts are not executed; a Python `transform`
+  can be supplied explicitly.
+- `local_projection`: observed-shock local projections with a joint Bartlett-HAC covariance
+  across variables and horizons. `LocalProjectionResult.targets()` returns targets and their
+  covariance in the order accepted by `irf_matching`.
+- `validation/compare_mom.py` and `validation/compare_irf.py`: eight GMM/SMM cases and two
+  IRF-matching cases against Dynare 7.2, at common parameter points and after estimation.
 - Moments of filtered variables: `hp_filter=lambda` (the Hodrick-Prescott cycle) and
   `bandpass=(shortest, longest)` (the ideal band-pass filter) in `FirstOrderSolution.moments`,
   `covariance` and `variance_decomposition`, as Dynare's `stoch_simul` options of the same

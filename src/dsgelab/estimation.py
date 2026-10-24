@@ -47,16 +47,23 @@ def unpack_point(model: Model, params: Params, cov: Covariance,
                  theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
     """``(params, shock covariance, measurement sds)`` with ``names`` set to ``theta``.
 
-    A name is a parameter, ``"stderr e"`` for a shock or ``"stderr y"`` for the
-    measurement error on an observable. A shock's new standard deviation rescales
-    its row and column of ``cov``, so its correlations with the other shocks stay.
+    A name is a parameter, ``"stderr e"`` for a shock, ``"stderr y"`` for the
+    measurement error on an observable, or ``"corr e1, e2"`` for the correlation of
+    two shocks. A shock's new standard deviation rescales its row and column of
+    ``cov``, so its correlations with the other shocks stay; a correlation is set
+    after the standard deviations.
     """
     from .solution import shock_covariance
     theta = np.asarray(theta, dtype=float)
-    updates, sds = {}, {}
+    updates, sds, corrs = {}, {}, {}
     meas = dict(measurement)
     for n, v in zip(names, theta):
-        if n.startswith("stderr "):
+        if n.startswith("corr "):
+            pair = tuple(x.strip() for x in n[5:].split(","))
+            if len(pair) != 2 or not all(e in model.shocks for e in pair):
+                raise KeyError(f"{n!r}: name two shocks, as 'corr e1, e2'")
+            corrs[pair] = float(v)
+        elif n.startswith("stderr "):
             target = n[7:]
             if target in model.shocks:
                 sds[target] = float(v)
@@ -76,6 +83,9 @@ def unpack_point(model: Model, params: Params, cov: Covariance,
             S[:, i] *= v / old
         else:
             S[i, i] = v * v
+    for (a, b), rho in corrs.items():
+        i, j = model.shocks.index(a), model.shocks.index(b)
+        S[i, j] = S[j, i] = rho * math.sqrt(S[i, i] * S[j, j])
     return p, S, meas
 
 

@@ -253,7 +253,13 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   pela matriz de informação e os gráficos do Dynare.
 - [ ] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
   parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare.
-- [ ] **Método dos momentos** (GMM, SMM e ajuste de IRF). Validação contra o `+mom` do Dynare.
+- [x] **Método dos momentos** (GMM, SMM e ajuste de IRF), em primeira ordem. Validado contra
+  o `+mom` do Dynare 7.2 em oito casos de GMM/SMM e dois de ajuste de IRF (24 de outubro de 2026).
+  O ajuste de IRF é frequentista e aceita alvos externos, inclusive projeções locais ou estudos
+  de evento, com a sua covariância conjunta. `local_projection` fornece IRFs de um choque observado
+  e covariância HAC conjunta; em dados AR(1) simulados, recupera as IRFs do modelo na população
+  (Plagborg-Møller e Wolf, 2021). Ficam de fora o ajuste bayesiano de IRF e a execução de arquivos
+  de transformação MATLAB; transformações Python podem ser passadas explicitamente.
 - [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
 - [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
   `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
