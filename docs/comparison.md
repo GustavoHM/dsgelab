@@ -141,7 +141,7 @@ feature is that of the test that validates it.
 Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, occasionally binding
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
 each validated as the table in the following section indicates. Version 0.6 adds local
-identification. Still absent are global sensitivity, the method of moments, nonlinear filters, gradient-based
+identification and the moments of filtered variables. Still absent are global sensitivity, the method of moments, nonlinear filters, gradient-based
 samplers, global methods beyond Chebyshev collocation, regime switching, heterogeneous agents, BVAR,
 DSGE-VAR, plots and the declaration of trends in `from_equations`. The README lists them under
 *Known limitations*, and `ROADMAP.md` gives the version for each.
@@ -224,7 +224,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Local identification | ✅ Dynare (`+identification`) | **done**: `identification`, the moments, spectrum and minimal-system criteria and the collinearity search, with the same verdicts as Dynare on three models and derivatives within 2e-8 | 0.6 |
 | Global sensitivity | ✅ Dynare (`+gsa`) | missing | 0.6 |
 | Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`) | missing | 0.6 |
-| Filtered moments, mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |
+| Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
+| Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | risk slope done, the rest missing | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | missing | 0.7 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.8 |

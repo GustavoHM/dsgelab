@@ -56,6 +56,37 @@ def _mask_nonstationary(V: np.ndarray, J: np.ndarray, U1, tol: float = 1e-10) ->
     return V
 
 
+def _filter_gain(freqs: np.ndarray, hp_filter: float | None,
+                 bandpass: Sequence[float] | None) -> np.ndarray:
+    """Gain of Dynare's theoretical filters on its grid of frequencies in ``[0, 2 pi)``.
+
+    The Hodrick-Prescott cycle has gain ``4 l (1 - cos w)^2 / (1 + 4 l (1 - cos w)^2)``.
+    The band-pass filter is ideal: one for cycles between ``bandpass[0]`` and
+    ``bandpass[1]`` periods, at the positive frequencies and their mirror images,
+    zero elsewhere, with the comparisons written as Dynare writes them so that the
+    same grid points fall inside the band.
+    """
+    if hp_filter is not None and bandpass is not None:
+        raise ValueError("give hp_filter or bandpass, not both")
+    if bandpass is not None:
+        shortest, longest = (float(b) for b in bandpass)
+        if not 0 < shortest < longest:
+            raise ValueError(f"bandpass needs 0 < shortest < longest periods, got {bandpass}")
+        shortest = max(2.0, shortest)                  # no cycle is shorter than two periods
+        gain = np.zeros(freqs.size)
+        gain[(freqs >= 2 * np.pi / longest) & (freqs <= 2 * np.pi / shortest)] = 1.0
+        gain[(freqs <= -2 * np.pi / longest + 2 * np.pi)
+             & (freqs >= -2 * np.pi / shortest + 2 * np.pi)] = 1.0
+        return gain
+    if hp_filter is None:
+        raise ValueError("give hp_filter or bandpass")
+    lam = float(hp_filter)
+    if lam <= 0:
+        raise ValueError(f"hp_filter must be positive, got {hp_filter}")
+    c = 4 * lam * (1 - np.cos(freqs)) ** 2
+    return c / (1 + c)
+
+
 def shock_covariance(shocks: Sequence[str], cov: Covariance) -> np.ndarray:
     """Coerce a covariance given as a mapping of standard deviations, a vector or a matrix."""
     ne = len(shocks)
@@ -342,62 +373,137 @@ class FirstOrderSolution:
         return self.to_levels(paths) if levels else paths
 
     # -- second moments --------------------------------------------------
-    def covariance(self, cov: Covariance = None) -> np.ndarray:
+    def covariance(self, cov: Covariance = None, *, hp_filter: float | None = None,
+                   bandpass: Sequence[float] | None = None, grid: int = 512) -> np.ndarray:
         """Unconditional covariance of ``x_t = [k_t; u_t]`` in deviations.
 
         With a unit root (a solution found with ``qz_criterium``), the variables
         that load on it have no unconditional variance and their rows are
-        ``nan``; the others are computed exactly, as Dynare does.
+        ``nan``; the others are computed exactly, as Dynare does. With
+        ``hp_filter`` or ``bandpass`` the covariance is that of the filtered
+        variables, as in :meth:`moments`.
         """
         Sigma = shock_covariance(self.model.shocks, cov)
         if self.Q is None:
             raise ValueError("no shock loading: moments need a C matrix")
+        if hp_filter is not None or bandpass is not None:
+            return self._filtered_autocovariances(Sigma, 0, hp_filter, bandpass, grid)[0]
         J = self._J()
         Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
         return _mask_nonstationary(J @ Vk @ J.T, J, U1)
 
-    def moments(self, cov: Covariance = None, lags: int = 1) -> dict[str, Any]:
+    def moments(self, cov: Covariance = None, lags: int = 1, *,
+                hp_filter: float | None = None, bandpass: Sequence[float] | None = None,
+                grid: int = 512) -> dict[str, Any]:
         """Standard deviations, correlations and autocorrelations of every variable.
 
-        Variables that load on a unit root get ``nan``.
+        Variables that load on a unit root get ``nan``. ``autocov[j]`` is the matrix
+        ``E[x_t x_{t-j}']``, in the order of ``names``.
+
+        ``hp_filter=lambda`` gives the moments of the Hodrick-Prescott cycle of
+        each variable, and ``bandpass=(shortest, longest)`` those of the ideal
+        band-pass filter that keeps cycles of that many periods, as Dynare's
+        ``stoch_simul`` options of the same names. They are computed as Dynare
+        computes them (Uhlig, 2001): the spectral density on ``grid`` frequencies
+        in ``[0, 2 pi)``, times the squared gain of the filter, then the inverse
+        Fourier transform. Both filters remove the zero frequency, so the
+        filtered moments exist with a unit root as well.
         """
         Sigma = shock_covariance(self.model.shocks, cov)
-        Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
+        names = self.model.names
         J = self._J()
-        V = _mask_nonstationary(J @ Vk @ J.T, J, U1)
+        filtered = hp_filter is not None or bandpass is not None
+        if filtered:
+            G = self._filtered_autocovariances(Sigma, lags, hp_filter, bandpass, grid)
+            V = G[0]
+        else:
+            Vk, U1 = _state_variance(self.P, self.Q @ Sigma @ self.Q.T)
+            V = _mask_nonstationary(J @ Vk @ J.T, J, U1)
         sd = np.sqrt(np.maximum(np.diag(V), 0.0))
         denom = np.outer(sd, sd)
         with np.errstate(divide="ignore", invalid="ignore"):
             corr = np.where(denom > 0, V / np.where(denom == 0, 1.0, denom), 0.0)
         corr[np.isnan(denom)] = np.nan             # a variable with a unit root
-        names = self.model.names
-        auto = {}
+        auto, autocov = {}, {}
         Pj = np.eye(self.klein.n_k)
         for j in range(1, lags + 1):
-            Pj = Pj @ self.P
-            Vj = J @ Pj @ Vk @ J.T
+            if filtered:
+                Vj = G[j]
+            else:
+                Pj = Pj @ self.P
+                Vj = J @ Pj @ Vk @ J.T
+                Vj[np.isnan(sd), :] = np.nan
+                Vj[:, np.isnan(sd)] = np.nan
+            autocov[j] = Vj
             with np.errstate(divide="ignore", invalid="ignore"):
                 auto[j] = np.where(sd > 0, np.diag(Vj) / np.where(sd == 0, 1.0, sd ** 2), 0.0)
             auto[j][np.isnan(sd)] = np.nan
         return dict(names=names, std=sd, corr=corr, cov=V,
                     autocorr={j: dict(zip(names, v)) for j, v in auto.items()},
-                    std_by_name=dict(zip(names, sd)))
+                    autocov=autocov, std_by_name=dict(zip(names, sd)))
+
+    def _filtered_autocovariances(self, Sigma: np.ndarray, lags: int, hp_filter: float | None,
+                                  bandpass: Sequence[float] | None, grid: int,
+                                  chunk: int = 64) -> list[np.ndarray]:
+        """``E[x_t x_{t-j}']`` of the filtered variables for ``j = 0..lags``, Dynare's way.
+
+        The spectral density of ``x_t = J (I - P L)^{-1} Q eps_t`` at ``w`` is
+        ``H(w) Sigma H(w)^* / (2 pi)`` with ``H(w) = J (I - e^{-iw} P)^{-1} Q``. The
+        filtered density multiplies it by the squared gain of the filter, and
+        ``Gamma_j`` is the real part of its inverse discrete Fourier transform on
+        Dynare's grid. Frequencies where the gain is zero are skipped, which is
+        what lets a unit root through.
+        """
+        if self.Q is None:
+            raise ValueError("no shock loading: moments need a C matrix")
+        if grid < 2:
+            raise ValueError("grid must be at least 2")
+        freqs = np.arange(grid) * ((2 * np.pi) / grid)
+        gain = _filter_gain(freqs, hp_filter, bandpass)
+        keep = np.flatnonzero(gain != 0)
+        J, P, Q = self._J(), self.P, self.Q
+        n, nk = J.shape
+        out = [np.zeros((n, n)) for _ in range(lags + 1)]
+        I = np.eye(nk)
+        for a in range(0, keep.size, chunk):
+            idx = keep[a:a + chunk]
+            z = np.exp(-1j * freqs[idx])
+            MQ = np.linalg.solve(I[None] - z[:, None, None] * P[None], np.broadcast_to(Q, (idx.size,) + Q.shape))
+            H = J @ MQ                                                   # (c, n, ne)
+            HS = H @ Sigma
+            for j in range(lags + 1):
+                w = gain[idx] ** 2 * np.exp(1j * freqs[idx] * j)
+                out[j] += np.real(np.einsum("c,cae,cbe->ab", w, HS, np.conj(H)))
+        out = [g / grid for g in out]
+        out[0] = 0.5 * (out[0] + out[0].T)
+        return out
 
     def variance_decomposition(self, cov: Covariance = None,
-                               horizon: int | None = None) -> dict[str, Any]:
+                               horizon: int | None = None, *, hp_filter: float | None = None,
+                               bandpass: Sequence[float] | None = None,
+                               grid: int = 512) -> dict[str, Any]:
         """Share of each shock in the (forecast error) variance of each variable.
 
         ``horizon=None`` gives the unconditional decomposition; an integer gives
-        the forecast-error variance decomposition at that horizon.
+        the forecast-error variance decomposition at that horizon. ``hp_filter``
+        and ``bandpass`` decompose the variance of the filtered variables, as in
+        :meth:`moments`, and need ``horizon=None``.
         """
         Sigma = shock_covariance(self.model.shocks, cov)
         J = self._J()
         n_eps = self.model.n_shocks
+        filtered = hp_filter is not None or bandpass is not None
+        if filtered and horizon is not None:
+            raise ValueError("a filtered decomposition is unconditional: leave horizon=None")
         shares = np.zeros((self.model.n_vars, n_eps))
         for m in range(n_eps):
             Sm = np.zeros_like(Sigma)
             Sm[m, m] = Sigma[m, m]
             QSQ = self.Q @ Sm @ self.Q.T
+            if filtered:
+                shares[:, m] = np.diag(self._filtered_autocovariances(Sm, 0, hp_filter,
+                                                                      bandpass, grid)[0])
+                continue
             if horizon is None:
                 Vm, U1 = _state_variance(self.P, QSQ)
                 Vm = Vm if U1 is None else Vm + np.nan * (np.abs(U1) @ np.abs(U1).T > 0)

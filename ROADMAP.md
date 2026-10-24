@@ -242,7 +242,9 @@ warning that lasts at least one minor version. The public API is what is in `__a
   and Monte Carlo filtering. The reference is Dynare's `+gsa`.
 - [ ] **Method of moments** (GMM, SMM and IRF matching). Validation against Dynare's `+mom`.
 - [ ] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`).
-- [ ] **Filtered theoretical moments** (Hodrick–Prescott and band-pass).
+- [x] **Filtered theoretical moments** (Hodrick–Prescott and band-pass), with `hp_filter` and
+  `bandpass` in `moments`, `covariance` and `variance_decomposition`. Validated against Dynare's
+  `stoch_simul` on five models, one with a unit root (24 October 2026).
 - [ ] **Mixed-frequency data**.
 - [ ] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
   distributions.

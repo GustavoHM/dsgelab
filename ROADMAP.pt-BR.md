@@ -255,7 +255,9 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare.
 - [ ] **Método dos momentos** (GMM, SMM e ajuste de IRF). Validação contra o `+mom` do Dynare.
 - [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
-- [ ] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda).
+- [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
+  `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
+  `stoch_simul` do Dynare em cinco modelos, um deles com raiz unitária (24 de outubro de 2026).
 - [ ] **Dados de frequência mista**.
 - [ ] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
   posteriori.

@@ -484,6 +484,41 @@ when the moments have full rank. In kim2 the columns of `phi` and `theta` are co
 error, and a regression of `alph` on both measures that error: Dynare finds a cosine of 0.79 for
 the pair and `dsgelab` keeps `theta` alone, at 0.72, because the second regressor only adds noise.
 
+## Filtered moments
+
+```bash
+bash fetch.sh
+bash run_filtered.sh              # stoch_simul with hp_filter=1600, then bandpass_filter=[6 32]
+python compare_filtered.py
+```
+
+```
+  model         filter  variables  covariance  autocorr.  decomp. (pp)
+  example1      hp              6     9.3e-15    5.9e-15        5.00 *  OK
+  example1      bp              6     9.7e-15    7.6e-15        5.00 *  OK
+  example2      hp              6     4.5e-06    2.0e-06       1.3e-04  OK  (limited by Dynare's s.s., residual 1e-06)
+  example2      bp              6     4.5e-06    2.5e-06       1.3e-04  OK  (limited by Dynare's s.s., residual 1e-06)
+  RBC_baseline  hp             15     2.3e-14    1.2e-14       1.4e-12  OK
+  RBC_baseline  bp             15     1.9e-14    1.4e-14       1.4e-12  OK
+  fs2000        hp             14     3.0e-14    6.2e-14       5.5e-12  OK
+  fs2000        bp             14     3.0e-14    9.3e-14       5.2e-12  OK
+  unitroot      hp              3     9.7e-16    4.2e-16       2.8e-14  OK
+  unitroot      bp              3     1.4e-15    5.0e-16       2.8e-14  OK
+```
+
+The five models are the three of `run_dynare.sh`, `fs2000` and `estimation/unitroot.mod`, whose
+price level has a unit root and no unfiltered variance. Dynare computes the filtered moments from
+the spectral density on 512 frequencies and its inverse Fourier transform (Uhlig, 2001), and
+`dsgelab` does the same on the same grid, so the comparison measures the solution and not the
+quadrature. That quadrature is checked separately in `tests/test_filtered_moments.py`, against
+integrals of the spectrum by `scipy.integrate.quad`. The comparison covers the covariance matrix,
+the autocorrelations and cross-correlations at lags 1 to 5 and the variance decomposition. In
+`example2` the difference is that of Dynare's steady state, as in the comparison above. The
+decomposition of `example1`, whose shocks are correlated, differs by 5 percentage points because
+the two programs attribute the covariance differently: Dynare orthogonalises the shocks by the
+Cholesky factor, in the order of declaration, and `dsgelab` counts each shock with its own
+variance. The numbers come from a run on 24 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

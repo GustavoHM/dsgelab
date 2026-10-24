@@ -30,6 +30,17 @@ Work toward milestone 0.6 (identification, moments and data).
   and `as2007` from its tests and on `fs2000`. Ranks, sensitive, dependent and weak
   parameters are Dynare's under both tolerances, and the derivatives of the moments and the
   spectrum agree within 2e-8.
+- Moments of filtered variables: `hp_filter=lambda` (the Hodrick-Prescott cycle) and
+  `bandpass=(shortest, longest)` (the ideal band-pass filter) in `FirstOrderSolution.moments`,
+  `covariance` and `variance_decomposition`, as Dynare's `stoch_simul` options of the same
+  names. They are computed as Dynare computes them, from the spectral density on a grid of
+  frequencies (`grid=512`) and its inverse Fourier transform, and exist with a unit root,
+  which both filters remove.
+- `moments(...)["autocov"]`: the autocovariance matrices `E[x_t x_{t-j}']`, filtered or not.
+- `validation/compare_filtered.py`: filtered moments against Dynare 7.2 on five models,
+  one with correlated shocks and one with a unit root, with both filters. Covariances and
+  autocorrelations agree within 1e-13, except in example2, where Dynare's steady state
+  leaves a residual of 1e-6 and the difference is 5e-6.
 
 ## 0.5.0 — 2026-10-18
 

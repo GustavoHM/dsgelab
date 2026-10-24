@@ -503,6 +503,20 @@ print(bad.summary())</code></pre>
   its effect. In the second model only the product <code>r1*r2</code> matters, and every criterion
   loses one rank. <code>ModFile.identification</code> does the same for the
   <code>estimated_params</code> of a <code>.mod</code>, at the prior mean.</p>
+  <h3>20. Moments of filtered series</h3>
+<pre><code>m_rbc, p_rbc, g_rbc = rbc.build()
+s_rbc = dsg.solve(m_rbc, p_rbc, guess=g_rbc)
+plain = s_rbc.moments(cov={"eps_a": 0.007})
+hp = s_rbc.moments(cov={"eps_a": 0.007}, lags=1, hp_filter=1600)
+bp = s_rbc.moments(cov={"eps_a": 0.007}, bandpass=(6, 32))
+plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]   # 0.034, 0.013, 0.012
+hp["autocorr"][1]["c"]                                                        # 0.84</code></pre>
+  <p><code>hp_filter</code> gives the moments of the Hodrick–Prescott cycle and
+  <code>bandpass</code> those of cycles between two lengths, as Dynare's <code>stoch_simul</code>
+  computes them, from the spectral density of the solution. The same arguments apply to
+  <code>covariance</code> and <code>variance_decomposition</code>. Both filters remove the zero
+  frequency, so a variable with a unit root, which has no unconditional variance, has filtered
+  moments.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -696,6 +710,23 @@ print(bad.summary())</code></pre>
   steady-state gain when the variance converges to 1e-6, which moves the number in the seventh
   decimal place. The Laplace approximation with dsgelab's own Hessian differs from Dynare's by 0.03,
   and that difference comes from the two numerical Hessians.</p>
+
+  <h3>Filtered moments against Dynare</h3>
+  <p>The three models above, <code>fs2000</code>, and a model written for the validation whose
+  price level has a unit root, each with the Hodrick–Prescott filter (λ = 1600) and the band-pass
+  filter of 6 to 32 periods.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>covariance matrix of the filtered variables</td><td class="num">3e-14</td><td class="ok">OK</td></tr>
+      <tr><td>autocorrelations and cross-correlations, lags 1 to 5</td><td class="num">9e-14</td><td class="ok">OK</td></tr>
+      <tr><td>variance decomposition, uncorrelated shocks (percentage points)</td><td class="num">6e-12</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">The deviations leave out <code>example2</code>,
+  where they are 5e-6 for the reason given above. With the correlated shocks of
+  <code>example1</code> the decomposition differs by 5 percentage points, because Dynare
+  orthogonalises the shocks by Cholesky and dsgelab counts each shock with its own variance.</p>
 
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's

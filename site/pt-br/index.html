@@ -512,6 +512,19 @@ print(bad.summary())</code></pre>
   segundo modelo só o produto <code>r1*r2</code> importa, e cada critério perde um posto.
   <code>ModFile.identification</code> faz o mesmo com os <code>estimated_params</code> de um
   <code>.mod</code>, na média da priori.</p>
+  <h3>20. Momentos de séries filtradas</h3>
+<pre><code>m_rbc, p_rbc, g_rbc = rbc.build()
+s_rbc = dsg.solve(m_rbc, p_rbc, guess=g_rbc)
+plain = s_rbc.moments(cov={"eps_a": 0.007})
+hp = s_rbc.moments(cov={"eps_a": 0.007}, lags=1, hp_filter=1600)
+bp = s_rbc.moments(cov={"eps_a": 0.007}, bandpass=(6, 32))
+plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]   # 0,034, 0,013, 0,012
+hp["autocorr"][1]["c"]                                                        # 0,84</code></pre>
+  <p><code>hp_filter</code> dá os momentos do ciclo de Hodrick–Prescott e <code>bandpass</code> os
+  dos ciclos entre duas durações, como o <code>stoch_simul</code> do Dynare os calcula, a partir da
+  densidade espectral da solução. Os mesmos argumentos valem para <code>covariance</code> e
+  <code>variance_decomposition</code>. Os dois filtros removem a frequência zero, e por isso uma
+  variável com raiz unitária, que não tem variância incondicional, tem momentos filtrados.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -709,6 +722,24 @@ print(bad.summary())</code></pre>
   passa a usar o ganho estacionário do filtro quando a variância converge a 1e-6, o que altera o número na sétima
   casa decimal. A aproximação de Laplace calculada com a hessiana do próprio dsgelab difere da do
   Dynare em 0,03, diferença que vem das duas hessianas numéricas.</p>
+
+  <h3>Momentos filtrados comparados com o Dynare</h3>
+  <p>Os três modelos acima, o <code>fs2000</code> e um modelo escrito para a validação cujo nível de
+  preços tem raiz unitária, cada um com o filtro de Hodrick–Prescott (λ = 1600) e com o filtro
+  passa-faixa de 6 a 32 períodos.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>matriz de covariância das variáveis filtradas</td><td class="num">3e-14</td><td class="ok">OK</td></tr>
+      <tr><td>autocorrelações e correlações cruzadas, defasagens de 1 a 5</td><td class="num">9e-14</td><td class="ok">OK</td></tr>
+      <tr><td>decomposição da variância, choques não correlacionados (pontos percentuais)</td><td class="num">6e-12</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">Os desvios deixam de fora o <code>example2</code>,
+  em que são de 5e-6 pelo motivo exposto acima. Com os choques correlacionados do
+  <code>example1</code>, a decomposição difere em 5 pontos percentuais, porque o Dynare
+  ortogonaliza os choques por Cholesky e o dsgelab conta cada choque com a sua própria
+  variância.</p>
 
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de

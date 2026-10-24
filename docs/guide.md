@@ -223,6 +223,18 @@ eigendecomposition where Cholesky refuses a singular matrix.
 
 Moments come from the discrete Lyapunov equation, so they are exact for the
 linear solution and carry no sampling error.
+
+The moments of filtered series, the ones business-cycle tables report, take one
+more argument. `hp_filter=1600` gives those of the Hodrick–Prescott cycle and
+`bandpass=(6, 32)` those of cycles between 6 and 32 quarters, as Dynare's
+`stoch_simul` computes them, from the spectral density. Both filters remove the
+zero frequency, so a variable with a unit root, which has no unconditional
+variance, has filtered moments.
+
+```python
+hp = sol.moments(cov={"eps_a": 0.007}, lags=4, hp_filter=1600)
+bp = sol.moments(cov={"eps_a": 0.007}, bandpass=(6, 32))
+```
 `test_simulation_reproduces_the_analytic_moments` checks a long simulation against
 them.
 

@@ -63,6 +63,8 @@ step "Dynare: balanced growth" bash run_bgp.sh
 step "compare_bgp.py"        "$PYTHON" compare_bgp.py
 step "Dynare: identification" bash run_identification.sh
 step "compare_identification.py" "$PYTHON" compare_identification.py
+step "Dynare: filtered moments" bash run_filtered.sh
+step "compare_filtered.py"  "$PYTHON" compare_filtered.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

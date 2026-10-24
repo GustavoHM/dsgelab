@@ -105,6 +105,7 @@ examples in English and Portuguese.
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
 | Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
+| Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
@@ -257,8 +258,7 @@ planned.
 - **Identification is local, at one point.** Dynare's repetition of the analysis over draws
   from the prior (`prior_mc`), its identification strength from the information matrix and its
   plots are not reproduced.
-- **No global sensitivity or method of moments** (Dynare's `+gsa`, `+mom`), and no HP- or
-  band-pass-filtered theoretical moments.
+- **No global sensitivity or method of moments** (Dynare's `+gsa`, `+mom`).
 - **Global methods are limited** to Chebyshev collocation with up to three states. There is no
   value or time iteration, endogenous grid, sparse grid, or Tauchen/Rouwenhorst discretisation.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
