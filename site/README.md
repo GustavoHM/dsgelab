@@ -59,3 +59,19 @@ and shows that the documentation went unchecked.
 
 Blocks marked `class="plain"` (shell lines, syntax illustrations and excerpts that depend on
 the user's data) are skipped on purpose. The mark is what declares them non-executable.
+
+## The output under each example
+
+Under each block the page shows what it produces, in a `<pre class="output">`: what the block
+prints, and the value of every expression that stands alone on a line, as an interactive session
+shows it. Without it the reader has to guess what the program does. The output is not typed by
+hand:
+
+```bash
+python tools/check_site_examples.py --write
+```
+
+runs the blocks and writes it into the pages, and the check without `--write` fails when the output
+on a page is not what the code prints. Run `--write` after editing an example. Numbers are compared
+with a tolerance, because the last digits of a residual at machine precision differ between
+platforms.

@@ -22,7 +22,8 @@ de modo que "0.3" quer dizer a 0.3 de cada um.
 ## Onde estamos
 
 A versão 0.5.0, em `https://github.com/GustavoHM/dsgelab`, reúne os marcos 0.2 a 0.4 e o trabalho
-de publicação do marco 0.5, e será lançada quando a tag `v0.5.0` for criada. O estado estacionário é
+de publicação do marco 0.5. Foi lançada em 18 de outubro de 2026, no PyPI e no Zenodo (DOI
+[10.5281/zenodo.23456475](https://doi.org/10.5281/zenodo.23456475)). O estado estacionário é
 encontrado com positividade e âncora externa, aceito em forma fechada depois de conferido e
 calculado com equações de calibração e homotopia. A solução de primeira ordem é a de Klein/QZ, com
 a condição de Blanchard–Kahn imposta e, opcionalmente, o critério de raiz unitária do Dynare, e
@@ -168,7 +169,7 @@ Concluído na versão 0.4.0, em 11 de outubro de 2026.
 - [x] **Diagnóstico do modelo** (`diagnose`), o `model_diagnostics` do Dynare, com o mesmo
   relatório.
 
-### 0.5 — lançamento público
+### 0.5 — lançamento público (lançada em 18 de outubro de 2026)
 
 Nenhum recurso novo. Os itens abaixo são condições para publicar.
 
@@ -197,11 +198,12 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
   marcada no site como não reproduzível a partir do repositório. O README e o
   `validation/README.md` a marcam da mesma forma.
 - [x] **Revisão de segurança antes do lançamento público.**
-- [ ] **Revisão do autor de todo texto público.** Nada é publicado (o repositório tornado público, o
+- [x] **Revisão do autor de todo texto público.** Nada é publicado (o repositório tornado público, o
   site, um release no GitHub, o PyPI, o Zenodo) antes de o autor revisar todos os textos que vão
   junto, a saber o README, o CHANGELOG, o `CONTRIBUTING.md`, o `CODE_OF_CONDUCT.md`, os modelos de
   *issue* e de *pull request*, o `CITATION.cff`, a descrição no `pyproject.toml`, o site nas duas
-  línguas, `docs/` e o `validation/README.md`.
+  línguas, `docs/` e o `validation/README.md`. Os 25 textos foram aprovados em 18 de outubro de
+  2026, depois de uma revisão final das suas afirmações contra o código.
 
 **Engenharia de publicação**
 
@@ -220,18 +222,15 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
   16 de outubro de 2026, e as suas 25 etapas passaram em 28 minutos.
 - [x] Instalação testada a partir da *wheel*, com 148 testes contra a *wheel* instalada em Python
   3.14 no macOS (`DSGELAB_TEST_INSTALLED=1`), e o sdist com os arquivos que os próprios testes leem.
-- [ ] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes.
-  *Escrito* (`release.yml`, disparado por uma tag `v*`). O fluxo confere a tag contra a versão,
-  publica no TestPyPI, roda a suíte contra o que o TestPyPI serve e só então publica no PyPI.
-  `twine check --strict` passa. A versão já é 0.5.0. O *trusted publisher* está cadastrado nos
-  dois índices, e os ambientes `testpypi` e `pypi` existem no repositório (16 de outubro de 2026),
-  com o revisor obrigatório do `pypi` a ser definido quando o repositório for público. Falta, no
-  dia do lançamento, datar o CHANGELOG e o `CITATION.cff` e criar a tag `v0.5.0`.
-- [ ] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
-  mudança, com os links para `docs/` apontados para o GitHub. Só roda com o repositório público.
-- [ ] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. O ORCID já está no
-  `CITATION.cff`. Falta ligar o repositório ao Zenodo, o que exige o repositório público, e incluir
-  o DOI do primeiro release.
+- [x] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes
+  (`release.yml`, disparado por uma tag `v*`). O fluxo confere a tag contra a versão, publica no
+  TestPyPI, roda a suíte contra o que o TestPyPI serve e só publica no PyPI depois da aprovação do
+  revisor obrigatório. A versão 0.5.0 saiu assim em 18 de outubro de 2026.
+- [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
+  mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.5.0 é
+  10.5281/zenodo.23456475, e o DOI conceitual 10.5281/zenodo.23456474, que leva sempre à versão
+  mais recente, está no `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
 - [x] `py.typed` e anotações de tipo na API pública, sem nenhuma função ou método público sem
   anotação e sem erro novo acusado pelo `mypy`. Os wrappers de importação preguiçosa (*lazy*) de
@@ -246,13 +245,19 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
 
 ### 0.6 — identificação, momentos e dados
 
-- [ ] **Identificação local** (Iskrev; Komunjer e Ng), a ser validada contra o `+identification`
-  do Dynare.
+- [x] **Identificação local** (Iskrev; Komunjer e Ng; também Qu e Tkachenko, e a busca de
+  colinearidade por força bruta), com `identification` e `ModFile.identification`. Validada
+  contra o `+identification` do Dynare em três modelos (`kim2`, `as2007`, `fs2000`), com os
+  mesmos vereditos nos três critérios e derivadas a menos de 2e-8 (18 de outubro de 2026).
+  Ficam de fora a repetição sobre sorteios da priori (`prior_mc`), a força da identificação
+  pela matriz de informação e os gráficos do Dynare.
 - [ ] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
   parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare.
 - [ ] **Método dos momentos** (GMM, SMM e ajuste de IRF). Validação contra o `+mom` do Dynare.
 - [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
-- [ ] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda).
+- [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
+  `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
+  `stoch_simul` do Dynare em cinco modelos, um deles com raiz unitária (24 de outubro de 2026).
 - [ ] **Dados de frequência mista**.
 - [ ] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
   posteriori.

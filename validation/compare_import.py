@@ -43,9 +43,9 @@ H = 40
 TOL = 1e-6
 
 
-def _load(name):
+def _load(name, out=HERE / "out_import"):
     from scipy.io import loadmat
-    f = HERE / "out_import" / f"{name}.mat"
+    f = Path(out) / f"{name}.mat"
     if not f.exists():
         return None
     ex = loadmat(f, squeeze_me=True, struct_as_record=False)["ex"]
@@ -61,8 +61,10 @@ def _mods():
     return out
 
 
-def compare(name: str, path: Path) -> dict:
-    ex = _load(name)
+def compare(name: str, path: Path, out: Path = HERE / "out_import",
+            ss_floor: float = 1e-8) -> dict:
+    """Compare one .mod with the Dynare run exported to ``out/<name>.mat``."""
+    ex = _load(name, out)
     if ex is None:
         return dict(name=name, missing=True)
     mf = from_mod(path)
@@ -86,7 +88,9 @@ def compare(name: str, path: Path) -> dict:
     # a linear model without initval starts from zero, as Dynare itself does
     start = {} if mf.linear else {v: ys[v] for v in mf.missing_guess}
     ss = mf.steady_state(guess=start, params=params)
-    d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), 1e-8) for v in mf.endogenous)
+    # relative error, absolute below ss_floor. mmb/compare.py passes 1: a variable whose steady
+    # state is zero (an output gap, a debt ratio) is otherwise compared on its rounding error
+    d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), ss_floor) for v in mf.endogenous)
     zero = np.zeros(model.n_shocks)
     x_dy = model.vector(mf.full_guess(ys))
     r_dy = float(np.max(np.abs(model.residuals(x_dy, x_dy, zero, params))))
@@ -114,9 +118,12 @@ def compare(name: str, path: Path) -> dict:
     ruler = {}
     for (v, _), (a, b) in curves.items():
         ruler[v] = max(ruler.get(v, 0.0), float(np.max(np.abs(b))), float(np.max(np.abs(a))))
+    # a variable that does not move at first order (price dispersion, say) responds with rounding
+    # error, and is left out when its largest response is below 1e-9 of the model's largest
+    quiet = 1e-9 * max(ruler.values(), default=0.0)
     d_irf, worst = 0.0, ""
     for (v, e), (a, b) in curves.items():
-        if ruler[v] < 1e-12:
+        if ruler[v] < max(1e-12, quiet):
             continue
         d = float(np.max(np.abs(a - b))) / ruler[v]
         if d > d_irf:

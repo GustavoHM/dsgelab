@@ -42,6 +42,43 @@ __all__ = ["EstimationProblem", "ModeResult", "MCMCResult", "SMCResult",
            "posterior_forecast", "hessian"]
 
 
+def unpack_point(model: Model, params: Params, cov: Covariance,
+                 measurement: Mapping[str, float], names: Sequence[str],
+                 theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
+    """``(params, shock covariance, measurement sds)`` with ``names`` set to ``theta``.
+
+    A name is a parameter, ``"stderr e"`` for a shock or ``"stderr y"`` for the
+    measurement error on an observable. A shock's new standard deviation rescales
+    its row and column of ``cov``, so its correlations with the other shocks stay.
+    """
+    from .solution import shock_covariance
+    theta = np.asarray(theta, dtype=float)
+    updates, sds = {}, {}
+    meas = dict(measurement)
+    for n, v in zip(names, theta):
+        if n.startswith("stderr "):
+            target = n[7:]
+            if target in model.shocks:
+                sds[target] = float(v)
+            else:
+                meas[target] = float(v)
+        else:
+            updates[n] = float(v)
+    p = set_params(params, updates)
+    if isinstance(p, dict):
+        p = dict(p)
+    S = shock_covariance(model.shocks, cov).copy()
+    for e, v in sds.items():
+        i = model.shocks.index(e)
+        old = math.sqrt(S[i, i]) if S[i, i] > 0 else 0.0
+        if old > 0:
+            S[i, :] *= v / old
+            S[:, i] *= v / old
+        else:
+            S[i, i] = v * v
+    return p, S, meas
+
+
 @dataclass
 class EstimationProblem:
     """A model, data, and what is estimated.
@@ -148,32 +185,8 @@ class EstimationProblem:
 
     def unpack(self, theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
         """``(params, shock covariance, measurement sds)`` at ``theta``."""
-        from .solution import shock_covariance
-        theta = np.asarray(theta, dtype=float)
-        updates, sds = {}, {}
-        meas = self._base_meas()
-        for n, v in zip(self.names, theta):
-            if n.startswith("stderr "):
-                target = n[7:]
-                if target in self.model.shocks:
-                    sds[target] = float(v)
-                else:
-                    meas[target] = float(v)
-            else:
-                updates[n] = float(v)
-        p = set_params(self.params, updates)
-        if isinstance(p, dict):
-            p = dict(p)
-        S = shock_covariance(self.model.shocks, self.cov).copy()
-        for e, v in sds.items():
-            i = self.model.shocks.index(e)
-            old = math.sqrt(S[i, i]) if S[i, i] > 0 else 0.0
-            if old > 0:
-                S[i, :] *= v / old
-                S[:, i] *= v / old
-            else:
-                S[i, i] = v * v
-        return p, S, meas
+        return unpack_point(self.model, self.params, self.cov, self._base_meas(),
+                            self.names, theta)
 
     # -- densities ---------------------------------------------------------
     def log_prior(self, theta: ArrayLike) -> float:

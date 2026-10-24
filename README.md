@@ -104,6 +104,8 @@ examples in English and Portuguese.
 | Optimal policy under discretion; optimal simple rules, on moments or on welfare | `discretionary_policy`, `osr` |
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
+| Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
+| Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
@@ -228,10 +230,11 @@ pip install -e ".[symbolic,test]" && pytest
 ```
 
 The second layer, in [`validation/`](https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md),
-runs Dynare's own example and test `.mod` files in Octave with Dynare, and one calibration in
+runs Dynare's own example and test `.mod` files in Octave with Dynare, thirteen MMB models,
+four published-model files from Johannes Pfeifer's DSGE_mod, and one calibration in
 MacroModelling.jl. Each result is compared with `dsgelab`'s, for steady states, impulse
 responses, moments, optimal policy, perfect foresight, estimation, OccBin, the extended path,
-balanced growth and diagnostics. The same folder checks the port of Heutel (2012) against
+balanced growth, identification and diagnostics. The same folder checks the port of Heutel (2012) against
 Heutel's own code. `bash validation/run_all.sh` runs all of it, and CI runs it weekly.
 
 The third layer is one comparison on an applied model from an unpublished paper by the author.
@@ -253,8 +256,10 @@ planned.
 - **Estimation is linear.** The likelihood comes from the Kalman filter on the first-order
   solution. There is no particle or inversion filter, so no estimation at second or third
   order, and no gradient-based samplers (HMC/NUTS).
-- **No identification analysis, global sensitivity, or method of moments** (Dynare's
-  `+identification`, `+gsa`, `+mom`), and no HP- or band-pass-filtered theoretical moments.
+- **Identification is local, at one point.** Dynare's repetition of the analysis over draws
+  from the prior (`prior_mc`), its identification strength from the information matrix and its
+  plots are not reproduced.
+- **No global sensitivity or method of moments** (Dynare's `+gsa`, `+mom`).
 - **Global methods are limited** to Chebyshev collocation with up to three states. There is no
   value or time iteration, endogenous grid, sparse grid, or Tauchen/Rouwenhorst discretisation.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
@@ -262,7 +267,8 @@ planned.
 - **The extended path's hybrid correction stops at second order.**
 - **Trends can be declared only in a `.mod` file.** `from_equations` does not accept them yet.
 - **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul`,
-  `estimation` or `identification` are skipped, and their options are not applied. In the
+  `estimation` or `identification` are skipped, and their options are not applied
+  (`ModFile.identification` takes them as arguments). In the
   model block, the constructs the reader cannot translate (`@#include`, `@#for`, `varexo_det`,
   leads of a shock, `expectation`, `diff`, `adl`, external functions) are refused with an
   error that quotes the line containing them. Coverage is validated on the Dynare examples and

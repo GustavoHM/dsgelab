@@ -92,6 +92,11 @@ print(sol.summary())
 irf = sol.irf("eps_a", size=0.01, periods=40)     # per cent deviations
 mom = sol.moments(cov={"eps_a": 0.007})           # std, correlations, autocorrelations
 dec = sol.variance_decomposition(cov={"eps_a": 0.007})</code></pre>
+<pre class="output" data-label="Output"><code>rbc: 2 states, 1 jumps, 1 shocks
+  steady-state residual : 8.882e-16
+  linearisation residual: 8.882e-16
+  Blanchard-Kahn        : 2 stable roots for 2 states -- OK
+  largest stable root   : 0.950000</code></pre>
 
   <h3>2. Declare your own model</h3>
   <p>A model consists of three lists of names and a function. The function reads variables by
@@ -124,6 +129,17 @@ sol_mine = solve(mine, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
 
 sol_mine.P                    # transition of the states
 sol_mine.accuracy()           # the implied order must come out ~2</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">sol_mine.P</span>
+[[0.36 1]
+ [0 0.95]]
+<span class="out-expr">sol_mine.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [9.333e-05, 2.339e-05, 5.856e-06],
+  'ratios': [3.99, 3.995],
+  'implied_order': [1.996, 1.998],
+  'exact': False
+}</code></pre>
   <p>When variables are read from a vector by position, swapping one index for another raises no
   error, and the program silently solves a different model from the one intended. Reading each
   variable by name rules that mistake out.</p>
@@ -143,6 +159,8 @@ symbolic = from_equations(
 sol_sym = dsg.solve(symbolic, P(), guess={"k": 0.2, "a": 1.0, "c": 0.36})
 
 dsg.compare_irfs(sol_mine, sol_sym, "eps_a")["worst"]   # the two are the same model</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">dsg.compare_irfs(sol_mine, sol_sym, "eps_a")["worst"]</span>
+1.182e-10</code></pre>
   <p>The residual, the Jacobian and the Hessian are differentiated <em>exactly</em>. Exact
   derivatives matter at second order because a second difference divides by the square of the
   step, so a numerical Hessian carries about half the significant digits of the residual it came
@@ -156,6 +174,26 @@ so.mean_correction()      # ergodic mean, in closed form
 so.ergodic_mean()         # the same thing, in levels
 so.accuracy()             # the implied order must come out ~3
 so.simulate(periods=5000, seed=1)   # pruned, by default</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">so.g_ss, so.h_ss</span>
+([2.292e-12], [-4.139e-12 4.9e-05])
+<span class="out-expr">so.mean_correction()</span>
+{'k': 0.0005888, 'a': 0.0002513, 'c': 0.0005888}
+<span class="out-expr">so.ergodic_mean()</span>
+{'k': 0.1996, 'a': 1, 'c': 0.3604}
+<span class="out-expr">so.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [4.785e-07, 6.005e-08, 7.522e-09],
+  'ratios': [7.968, 7.984],
+  'implied_order': [2.994, 2.997],
+  'exact': False
+}
+<span class="out-expr">so.simulate(periods=5000, seed=1)</span>
+{
+  'k': [-0.01659 -0.005077 0.01319 ... 0.02349 0.02659 0.04175],
+  'a': [0.0009341 0.01505 0.006866 ... 0.01805 0.03195 0.03259],
+  'c': [-0.005077 0.01319 0.01163 ... 0.02659 0.04175 0.04791]
+}</code></pre>
   <p>A first-order simulation keeps the mean of the states at the steady state <em>by
   construction</em>. When the shift in the decision rules is large, it can get the
   <em>sign</em> of a mean effect wrong as well as its magnitude, and welfare rankings depend on
@@ -176,6 +214,10 @@ announced = dsg.perfect_foresight(mine, ss0, ss1, params=schedule, T=T)
 
 surprise["k"], announced["k"]              # levels, (T+1,)
 announced["c"][0] != surprise["c"][0]      # the announcement shows up on impact</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">surprise["k"], announced["k"]</span>
+([0.1995 0.1985 0.1981 ... 0.1979 0.1979 0.1979], [0.1995 0.1995 0.1995 ... 0.1979 0.1979 0.1979])
+<span class="out-expr">announced["c"][0] != surprise["c"][0]</span>
+True</code></pre>
   <p>The transition is solved by a stacked-time Newton method on the same residual function that the
   perturbation linearises. A surprise is a change in <code>terminal</code> with constant
   parameters, and a statutory schedule known in advance is passed as a sequence of parameter values,
@@ -205,6 +247,18 @@ one = dsg.target_jacobian(mine, P(), free=["beta", "alpha"], targets=["k"],
                           guess={"k": 0.2, "a": 1.0, "c": 0.36})
 one["identified"]          # False: two parameters, one target
 one["null_directions"]     # the direction no target sees</code></pre>
+<pre class="output" data-label="Output"><code>calibration:
+  beta = 0.98912
+  delta = 0.025
+targets (achieved vs wanted):
+  ky 10  vs 10   (-2.31e-13%)
+  iy 0.25  vs 0.25   (-2.44e-13%)
+<span class="out-expr">ident["identified"]</span>
+True
+<span class="out-expr">one["identified"]</span>
+False
+<span class="out-expr">one["null_directions"]</span>
+[[-0.387 0.9221]]</code></pre>
   <p>The capital-output ratio and the investment share set β and δ together. In closed form
   δ = iy/ky = 0.025 and β = 1/(α/ky + 1 − δ) = 0.98912, which is what <code>calibrate</code>
   returns. Evaluated at that solution, <code>target_jacobian</code> reports that the two targets
@@ -223,6 +277,18 @@ dsg.check_slack(sol, {"c_positive": lambda v: v["c"]}, size=-0.5)   # along the 
 dsg.steady_state_invariance(                    # an invariance that is a theorem of the model
     lambda v: dsg.steady_state(mine, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
     [0.5, 0.8, 0.95], ["k", "c"])["ok"]         # k does not depend on the persistence</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">dsg.blanchard_kahn_report(sol)["margin"]</span>
+1.856
+<span class="out-expr">dsg.check_slack(sol, {"c_positive": lambda v: v["c"]}, size=-0.5)</span>
+{
+  'detail': {'eps_a:c_positive': {'min': 0.1127, 'argmin': 2, 'ok': True}},
+  'worst': 0.1127,
+  'ok': True
+}
+<span class="out-expr">dsg.steady_state_invariance(                    # an invariance that is a theorem of the model</span>
+    lambda v: dsg.steady_state(mine, {"k": 0.2, "a": 1.0, "c": 0.36}, replace(P(), rho=v)),
+    [0.5, 0.8, 0.95], ["k", "c"])["ok"]
+True</code></pre>
 
   <h3>8. Derive the first-order conditions (FOCs) instead of writing them</h3>
   <p>You declare only the problem, and the package differentiates the Lagrangian. Because the
@@ -247,6 +313,11 @@ derived = dsg.from_equations(
     foc["equations"] + ["log(a(+1)) = rho*log(a) + eps_a"],
     states=["k", "a"], jumps=foc["jumps"], shocks=["eps_a"],
     parameters=["alpha", "beta", "delta", "rho"])</code></pre>
+<pre class="output" data-label="Output"><code>lm_1 + 1/c                                                    # FOC for control c
+lm_1 - lm_2                                                   # FOC for control i
+lm_2 - beta*lm_2(+1) + beta*delta*lm_2(+1) - a(+1)*alpha*beta*lm_1(+1)*k(+1)**alpha/k(+1)  # Euler equation for state k
+c + i - a*k**alpha                                            # constraint 1: c + i = a*k**alpha
+k(+1) - i - k*(1 - delta)                                     # constraint 2: k(+1) = (1-delta)*k + i</code></pre>
   <p>Transversality conditions, inequality constraints and problems whose Euler equation does not
   follow from the derivative of next period's Lagrangian with respect to the inherited state are
   left to the modeller. The package derives the conditions of the problem that was declared, so an
@@ -259,6 +330,37 @@ derived = dsg.from_equations(
 to.g_kkk, to.h_kkk        # the cubic terms
 to.accuracy()             # the implied order must come out ~4
 to.simulate(periods=5000, seed=1)    # pruned in three layers</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">to.g_kkk, to.h_kkk</span>
+([[[[0.3779 -0.2304]
+   [-0.2304 6.34e-06]]
+
+  [[-0.2304 6.34e-06]
+   [6.34e-06 2.401e-05]]]], [[[[0.3779 -0.2304]
+   [-0.2304 -7.182e-06]]
+
+  [[-0.2304 -7.182e-06]
+   [-7.182e-06 -5.727e-05]]]
+
+
+ [[[0 0]
+   [0 -1.607e-08]]
+
+  [[0 -1.607e-08]
+   [-1.607e-08 0.04988]]]])
+<span class="out-expr">to.accuracy()</span>
+{
+  'sizes': [0.02, 0.01, 0.005],
+  'residuals': [3.868e-09, 2.438e-10, 1.553e-11],
+  'ratios': [15.87, 15.7],
+  'implied_order': [3.988, 3.973],
+  'exact': False
+}
+<span class="out-expr">to.simulate(periods=5000, seed=1)</span>
+{
+  'k': [-0.0166 -0.005081 0.01319 ... 0.02347 0.02657 0.04173],
+  'a': [0.0009326 0.01505 0.006865 ... 0.01804 0.03194 0.03259],
+  'c': [-0.005081 0.01319 0.01163 ... 0.02657 0.04173 0.0479]
+}</code></pre>
   <div class="note"><p><strong>Third order here covers the cubic block and the risk slope.</strong>
   The cubic terms (<code>g_kkk</code>, <code>h_kkk</code>) are verified by the order of accuracy,
   since halving the displacement divides the residual by sixteen. The <code>sigma²·k</code> terms,
@@ -279,6 +381,8 @@ text = dsg.to_dynare(symbolic, P(), steady=ss_sym, cov={"eps_a": 0.007},
 jl = dsg.to_macromodelling(symbolic, P(), cov={"eps_a": 0.007}, path="model.jl")
 
 "predetermined_variables k;" in text      # the timing is translated automatically</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">"predetermined_variables k;" in text</span>
+True</code></pre>
   <p>In dsgelab the state at <em>t</em> is the one <em>available</em> at <em>t</em>. In Dynare the
   predetermined variable is the one <em>decided</em> at <em>t</em>. A conversion by hand has to
   translate one timing into the other. The exporter does this translation, and it also writes
@@ -301,6 +405,8 @@ r = dsg.solve(nk, pn, steady=ss_nk).irf("e", size=1.0, percent=False)
 
 x_lag = np.r_[0.0, r["x"][:-1]]
 abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() &lt; 1e-12   # targeting rule</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">abs(r["pi"] + pn["lam"] / pn["kappa"] * (r["x"] - x_lag)).max() &lt; 1e-12</span>
+True</code></pre>
   <p>The planner's conditions are derived symbolically from the private-sector equations, and the
   result is an ordinary <code>Model</code>, with the multipliers and their lags as variables. The
   perspective is the timeless one, as in Dynare's <code>ramsey_model</code>. In this New Keynesian
@@ -330,6 +436,10 @@ ot = dsg.osr(rule, dict(pn, phi_pi=1.5, phi_u=0.0), rule_params=["phi_pi", "phi_
             weights={"pi": 1.0, "x": 0.25}, cov={"e": 0.01},
             guess=dict(u=0, x=0, pi=0, i=0))
 ot.loss &lt; ot.initial_loss</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">w_disc &lt; w_comm &lt; 0</span>
+True
+<span class="out-expr">ot.loss &lt; ot.initial_loss</span>
+True</code></pre>
   <p>Discretion is solved by the algorithm of Dennis (2007), which Dynare's
   <code>discretionary_policy</code> also uses, and on the same model it reproduces Galí's
   closed-form solution. As in <code>osr</code>, the simple rule minimises the quadratic loss computed
@@ -355,6 +465,10 @@ surprise = dsg.perfect_foresight_with_expectation_errors(       # learned only a
 
 anticipated["c"][0] != ss_pf.values["c"]     # consumption reacts to the announcement
 abs(surprise["c"][0] - ss_pf.values["c"]) &lt; 1e-12   # and not to what nobody knows</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">anticipated["c"][0] != ss_pf.values["c"]</span>
+True
+<span class="out-expr">abs(surprise["c"][0] - ss_pf.values["c"]) &lt; 1e-12</span>
+True</code></pre>
   <p>A news item is a new expected path of shocks and parameters, and a new terminal steady state.
   At each news item the agents replan from the states already realised. The procedure is that of
   Dynare's <code>perfect_foresight_with_expectation_errors_solver</code>, and a <code>.mod</code>
@@ -377,6 +491,12 @@ chain = dsg.metropolis_hastings(pb, mode, draws=1500, chains=2, seed=1)
 abs(mode.values["rho"] - 0.8) &lt; 0.1
 max(chain.rhat().values()) &lt; 1.05
 abs(chain.log_marginal_mhm() - mode.laplace) &lt; 0.5</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">abs(mode.values["rho"] - 0.8) &lt; 0.1</span>
+True
+<span class="out-expr">max(chain.rhat().values()) &lt; 1.05</span>
+True
+<span class="out-expr">abs(chain.log_marginal_mhm() - mode.laplace) &lt; 0.5</span>
+True</code></pre>
   <p><code>EstimationProblem</code> holds the model, the data, the priors and the observables. The
   priors are Dynare's, set by mean and standard deviation. Observables may be in levels or in logs,
   may carry measurement error and may have missing values. From the problem the package computes
@@ -403,6 +523,10 @@ ob = dsg.occbin_simulate(credit, pc, {"u": {2: 0.06}}, periods=40,
 
 ob.binding["slack"].any()                                   # high income loosens the limit
 max(abs(ob.piecewise["lam"][ob.binding["slack"]])) &lt; 1e-14  # and the multiplier goes to zero</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ob.binding["slack"].any()</span>
+True
+<span class="out-expr">max(abs(ob.piecewise["lam"][ob.binding["slack"]])) &lt; 1e-14</span>
+True</code></pre>
   <p>Each regime is linearised at the reference steady state, with its residual as a constant. For a
   guess of the dates at which each constraint holds, the path follows time-varying rules found
   backwards, and the guess is then revised by the rule of Dynare's <code>+occbin</code>, with
@@ -424,6 +548,8 @@ ep = dsg.extended_path(tree, ss_a, pa, draws, horizon=60)                     # 
 sep = dsg.extended_path(tree, ss_a, pa, draws, horizon=60, order=1,           # next-period risk
                        cov=[[0.0348**2]])
 bool((sep["y"][1:] &gt; ep["y"][1:]).all())       # with theta &lt; 0, risk raises the tree's price</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">bool((sep["y"][1:] &gt; ep["y"][1:]).all())</span>
+True</code></pre>
   <p>Each period the shock arrives, the states it leads to are computed, and the agents solve a
   nonlinear problem that reaches the steady state <code>horizon</code> periods later. With
   <code>order</code> &gt; 0 the shocks of the following periods are integrated by Gauss–Hermite
@@ -451,6 +577,12 @@ rbc_h = dsg.from_equations(
     states=["k"], jumps=["c"], shocks=[], parameters=["alpha", "beta", "delta"])
 ss_h = dsg.steady_state(rbc_h, dict(k=30, c=2), dict(alpha=0.33, beta=0.99, delta=0.9),
                        homotopy={"delta": (0.02, 0.9)})   # the guess is good for delta = 0.02</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">rbc_cal.auxiliary</span>
+{'LAG1_q': ('lag', 'q')}
+<span class="out-expr">abs(ss_cal.calibrated["beta"] - 1/(0.33/10 + 1 - 0.025)) &lt; 1e-12</span>
+True
+<span class="out-expr">dsg.diagnose(rbc_cal, ss_cal.params, ss_cal.values)["ok"]</span>
+True</code></pre>
   <p>A closed-form steady state (<code>steady_state_model</code>, here or in a <code>.mod</code>) is
   checked against the equations before it is used and, as in Dynare, refused if it does not set them
   to zero. <code>dsg.assemble</code> combines the problems of several agents and the
@@ -477,10 +609,72 @@ solow = dsg.from_equations(
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
+True</code></pre>
   <p>In a <code>.mod</code> written in levels, <code>trend_var</code> and <code>var(deflator=)</code>
   are detrended as Dynare does it, and an equation that still depends on the level of the trend is
   refused. <code>balanced_growth</code> computes the growth factors and the ratios between variables
   that share the trend, which is the problem Dynare's <code>bgp.write</code> solves.</p>
+  <h3>19. Is the model identified before it is estimated?</h3>
+<pre><code>ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],
+                           observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+ident.identified                                    # True, by all three criteria
+
+ab = dsg.from_equations(["a(+1) = r1*r2*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["r1", "r2"])
+bad = dsg.identification(ab, dict(r1=1.6, r2=0.5), free=["r1", "r2", "stderr e"],
+                         observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+bad.identified                                      # False
+bad["moments"].rank, bad["moments"].required        # (2, 3)
+bad["moments"].dependent                            # [('r1', 'r2')]
+print(bad.summary())</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ident.identified</span>
+True
+<span class="out-expr">bad.identified</span>
+False
+<span class="out-expr">bad["moments"].rank, bad["moments"].required</span>
+(2, 3)
+<span class="out-expr">bad["moments"].dependent</span>
+[('r1', 'r2')]
+Local identification of 3 parameters from 1 observable (y)
+  moments (Iskrev 2010)                    rank 2 of 3: NOT identified  (condition 22.5)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2
+  spectrum (Qu and Tkachenko 2012)         rank 2 of 3: NOT identified  (condition 2.22e+15)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2
+  minimal system (Komunjer and Ng 2011)    rank 4 of 5: NOT identified  (condition 1.06e+13)
+      linearly dependent: r1, r2
+      weakly identified: r1, r2</code></pre>
+  <p><code>identification</code> checks, at one point, whether the distribution of the observed
+  series pins down the free parameters, with the three criteria of Dynare's
+  <code>identification</code> command: the derivatives of the moments (Iskrev), of the spectrum
+  (Qu and Tkachenko) and of a minimal state space (Komunjer and Ng). Each one reports its rank, the
+  parameters that do not move it, the sets of parameters that move it together and the weakly
+  identified ones, and a search finds for each parameter the group of others that best reproduces
+  its effect. In the second model only the product <code>r1*r2</code> matters, and every criterion
+  loses one rank. <code>ModFile.identification</code> does the same for the
+  <code>estimated_params</code> of a <code>.mod</code>, at the prior mean.</p>
+  <h3>20. Moments of filtered series</h3>
+<pre><code>m_rbc, p_rbc, g_rbc = rbc.build()
+s_rbc = dsg.solve(m_rbc, p_rbc, guess=g_rbc)
+plain = s_rbc.moments(cov={"eps_a": 0.007})
+hp = s_rbc.moments(cov={"eps_a": 0.007}, lags=1, hp_filter=1600)
+bp = s_rbc.moments(cov={"eps_a": 0.007}, bandpass=(6, 32))
+plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]   # 0.034, 0.013, 0.012
+hp["autocorr"][1]["c"]                                                        # 0.84</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">plain["std_by_name"]["c"], hp["std_by_name"]["c"], bp["std_by_name"]["c"]</span>
+(0.03432, 0.01261, 0.01216)
+<span class="out-expr">hp["autocorr"][1]["c"]</span>
+0.8422</code></pre>
+  <p><code>hp_filter</code> gives the moments of the Hodrick–Prescott cycle and
+  <code>bandpass</code> those of cycles between two lengths, as Dynare's <code>stoch_simul</code>
+  computes them, from the spectral density of the solution. The same arguments apply to
+  <code>covariance</code> and <code>variance_decomposition</code>. Both filters remove the zero
+  frequency, so a variable with a unit root, which has no unconditional variance, has filtered
+  moments.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -501,6 +695,8 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
     announced parameter paths.</p></div>
     <div class="card"><h4>Calibration</h4><p>Targets solved jointly, with an identification
     diagnostic based on rank and null directions.</p></div>
+    <div class="card"><h4>Identification</h4><p>Dynare's three local criteria (moments, spectrum,
+    minimal system) and its collinearity search, with the same verdicts.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
@@ -672,6 +868,41 @@ abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
   steady-state gain when the variance converges to 1e-6, which moves the number in the seventh
   decimal place. The Laplace approximation with dsgelab's own Hessian differs from Dynare's by 0.03,
   and that difference comes from the two numerical Hessians.</p>
+
+  <h3>Filtered moments against Dynare</h3>
+  <p>The three models above, <code>fs2000</code>, and a model written for the validation whose
+  price level has a unit root, each with the Hodrick–Prescott filter (λ = 1600) and the band-pass
+  filter of 6 to 32 periods.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>covariance matrix of the filtered variables</td><td class="num">3e-14</td><td class="ok">OK</td></tr>
+      <tr><td>autocorrelations and cross-correlations, lags 1 to 5</td><td class="num">9e-14</td><td class="ok">OK</td></tr>
+      <tr><td>variance decomposition, uncorrelated shocks (percentage points)</td><td class="num">6e-12</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">The deviations leave out <code>example2</code>,
+  where they are 5e-6 for the reason given above. With the correlated shocks of
+  <code>example1</code> the decomposition differs by 5 percentage points, because Dynare
+  orthogonalises the shocks by Cholesky and dsgelab counts each shock with its own variance.</p>
+
+  <h3>Local identification against Dynare</h3>
+  <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
+  <code>tests/identification</code> and <code>fs2000</code> from its examples. In
+  <code>kim2</code> two parameters only enter together and a third does not enter at all.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>moments of the observables</td><td class="num">8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>their Jacobian (Iskrev); G of the spectrum (Qu and Tkachenko)</td><td class="num">2e-08; 2e-08</td><td class="ok">OK</td></tr>
+      <tr><td>rank, sensitive, dependent and weak parameters, three criteria, two tolerances</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>size of the minimal state (Komunjer and Ng)</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>collinearity search, cosines</td><td class="num">8e-09</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">Dynare differentiates analytically, and dsgelab by
+  differences with a Richardson step chosen for each parameter. The deviations are the largest over
+  the three models, relative to the largest entry of each column or matrix.</p>
 
   <h3>Nonlinearities and model declaration against Dynare</h3>
   <p>The files in <code>tests/occbin</code>, <code>tests/ep</code>, <code>tests/bgp</code> and

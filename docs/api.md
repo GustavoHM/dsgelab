@@ -164,9 +164,9 @@ model that fails the Blanchard–Kahn condition raises `BlanchardKahnError`.
 | `irf(name, size=1.0, periods=40, *, kind="shock", levels=False, percent=True)` | impulse response, a dict from each variable name to an array of length `periods` whose entry 0 is the impact date. `size` is the value of the innovation in the units it has in the equations (pass the standard deviation for a one-standard-deviation shock). The deviations are proportional for variables with a nonzero steady state and absolute for the rest, times 100 with `percent`; `levels=True` returns levels. `kind="state"` displaces a state directly |
 | `irf_impulse(impulse, periods=40, *, levels=False, percent=True)` | response to a whole innovation vector, such as an orthogonalised (Cholesky) impulse when shocks are correlated |
 | `simulate(periods=1000, cov=None, *, seed=None, burn=100, levels=False)` | draw a path, a dict of arrays |
-| `moments(cov=None, lags=1)` | a dict with `names`, `std`, `corr`, `cov`, `autocorr` (`{lag: {name: value}}`) and `std_by_name`, computed from the discrete Lyapunov equation |
-| `covariance(cov=None)` | unconditional covariance of `[k; u]` |
-| `variance_decomposition(cov=None, horizon=None)` | unconditional, or the forecast-error variance decomposition at a horizon |
+| `moments(cov=None, lags=1, *, hp_filter=None, bandpass=None, grid=512)` | a dict with `names`, `std`, `corr`, `cov`, `autocorr` (`{lag: {name: value}}`), `autocov` (`{lag: E[x_t x_{t-lag}']}`) and `std_by_name`, computed from the discrete Lyapunov equation. With `hp_filter=lambda` or `bandpass=(shortest, longest)`, the moments of the Hodrick–Prescott cycle or of the ideal band-pass filter, as Dynare's `stoch_simul` computes them: the spectral density on `grid` frequencies, times the squared gain of the filter, then the inverse Fourier transform. Both filters remove the zero frequency, so these moments exist with a unit root |
+| `covariance(cov=None, *, hp_filter=None, bandpass=None, grid=512)` | unconditional covariance of `[k; u]`, filtered or not |
+| `variance_decomposition(cov=None, horizon=None, *, hp_filter=None, bandpass=None, grid=512)` | unconditional, or the forecast-error variance decomposition at a horizon; with a filter, of the filtered variance. Each shock counts with its own variance, so with correlated shocks the shares differ from Dynare's, which orthogonalises them by Cholesky |
 | `state_path(k0, periods=40, shocks=None)` | propagate the states |
 | `conditional_forecast(conditions, *, periods=None, initial=None, controlled=None, levels=False)` | mean forecast with variables on prescribed paths (`nan` leaves a date free), the `controlled` shocks chosen to hit them and the others at zero, as Dynare's `conditional_forecast` with `controlled_varexo` |
 | `historical_decomposition(states)` | innovations behind a state path and the path each produces |
@@ -508,6 +508,7 @@ default) is a parameter, so a permanent change in the level is a change in it.
 | `extended_path(shocks=None, *, steady=None, **kwargs)` | `extended_path` with the file's covariance |
 | `balanced_growth(params=None, **kwargs)` | `balanced_growth` with the exogenous variables held at their level |
 | `estimation_problem(data, **kwargs)` | an `EstimationProblem` from `estimated_params`, `varobs` and the `estimation(...)` options; `kwargs` override them |
+| `identification(point="prior_mean", **kwargs)` | `identification` of the `estimated_params`, observing `varobs`, at the prior mean (Dynare's default), the calibration or a given point |
 
 The example reads `fs2000.mod` from Dynare 6.4's examples, which
 `validation/fetch.sh` downloads into `validation/mods/examples/`; it runs from the
@@ -859,6 +860,70 @@ by finite differences with relative step `step`. Returns `derivative`,
 `elasticity`, `singular_values`, `rank`, `n_free`, `identified` (`rank ==
 n_free`), `null_directions` (the parameter directions that no target responds
 to), `condition`, `base_targets` and `base_params`.
+
+---
+
+## Identification
+
+### `identification(model, params, *, free, observables, cov=None, measurement=None, transforms=None, guess=None, steady_fn=None, qz_criterium=None, lags=1, grid=5000, max_group=2, criteria=("moments", "spectrum", "minimal"), tol_rank="auto", tol_deriv=1e-8, tol_sv=1e-3, step=1e-2, levels=8) -> Identification`
+
+Local identification of the parameters in `free` at one point, from the
+distribution of the `observables`, as Dynare's `identification` command computes
+it. `free` names parameters, shock standard deviations (`"stderr e"`) and
+measurement-error standard deviations (`"stderr y"`), as in `EstimationProblem`. A
+mapping also sets the point; a sequence takes the values in `params`, `cov` and
+`measurement`. The observables must be stationary.
+
+Three criteria are computed, each a rank condition on a matrix whose columns are
+the free parameters:
+
+| Criterion | Matrix | Full rank when |
+|---|---|---|
+| `"moments"` (Iskrev 2010) | derivatives of the means, the covariances and the autocovariances up to `lags` | no direction of the parameters leaves those moments unchanged |
+| `"spectrum"` (Qu and Tkachenko 2012) | G, the Gram matrix of the derivatives of the mean and of the spectral density over `grid + 1` frequencies | no direction leaves the mean and the spectrum unchanged |
+| `"minimal"` (Komunjer and Ng 2011) | the derivatives of a minimal state space representation, next to the similarity transforms of its state and of its shocks | no direction is absorbed by a change of basis; needs as many observables as shocks and no measurement error, as in Dynare |
+
+The derivatives of the state space matrices are central differences with one
+Richardson step. For each parameter the step is chosen among `levels` steps that
+halve from `step` times its value, as the one where a second Richardson estimate,
+from half the steps, agrees best; the difference between the two estimates
+measures the error. With `tol_rank="auto"` a singular value below ten times that
+error counts as zero (for G, its square, since G's eigenvalues are squared singular
+values). `tol_rank="robust"` is Dynare's default, `max(shape) * eps(norm)`, which
+assumes exact derivatives. A model declared in Python is linearised by finite
+differences and its derivatives carry an error near `1e-10 / step`, so a robust
+tolerance can report full rank for parameters that are not identified. The other
+options are Dynare's, with the same names in its manual: `lags` is `ar`, `grid` is
+`grid_nbr`, `max_group` is `max_dim_cova_group` (0 skips the search), and `tol_deriv`
+and `tol_sv` keep their names.
+
+`Identification`: `names`, `point`, `observables`, `lags`, `moments` (in Dynare's
+order) and `moment_labels`, `checks` (also by index, `ident["moments"]`),
+`skipped` (criteria not computed, with the reason), `minimal_states`,
+`collinearity`, `identified` (every criterion computed has full rank), `summary()`.
+`collinearity[k][name]` is `(group, cosine)`: the `k` other parameters whose
+moment derivatives best reproduce those of `name`, as Dynare's brute-force search
+finds them. The group is shorter than `k` when a larger one adds nothing.
+
+`IdentificationCheck`: `criterion`, `jacobian` (before its rows are normalised),
+`rank`, `required`, `identified`, `condition`, `tolerance`, `sensitive` (whether
+each parameter moves the criterion at all) and `insensitive`, `dependent` (sets of
+linearly dependent parameters, one per direction of the null space),
+`multicollinearity` (the cosine between each parameter's column and its projection
+on the others), `weak` and `weak_pairs`.
+
+`ModFile.identification(point="prior_mean", **kwargs)` takes `free` from
+`estimated_params` and the observables from `varobs`. `point` is `"prior_mean"`
+(Dynare's default), `"calibration"` or a mapping.
+
+```python
+ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["rho"])
+ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],
+                           observables=["y"], cov={"e": 0.1}, guess=dict(a=0, y=1))
+ident.identified          # True
+print(ident.summary())
+```
 
 ---
 

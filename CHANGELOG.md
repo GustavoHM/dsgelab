@@ -3,6 +3,63 @@
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes bugs.
 
+## Unreleased
+
+Work toward milestone 0.6 (identification, moments and data).
+
+### Added
+
+- `identification`: local identification of the free parameters at one point, from the
+  distribution of the observables, as Dynare's `identification` command computes it. Three
+  criteria: the derivatives of the moments (Iskrev 2010), the Gram matrix of the derivatives
+  of the spectrum (Qu and Tkachenko 2012) and the derivatives of a minimal state space
+  (Komunjer and Ng 2011). Each reports its rank, the parameters that do not move it, the
+  sets of linearly dependent parameters, the multicollinearity of each parameter and the
+  weakly identified parameters and pairs. A brute-force search finds, for each parameter,
+  the group of others whose effect on the moments best reproduces its own. The free
+  parameters can include shock and measurement-error standard deviations (`"stderr e"`).
+- `ModFile.identification`: the same for the `estimated_params` of a `.mod`, observing its
+  `varobs`, at the prior mean (Dynare's default), the calibration or a given point.
+- `tol_rank="auto"`, the default of `identification`: a singular value below ten times the
+  estimated error of the derivatives counts as zero. The derivatives are central
+  differences with a Richardson step, at a step chosen for each parameter, and two
+  Richardson estimates measure their error. With Dynare's `"robust"` tolerance, two
+  parameters that enter a model declared in Python only through their product came out
+  identified, because the numerical linearisation leaves a singular value near 1e-7.
+- `validation/compare_identification.py`: the three criteria against Dynare 7.2 on `kim2`
+  and `as2007` from its tests and on `fs2000`. Ranks, sensitive, dependent and weak
+  parameters are Dynare's under both tolerances, and the derivatives of the moments and the
+  spectrum agree within 2e-8.
+- Moments of filtered variables: `hp_filter=lambda` (the Hodrick-Prescott cycle) and
+  `bandpass=(shortest, longest)` (the ideal band-pass filter) in `FirstOrderSolution.moments`,
+  `covariance` and `variance_decomposition`, as Dynare's `stoch_simul` options of the same
+  names. They are computed as Dynare computes them, from the spectral density on a grid of
+  frequencies (`grid=512`) and its inverse Fourier transform, and exist with a unit root,
+  which both filters remove.
+- `moments(...)["autocov"]`: the autocovariance matrices `E[x_t x_{t-j}']`, filtered or not.
+- `validation/compare_filtered.py`: filtered moments against Dynare 7.2 on five models,
+  one with correlated shocks and one with a unit root, with both filters. Covariances and
+  autocorrelations agree within 1e-13, except in example2, where Dynare's steady state
+  leaves a residual of 1e-6 and the difference is 5e-6.
+- `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
+  `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
+  They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions
+  (up to 361 variables), Smets and Wouters (2007) and the New York Fed model of Del Negro,
+  Giannoni and Schorfheide (2015). All thirteen agree within 1e-04, and twelve within 2e-08. The
+  `.mod` files come from a fixed Rep-MMB commit, checked by SHA-256, and are not versioned.
+- `validation/dsge_mod/`: four published-model files from Johannes Pfeifer's DSGE_mod —
+  Aguiar–Gopinath (2007), Ghironi–Melitz (2005), Hansen (1985) and Smets–Wouters (2007) — read
+  by `from_mod` and compared with Dynare 7.2 at first order. The largest IRF deviation is
+  2.2e-07, in Ghironi–Melitz, whose Dynare steady state leaves a residual of 2e-08. Sources
+  are pinned by commit and SHA-256; the site documents the scope and limits of each comparison.
+
+### Changed
+
+- The site shows, under each example, what it prints and the value of each expression on a line
+  of its own. `tools/check_site_examples.py --write` writes that output, and the check fails
+  when the page no longer matches the code. Table cells wrap their text, so the comparison
+  table no longer runs off the page.
+
 ## 0.5.0 — 2026-10-18
 
 The roadmap's milestone 0.5, the public release. No new solver features.

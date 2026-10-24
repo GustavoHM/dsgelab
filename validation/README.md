@@ -216,6 +216,120 @@ counts it as stable (`qz_criterium = 1 + 1e-6`). By default `dsgelab` does not, 
 model with `BlanchardKahnError`. `solve(..., qz_criterium=1 + 1e-6)` reproduces Dynare's
 convention, and `compare_import.py` uses that setting.
 
+## Central-bank models from the Macroeconomic Model Data Base
+
+The Macroeconomic Model Data Base (MMB, [macromodelbase.com](https://www.macromodelbase.com))
+collects models in Dynare, and its replication toolbox Rep-MMB
+([github.com/AlexMeyer-Gohde/Rep-MMB](https://github.com/AlexMeyer-Gohde/Rep-MMB)) holds 148 of
+them at the commit `fetch.sh` uses. The folder
+`mmb/` reads thirteen of them with `from_mod`, as they are, and compares them with Dynare in the
+same way as `compare_import.py`. The set covers models built or used at the Banco Central do
+Brasil, the ECB, the Federal Reserve, the Banco Central de Chile, the Bank of England, the
+Riksbank and the IMF, from 9 to 361 variables.
+
+```bash
+bash mmb/fetch.sh          # 13 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
+bash mmb/run_dynare.sh     # ../strip_mod.py and the same stoch_simul(order=1) for all
+python mmb/compare.py
+```
+
+```
+model         vars  aux    params     s.s.     IRFs   moments
+BRA_SAMBA08     41   38   0.0e+00  0.0e+00  6.6e-13   3.8e-13  OK
+CA_LS07         12   10   0.0e+00  0.0e+00  9.6e-15   1.1e-14  OK
+CL_MS07        124   70   9.0e-14  0.0e+00  3.2e-10   2.6e-10  OK
+EACZ_GEM03     239  100   3.9e-16  6.8e-13  1.1e-11   1.2e-08  OK
+             s.s. starting point taken from Dynare for 2 variable(s)
+EAUS_NAWM08    226  127   0.0e+00  4.8e-06  6.8e-05   7.0e-05  OK  (Dynare's s.s. with residual 5e-06)
+EA_ALSV06        9   12   0.0e+00  0.0e+00  1.3e-13   1.5e-13  OK
+EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
+HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
+UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
+US_DNGS15       38   33   0.0e+00  0.0e+00  1.4e-12   5.1e-13  OK
+US_FRB03       279  365   0.0e+00  0.0e+00  6.6e-10   1.8e-09  OK
+US_FRB08       361  335   2.2e-16  0.0e+00  5.8e-10   1.7e-09  OK
+             parameters the .mod leaves undefined, taken from Dynare: bpnca30
+US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
+             parameters the .mod leaves undefined, taken from Dynare: ccs, cinvs, crdpi
+```
+
+| Model | Origin |
+|---|---|
+| `BRA_SAMBA08` | SAMBA, Banco Central do Brasil |
+| `EAUS_NAWM08` | New Area-Wide Model, ECB (Coenen, McAdam and Straub, 2008), euro area and United States |
+| `EA_SWW14` | Smets, Warne and Wouters (2014), ECB |
+| `US_SW07` | Smets and Wouters (2007) |
+| `US_DNGS15` | Del Negro, Giannoni and Schorfheide (2015), Federal Reserve Bank of New York |
+| `US_FRB03`, `US_FRB08` | FRB/US, Federal Reserve Board, linearised with rational expectations (2003 version of Levin, Wieland and Williams, and February 2008 version) |
+| `CL_MS07` | Medina and Soto (2007), Banco Central de Chile |
+| `UK_SM11` | Harrison, Thomas and de Weymarn (2008), Bank of England, in the version estimated by Barriel and Millard |
+| `EA_ALSV06` | Adolfson, Laséen, Lindé and Villani, Riksbank, in the MMB's reduced version |
+| `EACZ_GEM03` | Global Economy Model, IMF (Laxton and Pesenti, 2003), euro area and Czech Republic |
+| `HK_FP13`, `CA_LS07` | Funke and Paetz (2013) for Hong Kong, Lubik and Schorfheide (2007) for Canada |
+
+**What differs from `compare_import.py`.** The steady-state error is relative, and absolute for
+values below 1. Several of these models have variables whose steady state is zero, and the
+relative error of `compare_import.py` (denominator floored at 1e-8) would measure their rounding.
+In `EACZ_GEM03` the output gaps are 7e-13 in `dsgelab` and 0 in Dynare, which the relative error
+reports as 7e-05. In both scripts, a variable whose largest response is below 1e-9 of the
+model's largest response is left out of the IRF column. Price and wage dispersion do not move at
+first order, and in `EAUS_NAWM08` the wage dispersion `EA_SI` responds with 6e-11 in both
+programs, against responses of order 1e4 in other variables. This rule leaves the output of
+`compare_import.py` unchanged.
+
+**What limits the comparison.** In `EAUS_NAWM08`, Dynare's steady state leaves a residual of
+5e-06, and the one `dsgelab` finds leaves 9e-14. The IRFs and moments inherit that residual, as
+in `example2`. `EACZ_GEM03` declares an innovation (`interest_`) that no equation uses. Dynare 7
+refuses the file unless it runs with `nostrict`, which drops the innovation, and `run_dynare.sh`
+passes that option for this model only. The parameters listed as taken from Dynare are declared
+and never assigned in the `.mod`.
+
+**What the set leaves out.** Eleven other Rep-MMB models from central banks and official
+institutions were tried, and `from_mod` does not yet read or solve them. `G2_SIGMA08` (Federal
+Reserve), `EA_AWM05` (ECB) and `CA_BMZ12` (Bank of Canada) declare a parameter twice, `ESREA_FIMOD12` stops on an expression the reader does not parse, and
+`US_CMR14` uses `@#for`. `CA_ToTEM10` (Bank of Canada), `DEREA_GEAR16` (Bundesbank),
+`EA_GNSS10` (Banca d'Italia), `EA_QUEST3` (European Commission) and `FI_AINO16` (Bank of
+Finland) take parameters or the steady state from MATLAB files, and the steady state of
+`GPM6_IMF13` does not converge from the file's starting point.
+
+## Published-model files from DSGE_mod
+
+Johannes Pfeifer's [DSGE_mod](https://github.com/JohannesPfeifer/DSGE_mod) collection supplies
+tractable Dynare replication files for published models. Four are compared here at first order,
+using Dynare 7.2 as the independent reference. The source is fixed at commit
+`26c21f79e4c6a6b19b18e6330edc5b23489907a4`, and every downloaded file is checked by SHA-256.
+The GPL source files are fetched rather than versioned in this MIT package.
+
+```bash
+bash dsge_mod/fetch.sh
+bash dsge_mod/run_dynare.sh
+python dsge_mod/compare.py
+```
+
+```
+model                    vars  aux    params     s.s.     IRFs   moments
+Aguiar_Gopinath_2007       21    7   0.0e+00  3.5e-16  1.1e-12   4.6e-13  OK
+Ghironi_Melitz_2005        35    8   0.0e+00  3.1e-08  2.2e-07   1.8e-07  OK
+Hansen_1985                 9    3   0.0e+00  3.1e-16  1.9e-14   1.5e-14  OK
+Smets_Wouters_2007_45      40   27   0.0e+00  6.9e-15  9.8e-14   5.8e-13  OK
+```
+
+| Model | Source exercise and scope |
+|---|---|
+| `Aguiar_Gopinath_2007` | Aguiar and Gopinath (2007), Mexico benchmark and Table 4 shock calibration. The detrended system is compared; reconstruction of nonstationary levels and the paper's filtered-moment table are not. |
+| `Ghironi_Melitz_2005` | Ghironi and Melitz (2005), financial autarky. Dynare's steady state leaves a residual of `2e-08`, which the IRF and moment differences inherit. Its MATLAB steady-state file supplies `fx` and `fx_`; those values and the initial guess are taken from Dynare. |
+| `Hansen_1985` | Hansen (1985), the file's default indivisible-labor economy. The comparison uses unfiltered theoretical moments, not the paper's simulated HP-filtered Table 1. |
+| `Smets_Wouters_2007_45` | Smets and Wouters (2007), at the calibration in the `.mod`. Three declared but unused parameters come from Dynare. The Bayesian estimation and the original paper's estimated results are not replicated. |
+
+`prepare.py` makes two explicit source-specific working copies. For Aguiar–Gopinath it selects the
+Mexico/Table 4 shock block and omits interleaved MATLAB plotting code; for Hansen it adds semicolons
+to the macro-processor title assignments so the lightweight statement reader sees the following
+`var` block separately. Neither changes equations, parameters or shock values. The other two files
+are read directly.
+
+These comparisons validate the supplied model systems against Dynare. They do not claim to reproduce
+every table, figure, robustness exercise or estimation in the papers.
+
 ## Discretion, optimal simple rules and welfare
 
 ```bash
@@ -435,6 +549,89 @@ level of a growing variable is not identified. A model in levels also has trivia
 population or zero capital), which `balanced_growth` discards before restarting from another
 point. The detrending of a `.mod` with `trend_var` and `var(deflator=)` is validated in
 `compare_import.py`, with `fs2000_nonstationary`.
+
+## Local identification
+
+```bash
+bash fetch.sh                     # mods/identification/, from Dynare 7.2's tests/identification
+bash run_identification.sh        # Dynare's identification at the prior mean, with advanced=1
+python compare_identification.py
+```
+
+Three models are compared, each at the prior mean of its `estimated_params`. `kim2` (Kim, 2003)
+comes from Dynare's tests: `phi` and `theta` only enter together and `dumpy` does not enter at all,
+so no criterion has full rank, and the test runs with `tol_rank=1e-8`. In `as2007` (An and
+Schorfheide, 2007), also from the tests, all 13 parameters are identified. `fs2000` comes from the
+examples and estimates two shock standard deviations, which Dynare places first among its columns.
+`run_identification.sh` cuts each file before its first `identification` or `estimation` command
+and appends one with `advanced=1`, which adds the brute-force collinearity search. The numbers
+below come from a run on 18 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+| | kim2 | as2007 | fs2000 |
+|---|---|---|---|
+| moments, largest relative difference | 1.2e-13 | 3.4e-14 | 7.7e-13 |
+| Jacobian of the moments, largest difference / column norm | 1.8e-08 | 2.7e-10 | 5.3e-09 |
+| G of the spectrum, largest difference / largest entry | 2.4e-08 | 1.6e-12 | 1.4e-10 |
+| size of Komunjer and Ng's matrix (minimal state) | 9 × 6 (1) | 45 × 31 (3) | 21 × 17 (2) |
+| rank, sensitive, dependent and weak parameters, three criteria, two tolerances | same | same | same |
+| multicollinearity, moments and spectrum, largest difference | not compared | 7.5e-12 | 5.5e-08 |
+| collinearity search, largest cosine difference | 7.8e-09 (groups of one) | 6.2e-11 | 1.4e-09 |
+
+Dynare differentiates analytically and `dsgelab` by central differences with a Richardson step,
+at a step chosen for each parameter. In `fs2000`, `bet = 0.993` lies 0.007 from 1, where the
+moments diverge, and a step of 0.1% of its value gave derivatives that were off by 1e-6; halving
+the step until two Richardson estimates agree brings the difference with Dynare to 5e-9.
+
+The verdicts are compared twice, with Dynare's tolerance (`"robust"`, or `1e-8` for kim2) and with
+`dsgelab`'s default, `"auto"`, which also counts as zero a singular value below ten times the
+estimated error of the derivatives. Both give Dynare's ranks and the same sets of sensitive,
+dependent and weak parameters on all three models. On a model declared in Python, linearised by
+finite differences, the derivatives carry an error near 1e-7. Two parameters that enter only
+through their product then leave a singular value of that size, which the robust tolerance counts
+as a rank, and `"auto"` exists for that case (`tests/test_identification.py`).
+
+Komunjer and Ng's matrix is compared by its size, which gives the size of the minimal state. Its
+entries, its condition number and the multicollinearity computed from it depend on the basis of
+the minimal system, which each package chooses in its own way. The multicollinearity of the other
+two criteria and the collinearity search for groups of more than one parameter are compared only
+when the moments have full rank. In kim2 the columns of `phi` and `theta` are collinear to rounding
+error, and a regression of `alph` on both measures that error: Dynare finds a cosine of 0.79 for
+the pair and `dsgelab` keeps `theta` alone, at 0.72, because the second regressor only adds noise.
+
+## Filtered moments
+
+```bash
+bash fetch.sh
+bash run_filtered.sh              # stoch_simul with hp_filter=1600, then bandpass_filter=[6 32]
+python compare_filtered.py
+```
+
+```
+  model         filter  variables  covariance  autocorr.  decomp. (pp)
+  example1      hp              6     9.3e-15    5.9e-15        5.00 *  OK
+  example1      bp              6     9.7e-15    7.6e-15        5.00 *  OK
+  example2      hp              6     4.5e-06    2.0e-06       1.3e-04  OK  (limited by Dynare's s.s., residual 1e-06)
+  example2      bp              6     4.5e-06    2.5e-06       1.3e-04  OK  (limited by Dynare's s.s., residual 1e-06)
+  RBC_baseline  hp             15     2.3e-14    1.2e-14       1.4e-12  OK
+  RBC_baseline  bp             15     1.9e-14    1.4e-14       1.4e-12  OK
+  fs2000        hp             14     3.0e-14    6.2e-14       5.5e-12  OK
+  fs2000        bp             14     3.0e-14    9.3e-14       5.2e-12  OK
+  unitroot      hp              3     9.7e-16    4.2e-16       2.8e-14  OK
+  unitroot      bp              3     1.4e-15    5.0e-16       2.8e-14  OK
+```
+
+The five models are the three of `run_dynare.sh`, `fs2000` and `estimation/unitroot.mod`, whose
+price level has a unit root and no unfiltered variance. Dynare computes the filtered moments from
+the spectral density on 512 frequencies and its inverse Fourier transform (Uhlig, 2001), and
+`dsgelab` does the same on the same grid, so the comparison measures the solution and not the
+quadrature. That quadrature is checked separately in `tests/test_filtered_moments.py`, against
+integrals of the spectrum by `scipy.integrate.quad`. The comparison covers the covariance matrix,
+the autocorrelations and cross-correlations at lags 1 to 5 and the variance decomposition. In
+`example2` the difference is that of Dynare's steady state, as in the comparison above. The
+decomposition of `example1`, whose shocks are correlated, differs by 5 percentage points because
+the two programs attribute the covariance differently: Dynare orthogonalises the shocks by the
+Cholesky factor, in the order of declaration, and `dsgelab` counts each shock with its own
+variance. The numbers come from a run on 24 October 2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 

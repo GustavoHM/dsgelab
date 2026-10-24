@@ -57,6 +57,19 @@ pre {
   padding: 1rem 1.1rem; overflow-x: auto; margin: 1rem 0; font-size: .87rem; line-height: 1.55;
 }
 pre code { background: none; padding: 0; font-size: 1em; }
+/* What a block prints, right under it, so the reader sees what the program does without running
+   it. Written by tools/check_site_examples.py --write, never by hand. */
+pre:has(+ pre.output) { border-radius: 6px 6px 0 0; margin-bottom: 0; }
+pre.output {
+  margin-top: 0; border-top: 1px dashed var(--rule); border-radius: 0 0 6px 6px; background: var(--bg);
+  color: var(--muted); font-size: .8rem; line-height: 1.45; max-height: 26rem; overflow: auto;
+}
+pre.output::before {
+  content: attr(data-label); display: block; margin-bottom: .35rem; font: 600 .7rem var(--sans);
+  text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+}
+pre.output .out-expr { color: var(--fg); }
+pre.output .out-expr::before { content: "\203A  "; color: var(--accent); }
 .tok-kw { color: var(--accent); font-weight: 600; }
 .tok-str { color: var(--ok); }
 .tok-com { color: var(--muted); font-style: italic; }
@@ -85,8 +98,12 @@ td.num { font-family: var(--mono); font-size: .85rem; white-space: nowrap; }
 footer { padding: 3rem 0 4rem; color: var(--muted); font-size: .88rem; }
 footer a { color: var(--muted); }
 
-/* Tabelas largas rolam dentro do seu contêiner; o corpo da página nunca rola na horizontal. */
+/* Tabelas largas rolam dentro do seu contêiner; o corpo da página nunca rola na horizontal.
+   O texto das células quebra linha: com white-space: nowrap, uma célula longa (a coluna do
+   pacote, na comparação) alargava a tabela muito além da página. Só os números não quebram. */
 .scroll { overflow-x: auto; margin: 1rem 0; -webkit-overflow-scrolling: touch; }
 .scroll table { margin: 0; min-width: 34rem; }
-.scroll td, .scroll th { white-space: nowrap; }
-.scroll td:first-child, .scroll th:first-child { white-space: normal; min-width: 12rem; }
+.scroll td, .scroll th { white-space: normal; vertical-align: top; overflow-wrap: break-word; }
+.scroll td.num { white-space: nowrap; }
+.scroll td:first-child, .scroll th:first-child { min-width: 10rem; }
+.scroll td code { white-space: nowrap; }

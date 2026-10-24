@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from .estimation import EstimationProblem
     from .extended_path import ExtendedPath
     from .foresight import News
+    from .identification import Identification
     from .kalman import Data
     from .occbin import OccbinModel, OccbinResult
 
@@ -606,6 +607,60 @@ class ModFile:
             kw["bounds"] = bounds
         kw.update(kwargs)
         return EstimationProblem(**kw)
+
+    def identification(self, point: str | Mapping[str, float] = "prior_mean",
+                       **kwargs: Any) -> Identification:
+        """:func:`dsgelab.identification` of the ``estimated_params``, observing ``varobs``.
+
+        ``point`` is where identification is checked: ``"prior_mean"`` (Dynare's
+        default), ``"calibration"`` (the values the file assigns), or a mapping from
+        the estimated names to values, which may leave some out. The shocks'
+        covariance, the measurement errors and the steady state come from the file,
+        as in :meth:`estimation_problem`. ``kwargs`` go to
+        :func:`~dsgelab.identification` and override anything.
+        """
+        from .identification import identification
+
+        if not self.estimated:
+            raise DynareImportError("this .mod has no estimated_params block")
+        if not self.varobs:
+            raise DynareImportError("this .mod has no varobs")
+        sd = {e: float(np.sqrt(self.cov[i, i])) for i, e in enumerate(self.exogenous)}
+        params = dict(self.params)
+        meas: dict[str, float] = {}
+        values = {}
+        for e in self.estimated:
+            if isinstance(point, Mapping) and e["name"] in point:
+                v = float(point[e["name"]])
+            elif point == "prior_mean" or isinstance(point, Mapping):
+                v = e["prior"].mean if e["prior"] is not None else (
+                    e["init"] if np.isfinite(e["init"]) else np.nan)
+            elif point == "calibration":
+                if e["kind"] == "param":
+                    v = params.get(e["target"], np.nan)
+                elif e["role"] == "shock":
+                    v = sd[e["target"]]
+                else:
+                    v = np.nan
+            else:
+                raise ValueError(f"point must be 'prior_mean', 'calibration' or a mapping, "
+                                 f"not {point!r}")
+            if not np.isfinite(v):
+                raise ValueError(f"no value for {e['name']!r} at point={point!r}")
+            values[e["name"]] = v
+            if e["kind"] == "param":
+                params[e["target"]] = v
+            elif e["role"] == "shock":
+                sd[e["target"]] = v
+            else:
+                meas[e["target"]] = v
+        kw: dict[str, Any] = dict(free=values, observables=list(self.varobs), cov=sd,
+                                  measurement=meas or None,
+                                  transforms="log" if "loglinear" in self.estimation_options
+                                  else "level",
+                                  steady_fn=lambda p: self.steady_state(params=p))
+        kw.update(kwargs)
+        return identification(self.model, params, **kw)
 
     def steady_state(self, guess: Mapping[str, float] | None = None,
                      params: dict[str, float] | None = None, *,
