@@ -132,6 +132,136 @@ stock, which corresponds to `k(+1)` in the package's convention, so the port too
 wrong period's stock. The steady state matched exactly, while the IRF of `log_k` lagged by one
 period. This case is the reason the comparison covers trajectories as well as points.
 
+## Second- and third-order decision rules
+
+```bash
+bash run_decision_rule.sh
+python compare_decision_rule.py
+```
+
+`example1` and `example2` compare `ghx`, `ghu`, `ghxx`, `ghuu`, `ghxu` and `ghs2` with Dynare 7.2.
+The comparison uses the steady state exported by Dynare as the common point of linearisation. All
+five tensors agree in the state-rule rows. `ghu` and `ghuu` also agree in the jump rows, with
+absolute errors below `5e-14` in both models. The full risk constant `g_s2 = [h_s2; g_ss]`, with
+`h_s2 = h_ss - h_uu:Sigma`, agrees in every row. The jump block `g_ku` is covered by a closed-form
+RBC test in the unit suite. The comparison accounts for the extra exogenous transition in Dynare's
+endogenous predetermined-state rows and for the different deviation scales of the two programs.
+
+At third order, `ghuuu`, `ghxuu`, `ghxxu`, `ghxxx`, `ghxss` and `ghuss` agree in every row.
+Both models use `derivatives="third"`. The largest absolute errors stay below `3e-13` in
+`example1` and `2e-14` in `example2`. The `ghxss` errors are `1.44e-16` and `5.39e-17`;
+the `ghuss` errors are `1.46e-16` and `5.35e-17`.
+The exact RBC test also checks `h_uuu`, `h_kuu`,
+`h_kku`, `h_kkk` and the composed jump blocks `g_uuu`, `g_kuu`, `g_kku` and `g_kkk`.
+The sparse residual tensors have 161 and 216 nonzeros, below 1.4% of their 16,464 dense
+entries. The Hessians have 46 and 56 nonzeros, below 4.8% of their 1,176 dense entries.
+`solve_third_order(sparse=True)` gives the same solution and stays below `3e-13`
+against Dynare on both models. With `direct_limit=0`, the matrix-free Sylvester solve uses
+60 independent symmetric unknowns instead of 162 in these models. Its largest Dynare error
+is `5.67e-13`, and its equation residual stays below `3.7e-14`.
+
+`python compare_third_sparse.py` checks the canonical solver at larger scale against a closed-form
+diagonal system. With 71 equations and 35 states it solves 551,670 unknowns in 1.9 seconds, with
+a peak RSS of 175 MB on macOS. The residual and closed-form error are both `8.88e-16`. The known
+term and residual use canonical coordinates, and each matvec expands one equation at a time with
+an optimized contraction path. This benchmark covers the Sylvester core, not the unpublished
+71-variable applied model or the dense decision-rule composition available on explicit request.
+`python compare_third_sparse.py --full` runs the complete nonlinear pipeline with 71 variables,
+35 states, 36 jumps and five shocks. Exact sparse third derivatives of the cubic state transitions
+drive `K3`, all risk blocks and the iterative solution. The maximum residual is `3.05e-20`, elapsed
+time is 135 seconds and peak RSS is 321 MB on macOS. This is a synthetic scale test, distinct from
+the unpublished applied model.
+
+The unit suite also checks conditional IRFs of the pruned rules at second and third order,
+including the impact period and the nonlinear AR(1) recursion. `run_third_irf.sh` and
+`compare_third_irf.py` compare 40 periods of the full third-order pruned rule on `example1` and
+`example2`, with 5,000 replications and `drop=100`. The largest errors are `5.65e-4` in `example1`
+and `1.50e-5` in `example2`, below the `1e-3` tolerance for Monte Carlo variation. Correlated shocks use the Cholesky factor.
+Contracting `ghuuu` with the shock covariance does not recover `ghuss`.
+
+`stochastic_steady_state` solves the fixed point of the full unpruned rule with `sigma=1`. Its
+residual is zero on `example1`, `example2` and the linear NK model. In the logarithmic RBC, the
+technology fixed point is zero in deviation (level 1), which is different from the positive
+ergodic mean.
+
+## Parameter Jacobians
+
+```bash
+bash run_derivatives.sh
+python compare_derivatives.py
+```
+
+`example1` and `example2` compare `solution_jacobian` with Dynare's analytical `dghx` and `dghu`.
+The composition covers `F P`, `F Q`, the extra exogenous transition of endogenous states and the
+derivatives of the deviation scales. The comparison uses Dynare's steady state as the common point.
+The largest errors are `3.49e-6` and `3.58e-6` in `example1` and `1.88e-5` and `6.96e-2` in
+`example2`, below the tolerances of `0.1` absolute and `1%` relative. The largest relative error is
+`0.512%`.
+
+### Second-order Jacobians
+
+```bash
+bash run_second_derivatives.sh
+python compare_second_derivatives.py
+```
+
+`second_order_jacobian` is compared with Dynare's analytical `dghxx`, `dghxu`, `dghuu` and
+`dghs2` in every variable row, for model parameters, shock standard deviations and correlations.
+The largest absolute errors are `6.22e-6` in `example1` and `1.56e-2` in `example2`; the largest
+relative errors are `5.76e-8` and `0.552%`. The comparison uses the same tolerances as the
+first-order case: `0.1` absolute and `1%` relative. Dynare 7.2 omits cross-covariance changes in
+`dghs2` for `stderr` with correlated shocks. The package differentiates the full covariance; only
+the comparator reproduces Dynare's omission to check that column.
+
+### Third-order Jacobians
+
+```bash
+bash run_third_derivatives.sh
+python compare_third_derivatives.py
+```
+
+`third_order_jacobian` is compared with `dghxxx`, `dghxxu`, `dghxuu` and `dghuuu` for model
+parameters, shock standard deviations and correlations. `ghxss` and `ghuss` remain outside its
+scope. The largest relative errors are `4.73e-8` in `example1` and `0.159%` in `example2`.
+The tolerance is `0.1` absolute and `5%` relative for the parameter derivatives, which remain
+numerical even when the model's third derivative is exact. The comparator uses
+`sparse=True, direct_limit=0` for the solution and for every perturbed Jacobian point.
+
+### Particle filter
+
+```bash
+bash run_particle.sh
+python compare_particle.py
+```
+
+The scalar AR(1) comparison runs Dynare's `sequential_importance_particle_filter` with 100,000
+particles and systematic resampling at first and second order. The likelihood differences are
+`3.18e-2` and `5.22e-3`; the comparison allows `0.05` for Monte Carlo variation. The second-order
+path checks the augmented pruned state and the `C z_{t-1} + D inov_t` observation timing.
+The pruned third-order filter uses `[xf; xs; xt]` and the full rule, including `ghxss` and `ghuss`.
+Its linear AR(1) likelihood is within `0.38` of Kalman; on the nonlinear RBC it differs from second order by
+`0.0847`. Missing observations are skipped. `EstimationProblem(order=3)` exposes the same
+likelihood to posterior mode and samplers. Third-order backward-information smoothing uses the
+linear transition of `xf`, with a pseudoinverse for singular transition covariances. Its AR(1)
+means agree with the Kalman smoother within `0.2` in the unit suite.
+
+### Inversion filter
+
+```bash
+bash run_inversion.sh
+python compare_inversion.py
+```
+
+The AR(1) comparison uses Dynare's `occbin.IVF_core` with a slack constraint. Recovered shocks,
+the observation Jacobian, the total likelihood and every per-date contribution agree exactly
+(tolerance `1e-8`). Unit tests also check the exact Gaussian density at first and pruned second
+order, a nonlinear RBC path and missing observations.
+
+`macromodelling/inversion.jl` and `compare_inversion_julia.py` also check a nonlinear RBC at
+pruned second order. Recovered shocks differ from MacroModelling.jl by at most `0.0057` (tolerance
+`0.01`). MacroModelling's likelihood uses `log|G|` once and omits `Sigma^-1`; dsgelab follows the
+Dynare convention, so the likelihoods are not compared with a numerical adjustment.
+
 ## Optimal policy: the Ramsey planner
 
 ```bash
@@ -631,6 +761,21 @@ For `c = 1 + 1/simulation_multiple`, the SMM covariance has a factor `c` and J a
 Dynare 7.2 omits `c` from its standard errors and multiplies J by `c`. The comparison therefore
 multiplies Dynare's standard errors by `sqrt(c)` and divides its J by `c^2`. Standard errors are
 checked in the two starting-point cases and in the complete five-parameter SMM estimation.
+
+### Pruned second-order moments
+
+```bash
+bash run_mom_order2.sh
+python compare_mom_order2.py
+```
+
+`example1` and `example2` compare means, covariances and three autocovariance lags of every
+endogenous variable with Dynare 7.2's `pruned_SS.pruned_state_space_system`. All differences are
+below `1e-14`, and the comparison requires `1e-8`. The models read by `from_mod`, including their
+auxiliary variables, differ by at most `2.93e-8` and `1.59e-6` in means and by `6.08e-9` and
+`2.87e-8` in second moments, with a tolerance of `5e-5`.
+Unit tests also check exact linear-model reductions and the lognormal AR(1), whose moments agree
+to `3.2e-7` with the closed form, within the accuracy of a second-order approximation.
 
 ### IRF matching and external targets
 

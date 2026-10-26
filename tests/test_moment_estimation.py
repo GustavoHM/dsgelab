@@ -126,8 +126,10 @@ def test_mod_file_method_of_moments_uses_estimated_params_and_matched_moments():
           stderr e, 0.3, 1e-8, 1;
         end;
         matched_moments; y*y; y*y(-1); end;
+        method_of_moments(order=2, mode_compute=0);
     """
     mf = dsg.from_mod(source)
+    assert mf.mom_options["order"] == "2"
     result = mf.method_of_moments({"y": np.zeros(20)}, "GMM",
                                   weighting=("identity",), optimize_=False)
     assert result.names == ["rho", "stderr e"]
@@ -135,6 +137,39 @@ def test_mod_file_method_of_moments_uses_estimated_params_and_matched_moments():
     np.testing.assert_allclose(result.x, [0.4, 0.3])
     variance = 0.3 ** 2 / (1 - 0.4 ** 2)
     np.testing.assert_allclose(result.model_moments, [variance, 0.4 * variance], rtol=1e-10)
+
+
+def test_second_order_matches_first_order_on_a_linear_model():
+    model = _ar1()
+    data = {"y": np.random.default_rng(12).standard_normal(20)}
+    kwargs = dict(params={"rho": 0.5}, free={}, observables=["y"],
+                  moments=["y", "y*y", "y*y(-1)", "y*y(-2)"], cov={"e": 1.0},
+                  guess={"y": 0.0}, weighting=("identity",), optimize_=False)
+    for method in ("GMM", "SMM"):
+        extra = dict(method=method)
+        if method == "SMM":
+            extra.update(shocks=np.random.default_rng(4).standard_normal((40, 1)),
+                         burnin=20, simulation_multiple=1)
+        first = dsg.method_of_moments(model, data, order=1, **kwargs, **extra)
+        second = dsg.method_of_moments(model, data, order=2, **kwargs, **extra)
+        np.testing.assert_allclose(second.model_moments, first.model_moments,
+                                   rtol=1e-12, atol=1e-12)
+
+
+def test_second_order_gmm_matches_lognormal_ar1_to_its_order():
+    pytest.importorskip("sympy")
+    from dsgelab.examples import rbc
+    model, params, guess = rbc.build_symbolic()
+    sigma = 0.007
+    result = dsg.method_of_moments(
+        model, {"a": np.random.default_rng(3).standard_normal(20)},
+        params=params, free={}, observables=["a"], moments=["a", "a*a", "a*a(-1)"],
+        method="GMM", order=2, cov={"eps_a": sigma}, guess=guess,
+        weighting=("identity",), optimize_=False)
+    variance = sigma ** 2 / (1 - params.rho ** 2)
+    expected = [np.exp(variance / 2), np.exp(2 * variance),
+                np.exp(variance * (1 + params.rho))]
+    np.testing.assert_allclose(result.model_moments, expected, rtol=5e-7, atol=1e-12)
 
 
 def test_moment_estimation_argument_errors():
@@ -150,3 +185,5 @@ def test_moment_estimation_argument_errors():
                               simulation_multiple=1, burnin=2, shocks=np.zeros((3, 1)), **kwargs)
     with pytest.raises(ValueError, match="at least one stage"):
         dsg.method_of_moments(model, {"y": np.zeros(10)}, moments=["y*y"], weighting=(), **kwargs)
+    with pytest.raises(ValueError, match="order must be 1 or 2"):
+        dsg.method_of_moments(model, {"y": np.zeros(10)}, moments=["y*y"], order=3, **kwargs)

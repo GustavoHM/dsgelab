@@ -5,10 +5,97 @@ before 1.0, a minor version may add to the API and a patch version only fixes bu
 
 ## Unreleased
 
-Work toward milestone 0.6 (identification, moments and data).
+Work toward milestone 0.6 (identification, moments and data) and milestone 0.7 (complete third
+order and derivatives).
 
 ### Added
 
+- `SecondOrderSolution.h_uu` and `h_ku`: quadratic innovation and state-innovation blocks of the
+  state rule. `decision_rule()` returns a `DecisionRule` for `[k'; u']`, with `g_k`, `g_u`,
+  `g_kk`, `g_uu` and `g_ku` in Dynare's coefficient convention. `h_s2 = h_ss - h_uu:Sigma`
+  and `DecisionRule.g_s2 = [h_s2; g_ss]` provide the full risk constant, validated against
+  Dynare's `ghs2`. The state-rule tensors are validated against Dynare 7.2 on `example1` and
+  `example2`.
+- `ThirdOrderSolution.h_uuu`, `h_kuu` and `h_kku`, with `ThirdOrderSolution.decision_rule()`:
+  cubic state-innovation blocks and their compositions `g_uuu`, `g_kuu` and `g_kku`, checked
+  against the exact RBC, Dynare's `ghuuu` and the state rows of `ghxxu`. `ghxuu` agrees in every
+  row, and the composed `g_kkk` also agrees with `ghxxx`. The risk-slope calculation reuses the
+  ex-post second-order innovation blocks. `ThirdOrderSolution.g_xss` and `h_xss` add the risk-state
+  terms, and `g_uss` and `h_uss` add the risk-innovation terms. `ghxss` and `ghuss` agree with
+  Dynare in every row, with errors below `1.5e-16` on both examples.
+- `SecondOrderSolution.irf` and `ThirdOrderSolution.irf`: conditional impulse responses of the
+  pruned rules, starting from the deterministic steady state or a supplied state. The innovation
+  enters in period 0. Third order uses the full Dynare recursion, with `ghxss`, `ghuss` and every
+  cubic innovation block. Generalized IRFs average stochastic paths with `drop=100` and agree with
+  Dynare on `example1` and `example2` within `1e-3`.
+- `stochastic_steady_state`: fixed point of the full unpruned third-order decision rule with
+  `sigma=1`, returned as a `SteadyState` with its residual and iteration count. The fixed point is
+  distinct from the ergodic mean of the pruned system.
+- `solution_jacobian`: derivatives of `P`, `F`, `Q` and the steady state. Purely backward models
+  use implicit differentiation of `P = A^-1 B` and `Q = A^-1 C`. General QZ solutions differentiate
+  the implicit saddle-path conditions, avoiding a QZ decomposition at every perturbed parameter.
+  Central differences and Richardson extrapolation retain the best step triple. Validated against
+  Dynare 7.2's analytical `dghx` and `dghu` on `example1` and `example2`, with relative errors
+  below `2.4e-4`, and against closed forms with jumps and complex stable eigenvalue pairs.
+- `log_likelihood_gradient`: recursive derivatives of the first-order Kalman
+  likelihood. Uses `solution_jacobian` for model parameters and direct formulas for shock and
+  measurement-error standard deviations and correlations. Supports `level` and `log`
+  observations, `presample`, missing data and diffuse starts through the univariate filter.
+- `log_posterior_gradient` and `Prior.score`: analytic prior derivatives for every supported
+  distribution, added to the likelihood gradient.
+- `hmc`: Hamiltonian Monte Carlo with leapfrog integration, Metropolis correction, a mass matrix
+  from the posterior mode and `MCMCResult` diagnostics. During burn-in, a heuristic sets the first
+  step and dual averaging (Hoffman and Gelman, 2014) tunes it toward the target acceptance. Each
+  trajectory multiplies the step by a uniform draw on [0.8, 1.2]. `posterior_mode` and
+  `maximum_likelihood` also use these gradients in BFGS.
+- `nuts`: No-U-Turn sampling with multinomial choice over the trajectory, Betancourt's generalised
+  U-turn criterion, the same step adaptation and `NUTSResult`. Reports divergences, maximum-depth
+  hits and mean tree depth per chain after burn-in. Both samplers are checked against the exact
+  posterior of an AR(1) coefficient, computed by quadrature, and a long Metropolis–Hastings run,
+  with tolerances set by each chain's effective sample size.
+- `second_order_jacobian`: derivatives of the full second-order decision rule, including `g_k`,
+  `g_u`, `g_kk`, `g_uu`, `g_ku`, `g_s2` and the steady state. Uses central differences and
+  Richardson extrapolation for model parameters, shock standard deviations and correlations.
+  Validated against Dynare 7.2's analytical `dghxx`, `dghxu`, `dghuu` and `dghs2` in every
+  variable row.
+- `third_order_jacobian`: derivatives of `g_kkk`, `g_kku`, `g_kuu`, `g_uuu`, `g_s2` and the
+  steady state with Richardson extrapolation, for model parameters, shock standard deviations
+  and correlations. Validated against Dynare 7.2's analytical third-order derivatives.
+- `derivatives="third"` in the symbolic frontend: exact third derivatives of the model
+  residuals through `Model.third_fn`. `third_derivatives` uses them directly instead of
+  differentiating the Hessian numerically. The default `"both"` remains unchanged. The cubic
+  decision-rule comparisons against Dynare stay below `3e-13` on `example1` and `2e-14` on
+  `example2`. `SparseSecondDerivatives` stores nonzero Hessian entries, and
+  `SparseThirdDerivatives` stores nonzero cubic entries; both support
+  contractions without densification. `solve_third_order(sparse=True)` also stores the cubic
+  state coefficients by independent symmetric triple and contracts them in rule evaluation and
+  risk terms. Explicit decision-rule composition expands dense arrays on demand.
+  Direct and iterative cubic Sylvester solves use the same symmetric coordinate form, the latter
+  with an `Abar` preconditioner. The iterative known term and residual use canonical coordinates,
+  and each matvec expands one equation at a time with an optimized contraction path.
+  `hessian=` reuses second derivatives alongside `third=`. A full nonlinear pipeline with 71
+  variables, 35 states and five shocks validates the sparse route with a maximum residual of
+  `3.1e-20` and a peak RSS of 321 MB. `third_order_jacobian` accepts `sparse` and `direct_limit`
+  and applies them at every perturbed point.
+- `particle_filter`: bootstrap likelihood at first, pruned second and pruned third order, with stationary
+  initialization, systematic resampling by effective sample size and measurement-error covariance.
+  Second order uses the augmented pruned state and the correct `C z_{t-1} + D inov_t` observation
+  timing. Validated against Dynare 7.2's sequential importance particle filter on an AR(1).
+  `EstimationProblem(order=2)` exposes the particle likelihood to posterior mode and samplers,
+  with common random draws. `particle_smoother` adds backward-information smoothing of
+  `particle_filter(..., store=True)`, with smoothed means and effective sample sizes at all three
+  orders. Missing observations are skipped in the filter and smoother. The pruned third-order
+  particle filter uses `[xf; xs; xt]` and the full rule, including `ghxss` and `ghuss`, in both
+  the transition and the observation, and starts each particle from its own 1,000-period path.
+  On a linear model with a jump observed under small measurement error, it reproduces the Kalman
+  likelihood within Monte Carlo error.
+  `EstimationProblem(order=3)` exposes the likelihood to posterior mode and samplers, and its
+  `smoother` method returns third-order smoothed means.
+- `inversion_filter`: minimum-norm shock inversion and exact likelihood at first and pruned
+  second order, with the observation-Jacobian correction and missing-data support.
+  `EstimationProblem(nonlinear_filter="inversion")` selects it instead of the particle filter.
+  Validated against Dynare OccBin's `IVF_core` on an AR(1). `inversion_smoother` returns the
+  exact inverted paths without a backward approximation.
 - `identification`: local identification of the free parameters at one point, from the
   distribution of the observables, as Dynare's `identification` command computes it. Three
   criteria: the derivatives of the moments (Iskrev 2010), the Gram matrix of the derivatives
@@ -34,6 +121,8 @@ Work toward milestone 0.6 (identification, moments and data).
   identity, diagonal or Newey--West optimal weighting, iterated stages, standard errors and
   Hansen's J test. SMM uses fixed simulation draws and applies the `1 + 1/simulation_multiple`
   variance correction. `matched_moments` and `estimated_params` are read from the `.mod`.
+  With `order=2`, GMM computes means and autocovariances from the pruned second-order ABCD
+  system and SMM simulates the same system with fixed draws. The `.mod` option supplies the order.
 - `irf_matching` and `ModFile.irf_matching`: frequentist first-order IRF matching with sparse
   targets, full or diagonal weights, correlated shocks and the inverse Hessian covariance.
   External targets carry their joint covariance; its inverse is the default efficient weight.
@@ -74,6 +163,9 @@ Work toward milestone 0.6 (identification, moments and data).
   of its own. `tools/check_site_examples.py --write` writes that output, and the check fails
   when the page no longer matches the code. Table cells wrap their text, so the comparison
   table no longer runs off the page.
+- `validation/compare_import.py`: a variable whose largest response is below 1e-9 of the
+  model's largest response is left out of the IRF comparison. Its printed results are
+  unchanged.
 
 ## 0.5.0 — 2026-10-18
 

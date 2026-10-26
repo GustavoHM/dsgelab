@@ -329,6 +329,8 @@ k(+1) - i - k*(1 - delta)                                     # constraint 2: k(
 
   <h3>9. Terceira ordem</h3>
 <pre><code>to = dsg.solve_third_order(so, cov={"eps_a": 0.007})
+to_esparso = dsg.solve_third_order(so, cov={"eps_a": 0.007},
+                                   sparse=True, direct_limit=0)
 
 to.g_kkk, to.h_kkk        # os termos cúbicos
 to.accuracy()             # a ordem implícita tem de dar ~4
@@ -360,22 +362,19 @@ to.simulate(periods=5000, seed=1)    # podada em três camadas</code></pre>
 }
 <span class="out-expr">to.simulate(periods=5000, seed=1)</span>
 {
-  'k': [-0.0166 -0.005081 0.01319 ... 0.02347 0.02657 0.04173],
-  'a': [0.0009326 0.01505 0.006865 ... 0.01804 0.03194 0.03259],
-  'c': [-0.005081 0.01319 0.01163 ... 0.02657 0.04173 0.0479]
+  'k': [-0.005672 0.01268 0.01105 ... 0.02659 0.04209 0.04841],
+  'a': [0.0005292 0.01475 0.006478 ... 0.01805 0.03229 0.03296],
+  'c': [-0.005661 0.01267 0.01106 ... 0.02659 0.04208 0.04843]
 }</code></pre>
-  <div class="note"><p><strong>A terceira ordem deste pacote cobre o bloco cúbico e a inclinação
-  do risco.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são verificados pela
-  ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por dezesseis. Os
-  termos <code>sigma²·k</code>, pelos quais o risco entra na <em>inclinação</em> das regras e um
-  prêmio de risco varia com o estado, são <code>g_ssk</code> e <code>h_ssk</code>. No AR(1) em
-  logaritmo, o teste do pacote exige <code>h_ssk[a, a] = ρσ²</code>, com sinal positivo. A inovação
-  continua entrando de forma aditiva, como <code>k' = h(k,σ) + Qε</code>, e por isso as regras não
-  têm monômio em que ε multiplique a si mesma ou o estado. Esses monômios pertencem ao tensor
-  completo de terceira ordem do Dynare, que o pacote ainda não calcula. Esse tensor e o estado
-  estacionário estocástico estão previstos para a versão 0.7, e até lá os termos de risco nesse
-  sentido completo exigem o Dynare, para o qual o exemplo seguinte escreve o
-  <code>.mod</code>.</p></div>
+  <div class="note"><p><strong>A terceira ordem cobre a regra de decisão completa e o estado
+  estacionário estocástico.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são
+  verificados pela ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por
+  dezesseis. O risco entra por <code>g_ssk</code>, <code>h_ssk</code> e pelos blocos de estado e
+  inovação <code>ghxss</code> e <code>ghuss</code>. No AR(1) em logaritmo,
+  <code>h_ssk[a, a] = ρσ²</code>. A simulação usa a regra podada com todos os blocos cúbicos de
+  inovação. <code>stochastic_steady_state(to)</code> calcula o ponto fixo da regra completa sem poda.
+  Com <code>sparse=True, direct_limit=0</code>, o resolvedor guarda triplas simétricas independentes
+  e evita os grandes tensores densos; a composição explícita da regra ainda forma arrays densos.</p></div>
 
   <h3>10. Exportar para o Dynare e para o MacroModelling.jl</h3>
 <pre><code>ss_sim = dsg.steady_state(simbolico, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
@@ -683,6 +682,96 @@ hp["autocorr"][1]["c"]                                                        # 
   densidade espectral da solução. Os mesmos argumentos valem para <code>covariance</code> e
   <code>variance_decomposition</code>. Os dois filtros removem a frequência zero, e por isso uma
   variável com raiz unitária, que não tem variância incondicional, tem momentos filtrados.</p>
+  <h3>21. Derivadas da solução em relação aos parâmetros</h3>
+<pre><code>p_cf = replace(p_rbc, delta=1.0, gamma=1.0)          # depreciação completa e utilidade log
+m_cf, _, g_cf = rbc.build(p_cf)
+jac = dsg.solution_jacobian(dsg.solve(m_cf, p_cf, guess=g_cf), ["alpha", "rho"])
+exata = np.zeros((2, 2, 2))
+exata[0, 0, 0] = exata[1, 1, 1] = 1.0                 # P = [[alpha, 1], [0, rho]]
+np.abs(jac.P - exata).max() &lt; 1e-5
+
+theta = np.array([0.6, 0.12])                         # rho e stderr e, longe da moda
+grad = dsg.log_posterior_gradient(pb, theta).gradient
+fd = np.array([(pb.log_posterior(theta + 1e-6 * e) - pb.log_posterior(theta - 1e-6 * e)) / 2e-6
+               for e in np.eye(2)])
+grad, fd</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">np.abs(jac.P - exata).max() &lt; 1e-5</span>
+True
+<span class="out-expr">grad, fd</span>
+([84.51 -1253], [84.51 -1253])</code></pre>
+  <p><code>solution_jacobian</code> devolve as derivadas de <code>P</code>, <code>F</code>,
+  <code>Q</code> e do estado estacionário, com o parâmetro no último eixo. Com depreciação completa
+  e utilidade logarítmica, o RBC tem a solução em forma fechada
+  <code>P = [[alpha, 1], [0, rho]]</code> em logs. A derivada em relação a <code>alpha</code> vale
+  então um no canto e zero no resto, e a calculada difere dela em menos de 1e-6. A solução QZ é
+  diferenciada pelas condições de ponto de sela, sem nova decomposição em cada ponto perturbado.
+  <code>second_order_jacobian</code> e <code>third_order_jacobian</code> diferenciam as regras de
+  ordem mais alta por diferenças centrais com extrapolação de Richardson.
+  <code>log_posterior_gradient</code> diferencia a verossimilhança de Kalman do problema do exemplo
+  14 pela própria recursão e, num ponto longe da moda, concorda com as diferenças centrais até um
+  erro relativo de 2e-10.</p>
+  <h3>22. Estimação em segunda ordem: filtros de inversão e de partículas</h3>
+<pre><code>theta = [moda.values[n] for n in pb.names]
+inversao = replace(pb, order=2, nonlinear_filter="inversion", presample=1)
+abs(inversao.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9
+
+com_erro = replace(pb, measurement={"y": 0.05})         # o filtro de partículas exige erro de medida
+particulas = replace(com_erro, order=2, particles=10000)
+com_erro.log_likelihood(theta), particulas.log_likelihood(theta)
+
+choques = inversao.smoother(theta).shocks[:, 0]
+np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">abs(inversao.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9</span>
+True
+<span class="out-expr">com_erro.log_likelihood(theta), particulas.log_likelihood(theta)</span>
+(372.2, 372.4)
+<span class="out-expr">np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</span>
+True</code></pre>
+  <p>Com <code>order=2</code>, a verossimilhança vem da regra podada de segunda ordem, e
+  <code>nonlinear_filter</code> escolhe entre a inversão (<code>"inversion"</code>) e o filtro
+  de partículas bootstrap (<code>"particle"</code>, o padrão). O AR(1) do exemplo 14 é linear, de
+  modo que sua regra de segunda ordem coincide com a de primeira e os dois métodos devem reproduzir
+  o filtro de Kalman. A inversão recupera os choques que reproduzem os dados e parte do
+  estado estacionário. Quando a primeira observação serve apenas de pré-amostra
+  (<code>presample=1</code>), o resultado é igual ao de Kalman. As partículas exigem erro de medida
+  e, com 10.000 delas, o valor fica a menos de 0,3 do obtido por Kalman para o mesmo problema. A partir do
+  segundo período, os choques recuperados por inversão coincidem com os do suavizador de Kalman.
+  <code>posterior_mode</code> e <code>metropolis_hastings</code> aceitam esses problemas sem
+  mudança.</p>
+  <h3>23. Amostragem com gradiente: HMC e NUTS</h3>
+<pre><code>curta = replace(pb, data={"y": serie[:100]})         # as 100 primeiras observações do exemplo 14
+moda_curta = dsg.posterior_mode(curta)
+amostra_nuts = dsg.nuts(curta, moda_curta, draws=200, chains=2, seed=1)
+amostra_hmc = dsg.hmc(curta, moda_curta, draws=150, chains=2, leapfrog=5, seed=1)
+
+max(amostra_nuts.rhat().values()) &lt; 1.05, max(amostra_hmc.rhat().values()) &lt; 1.05
+amostra_nuts.divergences
+tol = 0.35 * moda_curta.std["rho"]
+abs(amostra_nuts.mean()["rho"] - moda_curta.values["rho"]) &lt; tol
+abs(amostra_hmc.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">max(amostra_nuts.rhat().values()) &lt; 1.05, max(amostra_hmc.rhat().values()) &lt; 1.05</span>
+(True, True)
+<span class="out-expr">amostra_nuts.divergences</span>
+[0 0]
+<span class="out-expr">abs(amostra_nuts.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</span>
+True
+<span class="out-expr">abs(amostra_hmc.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</span>
+True</code></pre>
+  <p><code>hmc</code> e <code>nuts</code> seguem o gradiente da log-posterior, calculado por
+  <code>log_posterior_gradient</code> como no exemplo 21, e usam a covariância na moda como inversa
+  da matriz de massa. No burn-in, uma heurística escolhe o primeiro passo e a média dual (Hoffman e
+  Gelman, 2014) o leva a uma taxa de aceitação de 0,8. O <code>nuts</code> dobra cada trajetória
+  até que ela volte sobre si mesma e sorteia nela um ponto com pesos multinomiais, de modo que não
+  há número de passos de leapfrog a fixar. O <code>hmc</code> dá <code>leapfrog</code> passos e
+  varia o tamanho do passo em até 20% de um sorteio para o seguinte. Em duas execuções neste
+  problema, o tamanho efetivo da amostra de <code>rho</code> no NUTS ficou entre 70% e 100% do
+  número de sorteios, e em cerca de 6% dele no Metropolis de passeio aleatório. As duas médias a posteriori ficam a menos de um terço
+  de um desvio-padrão de Laplace da moda. O <code>NUTSResult</code> informa também as divergências,
+  as trajetórias que atingem <code>max_depth</code> e a profundidade média da árvore. A suíte de
+  testes confere os dois amostradores com a posterior exata de um coeficiente AR(1), obtida por
+  quadratura, e com uma cadeia longa de Metropolis–Hastings. Eles só funcionam em primeira ordem,
+  porque precisam do gradiente da verossimilhança de Kalman. A recursão que o calcula custa cerca
+  de cinco vezes uma avaliação da verossimilhança, e por isso o exemplo usa 100 observações.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -695,9 +784,10 @@ hp["autocorr"][1]["c"]                                                        # 
     Blanchard–Kahn exigida e a margem de determinação relatada.</p></div>
     <div class="card"><h4>Segunda ordem</h4><p>Equação de Sylvester generalizada, correções de risco,
     simulação podada e média ergódica em forma fechada.</p></div>
-    <div class="card"><h4>Terceira ordem</h4><p>Bloco cúbico verificado na ordem 4 e termos de risco
-    na inclinação (<code>g_ssk</code>, <code>h_ssk</code>). O tensor completo do Dynare e o estado
-    estacionário estocástico estão previstos para a versão 0.7, como explica o exemplo 9.</p></div>
+    <div class="card"><h4>Terceira ordem</h4><p>Regra de decisão completa na forma do Dynare, com o
+    bloco cúbico verificado na ordem 4 e todos os blocos de inovação e de risco
+    (<code>ghxss</code>, <code>ghuss</code>). O exemplo 9 resolve com tensores esparsos e descreve o
+    estado estacionário estocástico.</p></div>
     <div class="card"><h4>Das CPOs ao <code>.mod</code></h4><p>Declare o lagrangiano, derive as
     condições, resolva, exporte para Dynare ou MacroModelling.jl.</p></div>
     <div class="card"><h4>Previsão perfeita</h4><p>Método de Newton com os períodos empilhados,
@@ -962,11 +1052,11 @@ hp["autocorr"][1]["c"]                                                        # 
       <tr><td>Perturbação de 1ª ordem</td><td>sim</td><td>sim</td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
-      <tr><td>3ª ordem com risco na inclinação</td><td>sim (<code>g_ssk</code>, <code>h_ssk</code>), sem o tensor completo do Dynare</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
+      <tr><td>3ª ordem com risco na inclinação</td><td>sim, com a regra de decisão completa do Dynare (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
       <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, até três estados)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
       <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
       <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
-      <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings e SMC, com o filtro de Kalman sobre a solução de primeira ordem)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings, SMC, HMC e NUTS, com o filtro de Kalman na primeira ordem, o de partículas até a terceira e o de inversão até a segunda)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>Calibração por alvos + identificação</td><td>sim</td><td>parcial</td><td>?</td><td>?</td><td>?</td></tr>
       <tr><td>Exportar para Dynare e MacroModelling.jl</td><td class="ok">sim</td><td>só Dynare</td><td>só Dynare</td><td>—</td><td>—</td></tr>
       <tr><td>Ordem de acurácia autoverificada</td><td>sim (ordens 2, 3, 4)</td><td>?</td><td>?</td><td>?</td><td>?</td></tr>

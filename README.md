@@ -3,6 +3,7 @@
 [![tests](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml/badge.svg)](https://github.com/GustavoHM/dsgelab/actions/workflows/tests.yml)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/GustavoHM/dsgelab/blob/main/LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23456474.svg)](https://doi.org/10.5281/zenodo.23456474)
+[![site](https://img.shields.io/badge/site-gustavohm.github.io%2Fdsgelab-8a4b2a)](https://gustavohm.github.io/dsgelab/)
 
 A general toolkit for solving DSGE models in Python. A model is declared once, as lists of
 state, jump and shock names and one function that returns the equilibrium residuals. The
@@ -94,18 +95,20 @@ examples in English and Portuguese.
 |---|---|
 | Steady state, with positivity and outer anchors | `steady_state` |
 | First-order solution (Klein/QZ, Blanchard–Kahn enforced) | `solve` |
+| Parameter Jacobians of the first-, second- and third-order solutions and steady state | `solution_jacobian`, `second_order_jacobian`, `third_order_jacobian` |
 | Impulse responses, simulation, moments, variance decomposition | `FirstOrderSolution` |
-| Second-order perturbation and risk corrections | `solve_second_order` |
-| Third-order perturbation, partial (the cubic block and the risk slope) | `solve_third_order` |
+| Second-order perturbation, innovation tensors and risk corrections | `solve_second_order`, `SecondOrderSolution.decision_rule` |
+| Third-order perturbation, partial (state and innovation cubic blocks, risk slope) | `solve_third_order`, `ThirdOrderSolution.decision_rule` |
 | Global solution by Chebyshev collocation, up to three states | `solve_projection` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
 | Optimal policy under discretion; optimal simple rules, on moments or on welfare | `discretionary_policy`, `osr` |
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
+| Bootstrap particle and inversion filters at first and pruned second order | `particle_filter`, `inversion_filter`, `EstimationProblem(order=2)` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
 | Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
-| First-order GMM, SMM and frequentist IRF matching, with `.mod` blocks and external target covariance | `method_of_moments`, `irf_matching`, the `ModFile` methods |
+| GMM and SMM at first and pruned second order; frequentist IRF matching at first order | `method_of_moments`, `irf_matching`, the `ModFile` methods |
 | Observed-shock local projections with joint HAC covariance across variables and horizons | `local_projection` |
 | Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
@@ -205,12 +208,16 @@ impulse response, announced parameter paths and the Blanchard–Kahn check, and 
 MacroModelling.jl has no round trip. The checks come in three layers.
 
 The first layer is the test suite (`pytest`), which compares the output with answers known
-analytically. The full suite currently has 179 tests. Some need the `symbolic` extra (sympy)
+analytically. The full suite currently has 184 tests. Some need the `symbolic` extra (sympy)
 or the Heutel files from `heutel.fetch()`; tests requiring unavailable optional files are
 skipped. Among the closed forms it checks are the following.
 
 - The RBC with log utility and full depreciation has the solution `P = [[α, 1], [0, ρ]]` and
-  `F = [α, 1]`.
+  `F = [α, 1]`. Its innovation blocks give `h_uu = 1`, `h_ku = ρ`, `h_uuu = 1`, `h_kuu = ρ` and
+  `h_kku = ρ(ρ − 1)`. The composed consumption rule gives `g_ku = ρ + α`, `g_uuu = 1`,
+  `g_kuu = ρ + α` in the technology direction and `g_kuu = α²` in the capital direction. The
+  two-state, one-innovation block gives `g_kku = (ρ + α)(ρ + α − 1)` in the technology direction
+  and `g_kku = α²(α² − 1)` in the capital direction.
 - The New Keynesian example is determinate under a Taylor rule with `φπ = 1.5` and
   indeterminate with `φπ = 0.8`, where `solve` raises `BlanchardKahnError`.
 - On a lognormal AR(1), the second-order coefficient `h_ss` equals `σ²`, so the risk
@@ -235,10 +242,11 @@ The second layer, in [`validation/`](https://github.com/GustavoHM/dsgelab/blob/m
 runs Dynare's own example and test `.mod` files in Octave with Dynare, thirteen MMB models,
 four published-model files from Johannes Pfeifer's DSGE_mod, and one calibration in
 MacroModelling.jl. Each result is compared with `dsgelab`'s, for steady states, impulse
-responses, moments, optimal policy, perfect foresight, estimation, OccBin, the extended path,
-balanced growth, identification, diagnostics, GMM/SMM and IRF matching. The same folder checks
-the port of Heutel (2012) against Heutel's own code. `bash validation/run_all.sh` runs all of
-it, and CI runs it weekly.
+responses, second-order decision-rule tensors, parameter Jacobians, moments, optimal policy,
+perfect foresight, estimation, OccBin, the extended path, balanced growth, identification,
+diagnostics, GMM/SMM
+and IRF matching. The same folder checks the port of Heutel (2012) against Heutel's own code.
+`bash validation/run_all.sh` runs all of it, and CI runs it weekly.
 
 The third layer is one comparison on an applied model from an unpublished paper by the author.
 That model is not public, so the comparison cannot be rerun from the repository. Of the three
@@ -251,21 +259,20 @@ This section lists what the package does not do yet. The
 [roadmap](https://github.com/GustavoHM/dsgelab/blob/main/ROADMAP.md) says when each item is
 planned.
 
-- **Third order is partial.** The cubic block and the risk slope (`g_ssk` and `h_ssk`) are
-  implemented. Dynare's full decision-rule tensor, with the innovation in every monomial, and
-  the stochastic steady state are planned for 0.7. The tensors are dense, so their size grows
-  with the cube of the number of variables and shocks, and sparse tensors for large models are
-  planned for the same version.
-- **Estimation is linear.** The likelihood comes from the Kalman filter on the first-order
-  solution. There is no particle or inversion filter, so no estimation at second or third
-  order, and no gradient-based samplers (HMC/NUTS).
+- **The third-order decision rule is composed densely.** `solve_third_order(sparse=True)` stores
+  the cubic coefficients by independent symmetric triple, but `decision_rule()` expands them into
+  dense arrays, whose size grows with the cube of the number of variables and shocks.
+- **Gradient-based sampling is first order.** HMC and NUTS use the analytic gradient of the
+  Kalman likelihood, so they run on the first-order solution. At second and third order the
+  particle likelihood goes to the posterior mode and to Metropolis–Hastings. The inversion filter
+  stops at pruned second order.
 - **Identification is local, at one point.** Dynare's repetition of the analysis over draws
   from the prior (`prior_mc`), its identification strength from the information matrix and its
   plots are not reproduced.
 - **No global sensitivity analysis** (Dynare's `+gsa`).
-- **The method-of-moments routes are first order.** IRF matching is frequentist, and MATLAB
-  `irf_matching_file` transformations are not executed; pass an explicit Python `transform=`
-  instead.
+- **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
+  second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
+  explicit Python `transform=` instead.
 - **Global methods are limited** to Chebyshev collocation with up to three states. There is no
   value or time iteration, endogenous grid, sparse grid, or Tauchen/Rouwenhorst discretisation.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**

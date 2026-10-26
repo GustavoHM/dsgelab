@@ -72,3 +72,45 @@ def test_equation_count_is_checked():
     with pytest.raises(SymbolicError, match="equations for"):
         from_equations(["a(+1) = rho*a + eps_a"],
                        states=["a"], jumps=["c"], shocks=["eps_a"], parameters=["rho"])
+
+
+def test_exact_third_derivatives_are_opt_in():
+    m = from_equations(["x(+1) = rho*x + 0.1*x**3 + eps"],
+                       states=["x"], jumps=[], shocks=["eps"], parameters=["rho"],
+                       derivatives="third")
+    ss = dsg.steady_state(m, {"x": 2.0}, {"rho": 0.5})
+    system = dsg.first_order_system(m, ss, {"rho": 0.5})
+    T = dsg.linearize.third_derivatives(m, ss, {"rho": 0.5},
+                                        row_scale=system.row_scale)
+    expected = -0.6 * abs(ss.x[0]) ** 3 / system.row_scale[0]
+    assert ss.x[0] == pytest.approx(np.sqrt(5.0), rel=1e-8)
+    assert m.third_fn is not None
+    assert T.shape == (1, 3, 3, 3)
+    assert T[0, 1, 1, 1] == pytest.approx(expected, abs=1e-14)
+    np.testing.assert_allclose(T[0, 0], 0.0, atol=1e-14)
+    np.testing.assert_allclose(T[0, 2], 0.0, atol=1e-14)
+    sparse = dsg.third_derivatives(m, ss, {"rho": 0.5}, row_scale=system.row_scale,
+                                   sparse=True)
+    assert isinstance(sparse, dsg.SparseThirdDerivatives)
+    assert sparse.nnz == 1
+    np.testing.assert_allclose(sparse.to_dense(), T, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(sparse.contract(np.eye(3), np.eye(3), np.eye(3)), T,
+                               rtol=0.0, atol=1e-14)
+    H = dsg.second_derivatives(m, ss, {"rho": 0.5}, row_scale=system.row_scale)
+    H_sparse = dsg.second_derivatives(m, ss, {"rho": 0.5}, row_scale=system.row_scale,
+                                      sparse=True)
+    assert isinstance(H_sparse, dsg.SparseSecondDerivatives)
+    assert H_sparse.nnz == 1
+    np.testing.assert_allclose(H_sparse.to_dense(), H, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(H_sparse.contract(np.eye(3), np.eye(3)), H,
+                               rtol=0.0, atol=1e-14)
+
+    default = from_equations(["x(+1) = rho*x + eps"], states=["x"], jumps=[],
+                             shocks=["eps"], parameters=["rho"])
+    assert default.third_fn is None
+
+
+def test_derivatives_option_rejects_unknown_values():
+    with pytest.raises(SymbolicError, match="third.*both.*jacobian.*none"):
+        from_equations(["x(+1) = x"], states=["x"], jumps=[], shocks=[],
+                       parameters=[], derivatives="cubic")

@@ -41,6 +41,16 @@ validation/out_identification/
 validation/work_identification/
 validation/out_mom/
 validation/work_mom/
+validation/out_mom_order2/
+validation/work_mom_order2/
+validation/out_decision_rule/
+validation/work_decision_rule/
+validation/out_third_irf/
+validation/work_third_irf/
+validation/out_particle/
+validation/work_particle/
+validation/out_inversion/
+validation/work_inversion/
 validation/out_filtered/
 validation/work_filtered/
 validation/mmb/mods/
@@ -54,6 +64,7 @@ validation/dsge_mod/prepared/
 # the Python environment CondaPkg builds for validation/macromodelling
 validation/macromodelling/.CondaPkg/
 validation/macromodelling/Manifest.toml
+validation/macromodelling/inversion.json
 # local review tool for the public texts, not part of the package
 .review/
 

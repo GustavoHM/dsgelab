@@ -326,6 +326,8 @@ k(+1) - i - k*(1 - delta)                                     # constraint 2: k(
 
   <h3>9. Third order</h3>
 <pre><code>to = dsg.solve_third_order(so, cov={"eps_a": 0.007})
+to_sparse = dsg.solve_third_order(so, cov={"eps_a": 0.007},
+                                  sparse=True, direct_limit=0)
 
 to.g_kkk, to.h_kkk        # the cubic terms
 to.accuracy()             # the implied order must come out ~4
@@ -357,21 +359,19 @@ to.simulate(periods=5000, seed=1)    # pruned in three layers</code></pre>
 }
 <span class="out-expr">to.simulate(periods=5000, seed=1)</span>
 {
-  'k': [-0.0166 -0.005081 0.01319 ... 0.02347 0.02657 0.04173],
-  'a': [0.0009326 0.01505 0.006865 ... 0.01804 0.03194 0.03259],
-  'c': [-0.005081 0.01319 0.01163 ... 0.02657 0.04173 0.0479]
+  'k': [-0.005672 0.01268 0.01105 ... 0.02659 0.04209 0.04841],
+  'a': [0.0005292 0.01475 0.006478 ... 0.01805 0.03229 0.03296],
+  'c': [-0.005661 0.01267 0.01106 ... 0.02659 0.04208 0.04843]
 }</code></pre>
-  <div class="note"><p><strong>Third order here covers the cubic block and the risk slope.</strong>
-  The cubic terms (<code>g_kkk</code>, <code>h_kkk</code>) are verified by the order of accuracy,
-  since halving the displacement divides the residual by sixteen. The <code>sigma²·k</code> terms,
-  through which risk enters the <em>slope</em> of the rules and a risk premium varies with the
-  state, are <code>g_ssk</code> and <code>h_ssk</code>. On the log AR(1) the package's test requires
-  <code>h_ssk[a, a] = ρσ²</code>, with a positive sign. The innovation still enters additively, as
-  <code>k' = h(k,σ) + Qε</code>, so the rules contain no monomial in which ε multiplies itself or
-  the state. Such monomials belong to Dynare's full third-order tensor, which the package does not
-  compute yet. That tensor and the stochastic steady state are planned for version 0.7, and until
-  then risk terms in that full sense require Dynare, for which the next example writes the
-  <code>.mod</code>.</p></div>
+  <div class="note"><p><strong>Third order covers the full decision rule and the stochastic steady
+  state.</strong> The cubic terms (<code>g_kkk</code>, <code>h_kkk</code>) are verified by the order
+  of accuracy, since halving the displacement divides the residual by sixteen. Risk enters through
+  <code>g_ssk</code>, <code>h_ssk</code> and the state and innovation blocks <code>ghxss</code> and
+  <code>ghuss</code>. On the log AR(1), <code>h_ssk[a, a] = ρσ²</code>. Simulation uses the pruned
+  rule with every cubic innovation block. <code>stochastic_steady_state(to)</code> computes the fixed
+  point of the full unpruned rule. With <code>sparse=True, direct_limit=0</code>, the solver stores
+  independent symmetric state triples and avoids the large dense tensors; explicit decision-rule
+  composition still forms dense arrays.</p></div>
 
   <h3>10. Export to Dynare and to MacroModelling.jl</h3>
 <pre><code>ss_sym = dsg.steady_state(symbolic, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
@@ -675,6 +675,95 @@ hp["autocorr"][1]["c"]                                                        # 
   <code>covariance</code> and <code>variance_decomposition</code>. Both filters remove the zero
   frequency, so a variable with a unit root, which has no unconditional variance, has filtered
   moments.</p>
+  <h3>21. Derivatives of the solution with respect to the parameters</h3>
+<pre><code>p_cf = replace(p_rbc, delta=1.0, gamma=1.0)          # full depreciation and log utility
+m_cf, _, g_cf = rbc.build(p_cf)
+jac = dsg.solution_jacobian(dsg.solve(m_cf, p_cf, guess=g_cf), ["alpha", "rho"])
+exact = np.zeros((2, 2, 2))
+exact[0, 0, 0] = exact[1, 1, 1] = 1.0                 # P = [[alpha, 1], [0, rho]]
+np.abs(jac.P - exact).max() &lt; 1e-5
+
+theta = np.array([0.6, 0.12])                         # rho and stderr e, away from the mode
+grad = dsg.log_posterior_gradient(pb, theta).gradient
+fd = np.array([(pb.log_posterior(theta + 1e-6 * e) - pb.log_posterior(theta - 1e-6 * e)) / 2e-6
+               for e in np.eye(2)])
+grad, fd</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">np.abs(jac.P - exact).max() &lt; 1e-5</span>
+True
+<span class="out-expr">grad, fd</span>
+([84.51 -1253], [84.51 -1253])</code></pre>
+  <p><code>solution_jacobian</code> returns the derivatives of <code>P</code>, <code>F</code>,
+  <code>Q</code> and the steady state, with the parameter on the last axis. With full depreciation
+  and log utility the RBC has the closed-form solution <code>P = [[alpha, 1], [0, rho]]</code> in
+  logs, so the derivative with respect to <code>alpha</code> is one in the corner and zero elsewhere,
+  and the computed one differs from it by less than 1e-6. The QZ solution is differentiated through
+  its saddle-path conditions, with no new decomposition at each perturbed point.
+  <code>second_order_jacobian</code> and <code>third_order_jacobian</code> differentiate the
+  higher-order rules by central differences with Richardson extrapolation.
+  <code>log_posterior_gradient</code> differentiates the Kalman likelihood of the problem in example
+  14 through its recursion, and at a point away from the mode it agrees with central differences to
+  a relative 2e-10.</p>
+  <h3>22. Estimation at second order: inversion and particle filters</h3>
+<pre><code>theta = [mode.values[n] for n in pb.names]
+inversion = replace(pb, order=2, nonlinear_filter="inversion", presample=1)
+abs(inversion.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9
+
+noisy = replace(pb, measurement={"y": 0.05})         # the particle filter needs measurement error
+particle = replace(noisy, order=2, particles=10000)
+noisy.log_likelihood(theta), particle.log_likelihood(theta)
+
+shocks = inversion.smoother(theta).shocks[:, 0]
+np.abs(shocks[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">abs(inversion.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9</span>
+True
+<span class="out-expr">noisy.log_likelihood(theta), particle.log_likelihood(theta)</span>
+(372.2, 372.4)
+<span class="out-expr">np.abs(shocks[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</span>
+True</code></pre>
+  <p>With <code>order=2</code> the likelihood comes from the pruned second-order rule, and
+  <code>nonlinear_filter</code> chooses between the inversion filter and the bootstrap particle
+  filter, which is the default. The AR(1) of example 14 is linear, so its second-order rule equals
+  the first-order one and both filters must reproduce the Kalman likelihood. The inversion filter
+  recovers the shocks that reproduce the data and starts from the steady state, so once the first
+  observation serves only as presample (<code>presample=1</code>) its likelihood equals the Kalman
+  one. The particle filter requires measurement error, and with 10,000 particles its value differs
+  from Kalman's by less than 0.3 for the same problem. From the second period on, the shocks recovered
+  by inversion coincide with those of the Kalman smoother. <code>posterior_mode</code> and
+  <code>metropolis_hastings</code> accept these problems unchanged.</p>
+  <h3>23. Gradient-based sampling: HMC and NUTS</h3>
+<pre><code>short = replace(pb, data={"y": series[:100]})        # the first 100 observations of example 14
+mode_short = dsg.posterior_mode(short)
+draws_nuts = dsg.nuts(short, mode_short, draws=200, chains=2, seed=1)
+draws_hmc = dsg.hmc(short, mode_short, draws=150, chains=2, leapfrog=5, seed=1)
+
+max(draws_nuts.rhat().values()) &lt; 1.05, max(draws_hmc.rhat().values()) &lt; 1.05
+draws_nuts.divergences
+tol = 0.35 * mode_short.std["rho"]
+abs(draws_nuts.mean()["rho"] - mode_short.values["rho"]) &lt; tol
+abs(draws_hmc.mean()["rho"] - mode_short.values["rho"]) &lt; tol</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">max(draws_nuts.rhat().values()) &lt; 1.05, max(draws_hmc.rhat().values()) &lt; 1.05</span>
+(True, True)
+<span class="out-expr">draws_nuts.divergences</span>
+[0 0]
+<span class="out-expr">abs(draws_nuts.mean()["rho"] - mode_short.values["rho"]) &lt; tol</span>
+True
+<span class="out-expr">abs(draws_hmc.mean()["rho"] - mode_short.values["rho"]) &lt; tol</span>
+True</code></pre>
+  <p><code>hmc</code> and <code>nuts</code> follow the gradient of the log posterior, computed by
+  <code>log_posterior_gradient</code> as in example 21, and use the covariance at the mode as the
+  inverse mass matrix. During burn-in, a heuristic picks a first step size and dual averaging
+  (Hoffman and Gelman, 2014) moves it toward an acceptance rate of 0.8. <code>nuts</code> doubles
+  each trajectory until it turns back on itself and draws a point from it with multinomial
+  weights, so it has no number of leapfrog steps to set. <code>hmc</code> takes
+  <code>leapfrog</code> steps and varies the step size by up to 20% from one draw to the next. In two
+  runs on this problem, the effective sample size of <code>rho</code> from NUTS was between 70% and
+  100% of the number of draws, and about 6% of it for random-walk Metropolis. Both posterior means lie within a third of
+  a Laplace standard deviation of the mode. <code>NUTSResult</code> also reports divergences,
+  trajectories that reach <code>max_depth</code> and the mean tree depth. The test suite checks
+  both samplers against the exact posterior of an AR(1) coefficient, computed by quadrature, and
+  against a long Metropolis–Hastings run. They run at first order only, because they need the
+  gradient of the Kalman likelihood. Its recursion costs about five times one evaluation of the
+  likelihood, and for that reason the example uses 100 observations.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -686,9 +775,10 @@ hp["autocorr"][1]["c"]                                                        # 
     and the determinacy margin reported.</p></div>
     <div class="card"><h4>Second order</h4><p>Generalised Sylvester equation, risk corrections,
     pruned simulation and the ergodic mean in closed form.</p></div>
-    <div class="card"><h4>Third order</h4><p>Cubic block verified at order 4, and the risk terms in
-    the slope (<code>g_ssk</code>, <code>h_ssk</code>). Dynare's full tensor and the stochastic
-    steady state are planned for version 0.7, as example 9 explains.</p></div>
+    <div class="card"><h4>Third order</h4><p>Full decision rule in Dynare's form, with the cubic
+    block verified at order 4 and every innovation and risk block (<code>ghxss</code>,
+    <code>ghuss</code>). Example 9 solves with sparse tensors and describes the stochastic
+    steady state.</p></div>
     <div class="card"><h4>From FOCs to <code>.mod</code></h4><p>Declare the Lagrangian, derive the
     conditions, solve, and export to Dynare or MacroModelling.jl.</p></div>
     <div class="card"><h4>Perfect foresight</h4><p>Stacked-time Newton with a sparse Jacobian and
@@ -948,11 +1038,11 @@ hp["autocorr"][1]["c"]                                                        # 
       <tr><td>1st-order perturbation</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td>—</td></tr>
       <tr><td><strong>2nd order + risk corrections</strong></td><td><strong>yes</strong></td><td><strong>no</strong></td><td>yes</td><td>yes</td><td>—</td></tr>
       <tr><td>3rd order (deterministic block)</td><td class="ok">yes</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
-      <tr><td>3rd order with risk in the slope</td><td>yes (<code>g_ssk</code>, <code>h_ssk</code>); Dynare's full tensor, no</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
+      <tr><td>3rd order with risk in the slope</td><td>yes, with Dynare's full decision rule (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
       <tr><td>Global / projection methods</td><td>partial (Chebyshev collocation, up to three states)</td><td>—</td><td>yes</td><td>—</td><td>partial</td></tr>
       <tr><td>Heterogeneous agents</td><td>—</td><td>—</td><td>—</td><td>—</td><td>yes</td></tr>
       <tr><td>Nonlinear perfect foresight</td><td>yes</td><td>yes</td><td>yes</td><td>?</td><td>yes</td></tr>
-      <tr><td>Bayesian estimation</td><td>yes (mode, Metropolis–Hastings and SMC, with the Kalman filter on the first-order solution)</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Bayesian estimation</td><td>yes (mode, Metropolis–Hastings, SMC, HMC and NUTS, with the Kalman filter at first order, the particle filter up to third and the inversion filter up to second)</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>Calibration on targets + identification</td><td>yes</td><td>partial</td><td>?</td><td>?</td><td>?</td></tr>
       <tr><td>Export to Dynare and MacroModelling.jl</td><td class="ok">yes</td><td>Dynare only</td><td>Dynare only</td><td>—</td><td>—</td></tr>
       <tr><td>Self-verified order of accuracy</td><td>yes (orders 2, 3, 4)</td><td>?</td><td>?</td><td>?</td><td>?</td></tr>

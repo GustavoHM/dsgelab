@@ -33,10 +33,12 @@ I read only the documentation, so a **📄** cell may be wrong without the table
 
 `dsgelab` does not solve heterogeneous-agent models, which are the subject of **sequence-jacobian**
 and **econpizza**. For global methods beyond polynomial projection, which in `dsgelab` goes up to
-three states, **dolo** documents time, value and expectations iteration. Gradient-based samplers
-(HMC, NUTS) are in PyMC, through which **gEconpy** estimates, whereas `dsgelab` samples by
-Metropolis–Hastings and SMC. Estimating at second or third order, with a particle or inversion
-filter, and obtaining the full third-order tensor still require **Dynare** or **MacroModelling.jl**.
+three states, **dolo** documents time, value and expectations iteration. **gEconpy** estimates
+through PyMC and its gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
+analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
+second and third order it estimates with a particle filter, and at second order also with an
+inversion filter. Global sensitivity analysis still requires **Dynare**, and Markov regime
+switching requires **RISE**.
 
 | Capability | dsgelab | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
 |---|---|---|---|---|---|---|---|
@@ -46,7 +48,7 @@ filter, and obtaining the full third-order tensor still require **Dynare** or **
 | Declared analytic steady state | ✅ ‡ checked against the model's residual before use, and against Dynare on `fs2000` at 1e-16 | ✅ `STEADY_STATE` block | ? | ? | ? | 📄 | ✅ |
 | **1st-order perturbation** | ✅ Klein/QZ | ✅ | 📄 | 📄 | — | 📄 Klein | ✅ |
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
-| 3rd-order perturbation | ✅ ‡ cubic block and risk slope `g_ssk` and `h_ssk`, with `h_ssk` checked against the closed form of the AR(1) in logs. Without Dynare's full tensor or the stochastic steady state (planned for 0.7) | — | 📄 | — | — | — | ✅ |
+| 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
 | Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
 | Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
@@ -66,7 +68,7 @@ filter, and obtaining the full third-order tensor still require **Dynare** or **
 | **Optimal policy: Ramsey under commitment** | ✅ ‡ timeless, against Dynare, with IRFs to 5e-13 and the steady state to 5e-11 | — | — | — | — | — | ✅ |
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
 | 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare, to 1.4e-12 under Ramsey and 3.5e-13 in an RBC with capital (6.1e-10 under discretion) | — | — | — | — | — | ✅ |
-| **Bayesian estimation** | ✅ ‡ mode, Laplace and Metropolis against Dynare on `fs2000`, SMC and maximum likelihood against the conjugate case, R-hat, ESS | ✅ via PyMC | — | 📄 with ZLB | — | — 📄 states it has none | ✅ |
+| **Bayesian estimation** | ✅ ‡ mode, Laplace and Metropolis against Dynare on `fs2000`, SMC and maximum likelihood against the conjugate case, R-hat, ESS. HMC and NUTS at first order, with the likelihood gradient checked against finite differences and the samplers against the exact posterior of an AR(1) coefficient. Particle filter up to third order, against Dynare's likelihood on an AR(1) to 0.006, and inversion filter up to second order, against Dynare's OccBin filter on the same AR(1) | ✅ via PyMC | — | 📄 with ZLB | — | — 📄 states it has none | ✅ |
 | Kalman filter / smoothing | ✅ ‡ filter with exact diffuse start and smoother, against Dynare (likelihood at 6e-12, smoother at 8.4e-15) | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibration on targets** | ✅ joint, with bounds | ✅ parameters calibrated to target ratios | ? | ? | ? | ? | 📄 |
 | **Identification diagnostic for the calibration** | ✅ rank and null directions | ? | ? | ? | ? | ? | 📄 (model identification) |
@@ -86,9 +88,8 @@ conditions from a declared problem, accept an analytic steady state, estimate by
 export to Dynare. Of the 37 rows of the table, 10 mark gEconpy as absent (—) in a capability that
 `dsgelab` has, among them second and third order, occasionally binding constraints and optimal
 policy, and none records the reverse, while in another 7 the gEconpy capability was not checked (?).
-The table leaves out two gEconpy features that `dsgelab` does not offer, the gradient-based samplers
-of PyMC, through which gEconpy estimates, and declaration by blocks, which `assemble` covers only
-within the limits of `Problem`.
+The table leaves out one gEconpy feature that `dsgelab` does not offer, declaration by blocks,
+which `assemble` covers only within the limits of `Problem`.
 
 **`PyMacLab` solves the first order by Klein's method, as `dsgelab` does,** and the second by that of
 Klein and Gomme, according to its documentation, which dates from January 2013. Among the packages in
@@ -122,16 +123,21 @@ feature is that of the test that validates it.
   accuracy. ``h_ssk`` and ``g_ssk`` come from the curvature of the rule with respect to the
   innovation, contracted with ``Σ``. In the AR(1) in logs, ``h_ssk[a, a] = ρ σ²``, with positive
   sign, which is the cross term of ``(1+â)^ρ exp(σ²/2)``, and the capital row, whose rule is exact,
-  comes out at zero. The object computed is the ``σ² k`` term of the decision rule. Dynare's full
-  tensor, with the innovation as an argument in every monomial, and the stochastic steady state are
-  planned for version 0.7.
+  comes out at zero. The object computed is the ``σ² k`` term of the decision rule. With version
+  0.7, the rule takes the innovation as an argument in every monomial, in Dynare's form, and
+  ``ghxxx``, ``ghxxu``, ``ghxuu``, ``ghuuu``, ``ghxss`` and ``ghuss`` agree with Dynare 7.2 on
+  `example1` and `example2` to 3e-13. ``stochastic_steady_state`` returns the fixed point of the
+  unpruned rule, which differs from the ergodic mean of the pruned system.
 * **Bayesian estimation of the linear model.** The likelihood comes from the Kalman filter on the
   first-order solution, present since 0.2 together with the posterior mode and random-walk
   Metropolis–Hastings. Version 0.3 added the smoother, the exact diffuse start for unit roots,
   maximum likelihood, SMC and the marginal likelihood by Laplace and by modified harmonic mean.
   Against Dynare's `estimation` on `fs2000.mod`, the likelihood agrees to 6e-12, the prior density to
-  4e-13 and the Laplace approximation, by the same formula, to 2e-13. Without a particle or inversion
-  filter, the package does not estimate at second or third order.
+  4e-13 and the Laplace approximation, by the same formula, to 2e-13. Version 0.7 adds the analytic
+  gradient of the Kalman likelihood, used by HMC and NUTS, and two nonlinear filters. The
+  particle filter estimates up to third order and matches Dynare's likelihood on an AR(1) to 0.006.
+  At first and second order, the inversion filter reproduces the shocks and the likelihood of
+  Dynare's OccBin filter on that AR(1).
 * **Projection by Chebyshev collocation.** The residual used in the perturbation is collocated on a
   tensor grid of up to three states. Rows without a future jump determine the next state for each
   shock, and the others are integrated by Gauss–Hermite. For stochastic growth with a
@@ -141,10 +147,10 @@ feature is that of the test that validates it.
 Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, occasionally binding
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
 each validated as the table in the following section indicates. Version 0.6 adds local
-identification and the moments of filtered variables. Still absent are global sensitivity, the method of moments, nonlinear filters, gradient-based
-samplers, global methods beyond Chebyshev collocation, regime switching, heterogeneous agents, BVAR,
-DSGE-VAR, plots and the declaration of trends in `from_equations`. The README lists them under
-*Known limitations*, and `ROADMAP.md` gives the version for each.
+identification, the method of moments and the moments of filtered variables. Still absent are
+global sensitivity, global methods beyond Chebyshev collocation, regime switching, heterogeneous
+agents, BVAR, DSGE-VAR, plots and the declaration of trends in `from_equations`. The README lists
+them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
 
@@ -179,13 +185,13 @@ those that set it apart from the Python packages in the table.
    pinned versions, on `.mod` files taken from Dynare's own examples and tests and on a few written
    in this repository (`nk_linear.mod`, `rbc_labortax.mod` and `nk_osr_planner.mod` in
    `validation/ramsey/`, `validation/estimation/unitroot.mod` and the three models in
-   `validation/diagnostics/`). Third order and
-   projection, which Dynare does not compute in the same form, are checked against closed forms in
-   the test suite.
+   `validation/diagnostics/`). Projection, which Dynare does not compute, is checked against a
+   closed form in the test suite. Third order is checked there against closed forms and here
+   against Dynare's decision rule on `example1` and `example2`.
 
 A model written in `dsgelab` reaches Dynare through `to_dynare`, checked by round trip, when it needs
-what `dsgelab` does not have yet, such as third order in decision-rule form, the stochastic steady
-state or nonlinear estimation. The `to_macromodelling` exporter writes the
+what `dsgelab` does not have yet, such as global sensitivity analysis (`+gsa`) or identification
+over draws from the prior (`prior_mc`). The `to_macromodelling` exporter writes the
 same model for MacroModelling.jl, without a round-trip check.
 
 ---
@@ -223,11 +229,11 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Several agents in one equilibrium | 📄 gEconpy (blocks) | **done**: `assemble`, within the limits of `Problem` | 0.4 |
 | Local identification | ✅ Dynare (`+identification`) | **done**: `identification`, the moments, spectrum and minimal-system criteria and the collinearity search, with the same verdicts as Dynare on three models and derivatives within 2e-8 | 0.6 |
 | Global sensitivity | ✅ Dynare (`+gsa`) | missing | 0.6 |
-| Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`) | missing | 0.6 |
+| Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`) | **done**: GMM and SMM at first and pruned second order, and frequentist IRF matching at first order; calibration restrictions missing | 0.6, 0.7 |
 | Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
 | Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |
-| Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | risk slope done, the rest missing | 0.7 |
-| Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | missing | 0.7 |
+| Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
+| Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.8 |
 | Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
 

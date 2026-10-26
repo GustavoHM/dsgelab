@@ -803,9 +803,10 @@ class ModFile:
         cov = np.zeros((len(self.model.shocks),) * 2)
         order = [self.model.shocks.index(e) for e in self.exogenous]
         cov[np.ix_(order, order)] = S
+        perturbation_order = int(float(self.mom_options.get("order", "1") or "1"))
         kw: dict[str, Any] = dict(params=dict(self.params), free=start, bounds=bounds,
                                   observables=list(self.varobs), moments=moments,
-                                  method=method, cov=cov,
+                                  method=method, cov=cov, order=perturbation_order,
                                   steady_fn=lambda p: self.steady_state(params=p))
         kw.update(kwargs)
         return method_of_moments(self.model, data, **kw)

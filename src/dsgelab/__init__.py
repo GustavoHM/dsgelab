@@ -47,8 +47,16 @@ from .optimal import (DiscretionError, DiscretionSolution, OSRError, OSRResult, 
                       RamseyError, discretionary_policy, osr, ramsey_model, ramsey_multipliers,
                       ramsey_steady_state)
 from .welfare import Welfare, WelfareError, consumption_equivalent, welfare, welfare_model
-from .secondorder import SecondOrderSolution, solve_second_order
-from .thirdorder import ThirdOrderSolution, solve_third_order
+from .secondorder import DecisionRule, SecondOrderSolution, solve_second_order
+from .thirdorder import ThirdOrderSolution, solve_third_order, stochastic_steady_state
+from .tensors import SparseSecondDerivatives, SparseThirdDerivatives
+from .derivatives import (SecondOrderSolutionJacobian, SolutionJacobian, PosteriorGradient,
+                          ThirdOrderSolutionJacobian, second_order_jacobian,
+                          solution_jacobian, third_order_jacobian, log_likelihood_gradient,
+                          log_posterior_gradient)
+from .gradient import LikelihoodGradient, kalman_likelihood_gradient
+from .hmc import hmc
+from .nuts import NUTSResult, nuts
 from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
 from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          effective_sample_size, maximum_likelihood, metropolis_hastings,
@@ -57,6 +65,8 @@ from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
                      shock_decomposition, state_space)
+from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
+from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .solution import FirstOrderSolution, shock_covariance
@@ -71,13 +81,21 @@ __all__ = [
     "solve", "FirstOrderSolution", "shock_covariance",
     "klein", "KleinSolution", "BlanchardKahnError",
     "first_order_system", "second_derivatives", "LinearSystem", "Coordinates",
-    "solve_second_order", "SecondOrderSolution",
-    "solve_third_order", "ThirdOrderSolution", "third_derivatives",
+    "solve_second_order", "SecondOrderSolution", "DecisionRule",
+    "solve_third_order", "ThirdOrderSolution", "third_derivatives", "SparseThirdDerivatives",
+    "stochastic_steady_state",
+    "SparseSecondDerivatives",
+    "solution_jacobian", "SolutionJacobian", "second_order_jacobian", "SecondOrderSolutionJacobian",
+    "third_order_jacobian", "ThirdOrderSolutionJacobian",
+    "log_likelihood_gradient", "LikelihoodGradient", "kalman_likelihood_gradient",
+    "log_posterior_gradient", "PosteriorGradient", "hmc", "nuts", "NUTSResult",
     "estimate", "EstimationResult", "log_likelihood", "log_posterior",
     "EstimationProblem", "posterior_mode", "maximum_likelihood", "metropolis_hastings", "smc",
     "prior_predictive", "model_probabilities", "posterior_forecast", "rhat",
     "effective_sample_size", "ModeResult", "MCMCResult", "SMCResult",
     "state_space", "StateSpace", "kalman_filter", "kalman_smoother", "FilterResult",
+    "particle_filter", "ParticleFilterResult", "particle_smoother", "ParticleSmootherResult",
+    "inversion_filter", "InversionFilterResult", "inversion_smoother",
     "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
     "Forecast", "prior", "Prior",
     "solve_projection", "Projection",

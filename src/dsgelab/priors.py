@@ -76,6 +76,32 @@ class Prior:
             return float(-math.log(self.upper - self.lower))
         raise ValueError(f"unknown prior shape {s!r}")
 
+    def score(self, x: float) -> float:
+        """Derivative of ``logpdf`` at ``x``, or NaN outside the support."""
+        x = float(x)
+        if not (self.lower <= x <= self.upper) or (x == self.lower and self.shape != "normal"
+                                                  and self.shape != "uniform"):
+            return float("nan")
+        s = self.shape
+        if s == "normal":
+            return float(-(x - self.mean) / self.sd ** 2)
+        if s == "beta":
+            aa, bb = self.lower, self.upper
+            if x >= bb:
+                return float("nan")
+            return float((self.a - 1) / (x - aa) - (self.b - 1) / (bb - x))
+        if s == "gamma":
+            return float((self.a - 1) / (x - self.lower) - 1 / self.b)
+        if s == "inv_gamma":
+            y = x - self.lower
+            return float(-(self.b + 1) / y + self.a / y ** 3)
+        if s == "inv_gamma2":
+            y = x - self.lower
+            return float(-(self.b / 2 + 1) / y + self.a / (2 * y ** 2))
+        if s == "uniform":
+            return 0.0
+        raise ValueError(f"unknown prior shape {s!r}")
+
     def sample(self, rng: np.random.Generator,
                size: int | tuple[int, ...] | None = None) -> float | np.ndarray:
         s = self.shape

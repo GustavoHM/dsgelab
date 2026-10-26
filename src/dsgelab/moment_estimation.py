@@ -7,9 +7,8 @@ block declares them, as products of observed variables with leads, lags and
 powers: ``"c"`` is a mean, ``"c*iv"`` a second moment, ``"c*c(-1)"`` a first
 autocovariance, ``"c^2"`` the same as ``"c*c"``.
 
-* **GMM** computes the model's moments in closed form from the first-order
-  solution: the means are the steady state, and the second moments come from the
-  Lyapunov equation, centred or not.
+* **GMM** computes means and second moments in closed form. First order uses the
+  steady state and a Lyapunov equation; second order uses the pruned ABCD system.
 * **SMM** simulates the model on a fixed set of draws, ``simulation_multiple``
   times as long as the data after a burn-in, and takes the same sample moments
   of the simulation as of the data.
@@ -179,7 +178,7 @@ class MomentsResult:
 def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *,
                       params: Params, free: Sequence[str] | Mapping[str, float],
                       observables: Sequence[str], moments: Sequence[str],
-                      method: str = "GMM",
+                      method: str = "GMM", order: int = 1,
                       bounds: Mapping[str, tuple[float, float]] | None = None,
                       cov: Covariance = None,
                       transforms: str | Mapping[str, str] | None = None,
@@ -206,8 +205,8 @@ def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *
     observables : the observed variables, in the units of the data.
     moments : the matched moments, as Dynare's ``matched_moments`` block writes
         them (``"c"``, ``"c*iv"``, ``"c*c(-1)"``, ``"c^2"``).
-    method : ``"GMM"`` (closed-form moments of the first-order solution) or
-        ``"SMM"`` (moments of a simulation).
+    method : ``"GMM"`` (closed-form moments) or ``"SMM"`` (moments of a simulation).
+    order : perturbation order, 1 or 2. Second order uses the pruned decision rule.
     bounds : ``{name: (lower, upper)}`` for the estimated names.
     cov : the shocks' covariance at the start (standard deviations or a matrix).
     transforms : ``"level"`` or ``"log"`` per observable, as in :func:`dsgelab.state_space`.
@@ -230,6 +229,8 @@ def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *
     method = method.upper()
     if method not in ("GMM", "SMM"):
         raise ValueError(f"method must be 'GMM' or 'SMM', not {method!r}")
+    if order not in (1, 2):
+        raise ValueError(f"order must be 1 or 2, got {order!r}")
     observables = list(observables)
     names = list(free)
     index = {n: i for i, n in enumerate(observables)}
@@ -266,12 +267,12 @@ def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *
     from .steady import steady_state
     last_ss = {"values": guess}
 
-    def space_at(theta) -> StateSpace:
+    def solution_at(theta):
         p, S, _ = unpack_point(model, params, cov, {}, names, theta)
         ss = steady_fn(p) if steady_fn is not None else steady_state(model, last_ss["values"], p)
         sol = solve(model, p, steady=ss, qz_criterium=qz_criterium)
         last_ss["values"] = ss.values
-        return state_space(sol, observables, transforms=transforms, cov=S)
+        return sol, S
 
     if method == "SMM":
         long = int(round(simulation_multiple * T))
@@ -287,7 +288,15 @@ def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *
         long, draws, vcf = 0, None, 1.0
 
     def model_moments(theta) -> np.ndarray:
-        s = space_at(theta)
+        sol, S = solution_at(theta)
+        if order == 2:
+            from .secondorder import solve_second_order
+            second = solve_second_order(sol, cov=S)
+            if method == "GMM":
+                return _gmm_moments_second(second, observables, transforms, specs, index, prefilter)
+            return _smm_moments_second(second, observables, transforms, specs, first, index,
+                                       draws, long, prefilter)
+        s = state_space(sol, observables, transforms=transforms, cov=S)
         if method == "GMM":
             return _gmm_moments(s, specs, index, prefilter)
         return _smm_moments(s, specs, first, index, draws, long, prefilter)
@@ -383,7 +392,7 @@ def method_of_moments(model: Model, data: Mapping[str, ArrayLike] | ArrayLike, *
 # ====================================================================== pieces
 def _data_matrix(data, observables) -> np.ndarray:
     if isinstance(data, Mapping):
-        cols = [np.asarray(data[n], dtype=float).ravel() for n in observables]
+        cols: list[np.ndarray] = [np.asarray(data[n], dtype=float).ravel() for n in observables]
         if len({c.size for c in cols}) != 1:
             raise ValueError("every observed series must have the same length")
         return np.column_stack(cols)
@@ -434,6 +443,165 @@ def _gmm_moments(s: StateSpace, specs, index, prefilter) -> np.ndarray:
             continue
         b, lag = index[names[1]], -leads[1]
         out[j] = G[lag][a, b] + (0.0 if prefilter else s.d[a] * s.d[b])
+    return out
+
+
+def _commutation(n: int) -> np.ndarray:
+    permutation = np.arange(n * n).reshape(n, n).T.ravel()
+    return np.eye(n * n)[permutation]
+
+
+def _second_order_system(second, lags=0):
+    """Pruned ABCD system of Andreasen, Fernández-Villaverde and Rubio-Ramírez."""
+    from .secondorder import _dynare_decision_rule
+    first = second.first
+    model = first.model
+    nk, ne, n = model.n_states, model.n_shocks, model.n_vars
+    rule = _dynare_decision_rule(second)
+    P, Q = rule.g_k[:nk], rule.g_u[:nk]
+    Sigma = second.Sigma
+    hkk = rule.g_kk[:nk].reshape(nk, nk * nk, order="F")
+    hku = rule.g_ku[:nk].transpose(0, 2, 1).reshape(nk, nk * ne, order="F")
+    huu = rule.g_uu[:nk].reshape(nk, ne * ne, order="F")
+    gkk = rule.g_kk.reshape(n, nk * nk, order="F")
+    gku = rule.g_ku.transpose(0, 2, 1).reshape(n, nk * ne, order="F")
+    guu = rule.g_uu.reshape(n, ne * ne, order="F")
+    vec_sigma = Sigma.reshape(-1, order="F")
+    Vf = linalg.solve_discrete_lyapunov(P, Q @ Sigma @ Q.T)
+
+    z1 = slice(0, nk)
+    z2 = slice(nk, 2 * nk)
+    z3 = slice(2 * nk, 2 * nk + nk * nk)
+    nz = 2 * nk + nk * nk
+    i1 = slice(0, ne)
+    i2 = slice(ne, ne + ne * ne)
+    i3 = slice(ne + ne * ne, ne + ne * ne + nk * ne)
+    ni = ne + ne * ne + nk * ne
+    A = np.zeros((nz, nz))
+    B = np.zeros((nz, ni))
+    c = np.zeros(nz)
+    A[z1, z1] = P
+    A[z2, z2] = P
+    A[z2, z3] = 0.5 * hkk
+    A[z3, z3] = np.kron(P, P)
+    B[z1, i1] = Q
+    B[z2, i2] = 0.5 * huu
+    B[z2, i3] = hku
+    B[z3, i2] = np.kron(Q, Q)
+    B[z3, i3] = (np.eye(nk * nk) + _commutation(nk)) @ np.kron(P, Q)
+    c[z2] = 0.5 * rule.g_s2[:nk] + 0.5 * huu @ vec_sigma
+    c[z3] = np.kron(Q, Q) @ vec_sigma
+
+    C = np.zeros((n, nz))
+    D = np.zeros((n, ni))
+    C[:, z1] = rule.g_k
+    C[:, z2] = rule.g_k
+    C[:, z3] = 0.5 * gkk
+    D[:, i1] = rule.g_u
+    D[:, i2] = 0.5 * guu
+    D[:, i3] = gku
+    d = 0.5 * rule.g_s2 + 0.5 * guu @ vec_sigma
+
+    Vinov = np.zeros((ni, ni))
+    Vinov[i1, i1] = Sigma
+    fourth = np.empty((ne, ne, ne, ne))
+    for a in range(ne):
+        for b in range(ne):
+            for k in range(ne):
+                for ell in range(ne):
+                    fourth[a, b, k, ell] = (Sigma[a, b] * Sigma[k, ell]
+                                             + Sigma[a, k] * Sigma[b, ell]
+                                             + Sigma[a, ell] * Sigma[b, k])
+    M4 = fourth.reshape(ne * ne, ne * ne, order="F")
+    Vinov[i2, i2] = M4 - np.outer(vec_sigma, vec_sigma)
+    Vinov[i3, i3] = np.kron(Vf, Sigma)
+    Vz = linalg.solve_discrete_lyapunov(A, B @ Vinov @ B.T)
+
+    Ez = np.zeros(nz)
+    Ez[z2] = np.linalg.solve(np.eye(nk) - P, 0.5 * hkk @ Vf.reshape(-1, order="F") + c[z2])
+    Ez[z3] = Vf.reshape(-1, order="F")
+    Ey = C @ Ez + d
+    Vy = C @ Vz @ C.T + D @ Vinov @ D.T
+    autocov = []
+    tmp = A @ Vz @ C.T + B @ Vinov @ D.T
+    Ai = np.eye(nz)
+    for _ in range(lags):
+        autocov.append(C @ Ai @ tmp)
+        Ai = Ai @ A
+    return dict(A=A, B=B, c=c, C=C, D=D, d=d, Vinov=Vinov, Ey=Ey, Vy=Vy,
+                Ez=Ez, Vz=Vz, autocov=autocov, nk=nk, vec_sigma=vec_sigma)
+
+
+def _observation_conversion(first, observables, transforms):
+    model = first.model
+    if isinstance(transforms, str) or transforms is None:
+        tr = [transforms or "level"] * len(observables)
+    else:
+        tr = [transforms.get(n, "level") for n in observables]
+    rows = [model.position(n) for n in observables]
+    base = np.zeros(len(observables))
+    scale = np.zeros(len(observables))
+    for i, (name, kind) in enumerate(zip(observables, tr)):
+        j = model.position(name)
+        center = first.coords.center[j]
+        if kind == "level":
+            base[i], scale[i] = center, first.coords.scale[j]
+        elif kind == "log":
+            if center <= 0:
+                raise ValueError(f"{name!r} has steady state {center}: a log "
+                                 "observation needs a positive one")
+            base[i], scale[i] = np.log(center), 1.0
+        else:
+            raise ValueError(f"transform must be 'level' or 'log', got {kind!r}")
+    return rows, base, scale
+
+
+def _gmm_moments_second(second, observables, transforms, specs, index, prefilter) -> np.ndarray:
+    lags = max([-min(sp[1]) for sp in specs] + [0])
+    system = _second_order_system(second, lags)
+    rows, base, scale = _observation_conversion(second.first, observables, transforms)
+    mean = base + scale * system["Ey"][rows]
+    Vy = system["Vy"][np.ix_(rows, rows)] * np.outer(scale, scale)
+    autocov = [G[np.ix_(rows, rows)] * np.outer(scale, scale) for G in system["autocov"]]
+    out = np.empty(len(specs))
+    for j, (names, leads, _) in enumerate(specs):
+        a = index[names[0]]
+        if len(names) == 1:
+            out[j] = mean[a]
+            continue
+        b, lag = index[names[1]], -leads[1]
+        G = Vy if lag == 0 else autocov[lag - 1]
+        out[j] = G[a, b] + (0.0 if prefilter else mean[a] * mean[b])
+    return out
+
+
+def _smm_moments_second(second, observables, transforms, specs, first, index,
+                        draws, long, prefilter) -> np.ndarray:
+    system = _second_order_system(second)
+    rows, base, scale = _observation_conversion(second.first, observables, transforms)
+    Sigma = second.Sigma
+    live = np.flatnonzero(np.diag(Sigma) > 0)
+    eps = np.zeros_like(draws)
+    if live.size:
+        U = linalg.cholesky(Sigma[np.ix_(live, live)])
+        eps[:, live] = draws[:, live] @ U
+    A, B, c = system["A"], system["B"], system["c"]
+    C, D, d = system["C"], system["D"], system["d"]
+    nk, vec_sigma = system["nk"], system["vec_sigma"]
+    z = np.zeros(A.shape[0])
+    Ysim = np.empty((draws.shape[0], len(observables)))
+    for t in range(draws.shape[0]):
+        u = eps[t]
+        inov = np.concatenate([u, np.outer(u, u).reshape(-1, order="F") - vec_sigma,
+                               np.outer(z[:nk], u).reshape(-1, order="F")])
+        Ysim[t] = base + scale * (d + C @ z + D @ inov)[rows]
+        z = c + A @ z + B @ inov
+    Ysim = Ysim[-long:]
+    out = np.empty(len(specs))
+    out[first] = _sample_moments(Ysim, [sp for sp, f in zip(specs, first) if f], index)[0]
+    if prefilter:
+        Ysim = Ysim - Ysim.mean(axis=0)
+    out[~first] = _sample_moments(Ysim, [sp for sp, f in zip(specs, first) if not f], index)[0]
     return out
 
 

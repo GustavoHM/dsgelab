@@ -80,3 +80,51 @@ def test_a_different_covariance_is_solved_again_not_mixed():
     b = high.simulate(300, seed=3, burn=50)
     np.testing.assert_allclose(a["k"], b["k"], rtol=1e-10, atol=1e-14)
     assert low.at_covariance({"eps_a": 0.007}) is low
+
+
+def test_innovation_curvature_and_composed_rule_match_exact_rbc():
+    pytest.importorskip("sympy")
+    model, params, guess = rbc.build_symbolic()
+    ss = dsg.steady_state(model, guess, params)
+    first = dsg.solve(model, params, steady=ss)
+    second = dsg.solve_second_order(first, cov={"eps_a": 0.007})
+    ia = model.states.index("a")
+    ic = model.n_states + model.jumps.index("c")
+
+    np.testing.assert_allclose(second.h_uu[ia], [[1.0]], rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(second.h_ku[ia, ia], [params.rho], rtol=1e-10, atol=1e-12)
+    assert second.innovation_residual < 1e-10
+    assert abs(second.h_s2[ia]) < 1e-8
+
+    rule = second.decision_rule()
+    assert isinstance(rule, dsg.DecisionRule)
+    np.testing.assert_allclose(rule.g_s2, np.concatenate([second.h_s2, second.g_ss]))
+    np.testing.assert_allclose(rule.g_u[ic], [1.0], rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(rule.g_uu[ic], [[1.0]], rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(rule.g_ku[ic, ia], [params.rho + params.alpha],
+                               rtol=1e-10, atol=1e-12)
+    np.testing.assert_allclose(rule.g_uu, np.transpose(rule.g_uu, (0, 2, 1)),
+                               rtol=0.0, atol=1e-12)
+
+
+def test_linear_model_has_zero_innovation_curvature():
+    from dsgelab.examples import nk
+    model, params, guess = nk.build()
+    first = dsg.solve(model, params, guess=guess)
+    second = dsg.solve_second_order(first, cov={"eps_a": 0.01, "eps_v": 0.0025})
+    rule = second.decision_rule()
+    assert np.max(np.abs(second.h_uu)) == 0.0
+    assert np.max(np.abs(second.h_ku)) == 0.0
+    assert np.max(np.abs(rule.g_uu)) == 0.0
+    assert np.max(np.abs(rule.g_ku)) == 0.0
+
+
+def test_second_order_irf_matches_first_order_on_linear_model():
+    from dsgelab.examples import nk
+    model, params, guess = nk.build()
+    first = dsg.solve(model, params, guess=guess)
+    second = dsg.solve_second_order(first, cov={"eps_a": 0.01, "eps_v": 0.0025})
+    linear = first.irf("eps_a", size=0.01, periods=12)
+    quadratic = second.irf("eps_a", size=0.01, periods=12, percent=True)
+    for name in linear:
+        np.testing.assert_allclose(quadratic[name], linear[name], rtol=1e-10, atol=1e-12)
