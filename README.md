@@ -98,14 +98,14 @@ examples in English and Portuguese.
 | Parameter Jacobians of the first-, second- and third-order solutions and steady state | `solution_jacobian`, `second_order_jacobian`, `third_order_jacobian` |
 | Impulse responses, simulation, moments, variance decomposition | `FirstOrderSolution` |
 | Second-order perturbation, innovation tensors and risk corrections | `solve_second_order`, `SecondOrderSolution.decision_rule` |
-| Third-order perturbation, partial (state and innovation cubic blocks, risk slope) | `solve_third_order`, `ThirdOrderSolution.decision_rule` |
+| Third-order perturbation: full decision rule in Dynare's form, stochastic steady state, sparse tensors | `solve_third_order`, `ThirdOrderSolution.decision_rule`, `stochastic_steady_state` |
 | Global solution by Chebyshev collocation, up to three states | `solve_projection` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
 | Optimal policy under discretion; optimal simple rules, on moments or on welfare | `discretionary_policy`, `osr` |
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
-| Bootstrap particle and inversion filters at first and pruned second order | `particle_filter`, `inversion_filter`, `EstimationProblem(order=2)` |
+| Bootstrap particle filter and smoother up to pruned third order; inversion filter up to pruned second order | `particle_filter`, `particle_smoother`, `inversion_filter`, `EstimationProblem(order=2)` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
 | Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
 | GMM and SMM at first and pruned second order; frequentist IRF matching at first order | `method_of_moments`, `irf_matching`, the `ModFile` methods |

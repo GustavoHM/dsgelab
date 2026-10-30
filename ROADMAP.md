@@ -315,8 +315,11 @@ warning that lasts at least one minor version. The public API is what is in `__a
   reproduces Dynare OccBin's shocks, Jacobian and likelihood exactly on the AR(1).
   `EstimationProblem(nonlinear_filter=)` selects either route. Recovered shocks also agree with
   MacroModelling.jl within `0.006` on a nonlinear RBC; its likelihood convention differs, so only
-  the shocks are compared. Backward-information particle smoothing is implemented with
-  `store=True` at all three orders. Inversion smoothing returns the exact inverted paths. The
+  the shocks are compared. `particle_smoother` works with `store=True` at all three orders.
+  Full-rank first-order transitions use the Gaussian backward recursion; nonlinear and
+  rank-deficient transitions use the stored particle ancestry, whose effective sample size can
+  degenerate over long histories. Inversion smoothing returns the filter's paths without a
+  backward pass: they are exact when the data identify every shock, and filtered otherwise. The
   pruned third-order particle filter uses the full rule, including `ghxss` and `ghuss`, and
   reproduces the Kalman likelihood on a linear model.
   `EstimationProblem(order=3)` exposes the likelihood and smoothing.

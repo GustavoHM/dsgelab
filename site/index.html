@@ -724,7 +724,8 @@ True</code></pre>
   <code>nonlinear_filter</code> chooses between the inversion filter and the bootstrap particle
   filter, which is the default. The AR(1) of example 14 is linear, so its second-order rule equals
   the first-order one and both filters must reproduce the Kalman likelihood. The inversion filter
-  recovers the shocks that reproduce the data and starts from the steady state, so once the first
+  recovers the shocks that reproduce the data and starts from the mean of the pruned system, here
+  the steady state, so once the first
   observation serves only as presample (<code>presample=1</code>) its likelihood equals the Kalman
   one. The particle filter requires measurement error, and with 10,000 particles its value differs
   from Kalman's by less than 0.3 for the same problem. From the second period on, the shocks recovered

@@ -331,9 +331,12 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   primeira e segunda ordem com poda e reproduz exatamente os choques, o Jacobiano e a
   verossimilhança do OccBin no AR(1). `EstimationProblem(nonlinear_filter=)` escolhe a rota. Os
   choques também concordam com o MacroModelling.jl dentro de `0.006` em um RBC não linear; como
-  sua convenção de verossimilhança difere, apenas os choques são comparados. O smoothing por
-  informação backward está implementado com `store=True` nas três ordens. O smoothing de inversão
-  retorna as trajetórias exatas. O filtro de partículas de terceira ordem usa a regra completa,
+  sua convenção de verossimilhança difere, apenas os choques são comparados. O `particle_smoother`
+  funciona com `store=True` nas três ordens. Transições de primeira ordem com posto completo usam
+  a recursão gaussiana backward; transições não lineares ou de posto deficiente usam a ancestralidade
+  armazenada das partículas, cujo tamanho efetivo de amostra pode degenerar em históricos longos.
+  O smoothing de inversão retorna as trajetórias do filtro sem passo backward: elas são exatas
+  quando os dados identificam todos os choques e filtradas nos demais casos. O filtro de partículas de terceira ordem usa a regra completa,
   incluindo `ghxss` e `ghuss`, e reproduz a verossimilhança de Kalman num modelo linear. `EstimationProblem(order=3)` expõe a verossimilhança e o smoothing.
 
 ### 0.8 — métodos globais

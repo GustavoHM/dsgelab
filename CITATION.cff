@@ -3,7 +3,7 @@ message: "If you use this software in a publication, please cite it as below."
 type: software
 title: "dsgelab: a general toolkit for solving DSGE models in Python"
 abstract: >-
-  Steady state, Klein/QZ first-order solution, second-order perturbation and a partial third order (the cubic block and the risk slope), Chebyshev projection, perfect foresight with expectation errors, optimal policy (Ramsey, discretion, optimal simple rules) and welfare, Kalman filtering and smoothing, Bayesian estimation, shock decompositions and forecasts, reading Dynare .mod files, and export to Dynare and MacroModelling.jl. Validated against Dynare, MacroModelling.jl and closed-form solutions.
+  Steady state, Klein/QZ first-order solution, second- and third-order perturbation in Dynare's decision-rule form, Chebyshev projection, perfect foresight with expectation errors, optimal policy (Ramsey, discretion, optimal simple rules) and welfare, Kalman filtering and smoothing, Bayesian estimation, shock decompositions and forecasts, reading Dynare .mod files, and export to Dynare and MacroModelling.jl. Validated against Dynare, MacroModelling.jl and closed-form solutions.
 authors:
   - family-names: "Moreira"
     given-names: "Gustavo Hoffmann"

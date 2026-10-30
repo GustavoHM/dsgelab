@@ -731,8 +731,8 @@ True</code></pre>
   <code>nonlinear_filter</code> escolhe entre a inversão (<code>"inversion"</code>) e o filtro
   de partículas bootstrap (<code>"particle"</code>, o padrão). O AR(1) do exemplo 14 é linear, de
   modo que sua regra de segunda ordem coincide com a de primeira e os dois métodos devem reproduzir
-  o filtro de Kalman. A inversão recupera os choques que reproduzem os dados e parte do
-  estado estacionário. Quando a primeira observação serve apenas de pré-amostra
+  o filtro de Kalman. A inversão recupera os choques que reproduzem os dados e parte da
+  média do sistema podado, que aqui é o estado estacionário. Quando a primeira observação serve apenas de pré-amostra
   (<code>presample=1</code>), o resultado é igual ao de Kalman. As partículas exigem erro de medida
   e, com 10.000 delas, o valor fica a menos de 0,3 do obtido por Kalman para o mesmo problema. A partir do
   segundo período, os choques recuperados por inversão coincidem com os do suavizador de Kalman.
