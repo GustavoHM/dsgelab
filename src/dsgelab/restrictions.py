@@ -320,6 +320,22 @@ class RestrictionSample:
         """Share of the solved draws that satisfies each restriction, in their order."""
         return np.array([self.share([i]) for i in range(len(self.restrictions))])
 
+    def filtering(self, which: Sequence[int] | None = None, *, pvalue_ks: float = 0.001):
+        """Which parameters drive the restrictions ``which`` (all, by default).
+
+        :func:`~dsgelab.monte_carlo_filtering` of the solved draws into those
+        where the restrictions hold together and those where they do not, as
+        the ``map_calibration`` step of Dynare's sensitivity toolbox does.
+        """
+        from .sensitivity import monte_carlo_filtering
+        ok = self.solved
+        cols = range(len(self.restrictions)) if which is None else list(which)
+        holds = self.holds_each[:, cols].all(axis=1)
+        title = ("the restrictions together" if which is None
+                 else ", ".join(self.restrictions[i].label for i in cols))
+        return monte_carlo_filtering(self.draws, ok & holds, self.names,
+                                     nonbehaviour=ok & ~holds, pvalue_ks=pvalue_ks, title=title)
+
     def summary(self) -> str:
         n, ok = len(self.status), int(self.solved.sum())
         out = [f"Calibration restrictions over {n} draws, {ok} solved",

@@ -824,6 +824,51 @@ round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
   picture: over them the AR(1) does no better than the random walk, and the test cannot tell the
   two apart. An evaluation in earnest uses every quarter, at about two seconds per origin for this
   model.</p>
+  <h3>26. Global sensitivity</h3>
+<pre><code>priors_s = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05),
+            "rho_v": dsg.Uniform(0.0, 0.9)}             # example 24's model
+stab = dsg.stability_map(m_nk3, p_nk3, priors_s, draws=512, guess=g_nk3, cov=cov_nk3)
+print(stab.summary())
+run = dsg.solution_outputs(m_nk3, p_nk3, irf=[("pi", "eps_v", 4)], moments=[("x", "x", 0)],
+                           cov=cov_nk3, guess=g_nk3)
+inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
+          "rho_v": dsg.Uniform(0.0, 0.9)}               # within the determinacy region
+print(dsg.sobol(run, inside, n=256, bootstrap=0).summary())</code></pre>
+<pre class="output" data-label="Output"><code>Stability mapping over 512 draws
+   85.5% unique stable solution
+    0.0% explosive
+   14.5% indeterminate
+Smirnov statistics in driving a unique stable solution: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+Smirnov statistics in driving determinacy: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+pi(4), eps_v  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.029   0.112
+  kappa       0.015   0.027
+  rho_v       0.843   0.916
+x, x  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.126   0.452
+  kappa       0.241   0.446
+  rho_v       0.156   0.409</code></pre>
+  <p><code>stability_map</code> is the stability mapping of Dynare's sensitivity toolbox
+  (<code>dynare_sensitivity(stab=1)</code>). It draws the parameters from priors or from the
+  distributions <code>Uniform</code>, <code>Normal</code> and <code>Triangular</code>, on a scrambled
+  Sobol sequence, solves the model at each draw and sorts the draws into those with a unique stable
+  solution, the indeterminate, the explosive and those without a solution. The Monte Carlo
+  filtering that follows asks which parameters separate the groups, with a Smirnov test per
+  parameter; here the Taylor principle shows up as <code>phi_pi</code>, which alone separates the
+  determinate draws from the others. <code>stab.filtering(kind)</code> gives the test and the
+  correlations inside each group, <code>monte_carlo_filtering</code> applies it to any behaviour,
+  and <code>RestrictionSample.filtering</code> to the restrictions of example 24.
+  <code>sobol</code> computes first-order and total Sobol indices on Saltelli's design, and
+  <code>solution_outputs</code> turns impulse responses and moments into the function it
+  evaluates. The persistence of the shock accounts for most of the variance of the inflation
+  response a year after it, and the variance of the output gap depends on all three parameters,
+  largely through their interactions.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1063,6 +1108,23 @@ round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
       <tr><td>Diebold–Mariano statistic and p-value, 48 cases</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
+
+  <h3>Global sensitivity against Dynare and SALib</h3>
+  <p>The stability mapping of Lubik and Schorfheide (2003), from Dynare's
+  <code>tests/gsa/ls2003a.mod</code>, on three samples of 1024 draws, one of them with explosive
+  draws, and the Sobol indices of SALib 1.6.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>class of each draw, against Dynare's solver (3 × 1024 draws)</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>Smirnov statistic and p-value of each parameter, on Dynare's groups</td><td class="num">3e-16</td><td class="ok">OK</td></tr>
+      <tr><td>correlations and their p-values inside each group</td><td class="num">2e-13</td><td class="ok">OK</td></tr>
+      <tr><td>Sobol design and first-order and total indices, against SALib</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p>The toolbox's own lists differ from its solver in 37 draws of the explosive sample: it sorts
+  the eigenvalues by signed value when they are all real, and its rule cannot see rank
+  failures.</p>
 
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's

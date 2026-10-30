@@ -195,6 +195,26 @@ order and derivatives).
 - `validation/compare_forecast_eval.py`: Dynare 7.2's recursive estimation of `fs2000` over nine
   samples, with forecasts within 2.6e-15 at Dynare's modes and modes of equal or higher kernel
   when re-estimated, and 48 Diebold–Mariano tests against R's `forecast::dm.test` within 3.1e-15.
+- `stability_map`: draws parameters from priors or from `Uniform`, `Normal` and `Triangular`
+  (the interface of `cgelab.sensitivity`), on a scrambled Sobol sequence, a Latin hypercube or at
+  random, solves the model at each draw and sorts the draws into determinate, indeterminate,
+  explosive, without a steady state and without a solution, as Dynare's
+  `dynare_sensitivity(stab=1)`. `ModFile.stability_map` takes the priors of `estimated_params`.
+- `monte_carlo_filtering` and `smirnov_test`: which parameters separate the draws that show a
+  behaviour from those that do not, by Dynare's Smirnov test, and the correlations between
+  parameters inside each group. `StabilityMap.filtering` runs Dynare's three analyses
+  (determinacy, indeterminacy, explosiveness), and `RestrictionSample.filtering` filters on the
+  calibration restrictions, as Dynare's `map_calibration`.
+- `sobol`: first-order and total Sobol indices on Saltelli's design, with bootstrap intervals,
+  the design and estimators of `cgelab.sobol` and SALib; base points with a missing output are
+  left out. `solution_outputs` makes the function from IRFs and moments of the first-order
+  solution, in the units of `check_restrictions`.
+- `Prior.ppf`: the quantile function of every prior shape.
+- `validation/compare_gsa.py`: the stability mapping of Dynare 7.2 on `tests/gsa/ls2003a.mod`
+  over three samples of 1024 draws, one with explosive draws, and the Sobol indices against
+  SALib 1.6. Every draw has the class Dynare's solver gives it; the Smirnov tests and
+  correlations on Dynare's groups agree within 1.7e-13, and SALib's design and indices within
+  8.9e-16.
 - `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
   `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
   They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions

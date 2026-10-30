@@ -269,7 +269,9 @@ planned.
 - **Identification is local, at one point.** Dynare's repetition of the analysis over draws
   from the prior (`prior_mc`), its identification strength from the information matrix and its
   plots are not reproduced.
-- **No global sensitivity analysis** (Dynare's `+gsa`).
+- **Global sensitivity covers stability mapping, Monte Carlo filtering and Sobol indices.**
+  Dynare's reduced-form mapping (`redform`), its RMSE filtering against data (`rmse`), Morris
+  screening and its plots are not reproduced.
 - **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.

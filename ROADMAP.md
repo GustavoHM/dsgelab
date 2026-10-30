@@ -238,11 +238,24 @@ warning that lasts at least one minor version. The public API is what is in `__a
   the same verdicts in all three criteria and derivatives within 2e-8 (18 October 2026).
   Dynare's repetition over draws from the prior (`prior_mc`), its identification strength
   from the information matrix and its plots are left out.
-- [ ] **Global sensitivity**, covering the stability and determinacy region in the parameter space
+- [x] **Global sensitivity**, covering the stability and determinacy region in the parameter space
   and Monte Carlo filtering. The reference is Dynare's `+gsa`. First-order and total Sobol
   indices for impulse responses and moments, validated against SALib. The distributions share
   their interface with `cgelab.sensitivity` (`Uniform`, `Normal`, `Triangular`), without either
-  package importing the other.
+  package importing the other. `stability_map` sorts draws into determinate, indeterminate,
+  explosive and unsolved; `monte_carlo_filtering` (also `StabilityMap.filtering` and
+  `RestrictionSample.filtering`) gives the Smirnov test of each parameter and the correlations
+  inside each group; `sobol` and `solution_outputs` give the indices of IRFs and moments.
+  Validated on Dynare 7.2's `tests/gsa/ls2003a.mod` over three samples of 1024 draws
+  (30 October 2026): every draw has the class Dynare's solver gives it, and on Dynare's groups
+  the Smirnov statistics agree exactly, their p-values within `3.3e-16` and the correlations'
+  within `1.7e-13`. The sensitivity toolbox's own lists differ in 37 draws of the explosive
+  sample: in 36 because it sorts the eigenvalues by signed value when they are all real, and in
+  one rank failure that its eigenvalue rule cannot see. By modulus, its rule gives `dsgelab`'s
+  classes everywhere but at the rank failures. Sobol's design and
+  indices agree with SALib 1.6 within `8.9e-16` on the Ishigami function and on IRFs and moments
+  of the same model. Dynare's reduced-form mapping (`redform`), RMSE filtering (`rmse`) and
+  Morris screening are left out.
 - [x] **Method of moments** (GMM, SMM and IRF matching). GMM and SMM work at first and
   pruned second order; IRF matching works at first order. Validated against Dynare 7.2's `+mom`
   in eight first-order GMM/SMM cases and two IRF-matching cases (24 October 2026). Second-order

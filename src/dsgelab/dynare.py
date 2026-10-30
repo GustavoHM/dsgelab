@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     from .irf_matching import IRFMatchingResult
     from .moment_estimation import MomentsResult
     from .restrictions import RestrictionCheck, RestrictionSample
+    from .sensitivity import StabilityMap
     from .kalman import Data
     from .occbin import OccbinModel, OccbinResult
 
@@ -994,6 +995,24 @@ class ModFile:
         kw.setdefault("cov", self._shock_cov())
         kw.setdefault("steady_fn", lambda p: self.steady_state(params=p))
         return sample_restrictions(self.model, dict(self.params), priors, draws=draws, **kw)
+
+    def stability_map(self, draws: int = 2048, **kwargs: Any) -> StabilityMap:
+        """:func:`dsgelab.stability_map` over the priors of ``estimated_params``.
+
+        The parameters it leaves out keep the file's values, as in Dynare's
+        ``dynare_sensitivity(stab=1)``. ``kwargs`` go to
+        :func:`~dsgelab.stability_map`; ``points=`` with ``names=`` classifies
+        given draws instead.
+        """
+        from .sensitivity import stability_map
+
+        priors = {e["name"]: e["prior"] for e in self.estimated if e["prior"] is not None}
+        if not priors and kwargs.get("points") is None:
+            raise DynareImportError("no priors in estimated_params: pass points= and names=")
+        kw: dict[str, Any] = dict(kwargs)
+        kw.setdefault("cov", self._shock_cov())
+        kw.setdefault("steady_fn", lambda p: self.steady_state(params=p))
+        return stability_map(self.model, dict(self.params), priors, draws=draws, **kw)
 
     def steady_state(self, guess: Mapping[str, float] | None = None,
                      params: dict[str, float] | None = None, *,

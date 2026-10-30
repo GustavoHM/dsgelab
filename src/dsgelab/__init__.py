@@ -73,6 +73,9 @@ from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
                            sample_restrictions)
+from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
+                          monte_carlo_filtering, smirnov_test, sobol, solution_outputs,
+                          stability_map)
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
@@ -111,6 +114,8 @@ __all__ = [
     "local_projection", "LocalProjectionResult",
     "check_restrictions", "sample_restrictions", "Restriction", "RestrictionCheck",
     "RestrictionSample",
+    "stability_map", "StabilityMap", "monte_carlo_filtering", "FilteringResult", "smirnov_test",
+    "sobol", "SobolResult", "solution_outputs", "Uniform", "Normal", "Triangular",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance", "diagnose",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",

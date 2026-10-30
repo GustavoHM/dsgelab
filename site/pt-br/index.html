@@ -831,6 +831,51 @@ round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
   grosseiro: nelas o AR(1) não se sai melhor que o passeio aleatório, e o teste não distingue os
   dois. Uma avaliação de verdade usa todos os trimestres, a cerca de dois segundos por origem
   neste modelo.</p>
+  <h3>26. Sensibilidade global</h3>
+<pre><code>priors_s = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05),
+            "rho_v": dsg.Uniform(0.0, 0.9)}             # o modelo do exemplo 24
+stab = dsg.stability_map(m_nk3, p_nk3, priors_s, draws=512, guess=g_nk3, cov=cov_nk3)
+print(stab.summary())
+run = dsg.solution_outputs(m_nk3, p_nk3, irf=[("pi", "eps_v", 4)], moments=[("x", "x", 0)],
+                           cov=cov_nk3, guess=g_nk3)
+inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
+          "rho_v": dsg.Uniform(0.0, 0.9)}               # dentro da região de determinação
+print(dsg.sobol(run, inside, n=256, bootstrap=0).summary())</code></pre>
+<pre class="output" data-label="Saída"><code>Stability mapping over 512 draws
+   85.5% unique stable solution
+    0.0% explosive
+   14.5% indeterminate
+Smirnov statistics in driving a unique stable solution: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+Smirnov statistics in driving determinacy: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+pi(4), eps_v  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.029   0.112
+  kappa       0.015   0.027
+  rho_v       0.843   0.916
+x, x  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.126   0.452
+  kappa       0.241   0.446
+  rho_v       0.156   0.409</code></pre>
+  <p><code>stability_map</code> é o mapeamento de estabilidade da caixa de ferramentas de
+  sensibilidade do Dynare (<code>dynare_sensitivity(stab=1)</code>). Ele sorteia os parâmetros das
+  prioris ou das distribuições <code>Uniform</code>, <code>Normal</code> e <code>Triangular</code>,
+  numa sequência de Sobol embaralhada, resolve o modelo em cada sorteio e separa os sorteios com
+  solução estável única, os indeterminados, os explosivos e os sem solução. A filtragem de Monte
+  Carlo que vem em seguida pergunta quais parâmetros separam os grupos, com um teste de Smirnov por
+  parâmetro; aqui o princípio de Taylor aparece como <code>phi_pi</code>, que sozinho separa os
+  sorteios determinados dos demais. <code>stab.filtering(kind)</code> dá o teste e as correlações
+  dentro de cada grupo, <code>monte_carlo_filtering</code> o aplica a qualquer comportamento, e
+  <code>RestrictionSample.filtering</code> às restrições do exemplo 24. <code>sobol</code> calcula
+  os índices de Sobol de primeira ordem e totais no desenho de Saltelli, e
+  <code>solution_outputs</code> transforma respostas a impulso e momentos na função que ele avalia.
+  A persistência do choque responde pela maior parte da variância da resposta da inflação um ano
+  depois dele, e a variância do hiato do produto depende dos três parâmetros, em boa parte pelas
+  interações entre eles.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1075,6 +1120,23 @@ round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
       <tr><td>estatística e p-valor de Diebold–Mariano, 48 casos</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
+
+  <h3>Sensibilidade global comparada com o Dynare e o SALib</h3>
+  <p>O mapeamento de estabilidade de Lubik e Schorfheide (2003), do
+  <code>tests/gsa/ls2003a.mod</code> do Dynare, em três amostras de 1024 sorteios, uma delas com
+  sorteios explosivos, e os índices de Sobol do SALib 1.6.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>classe de cada sorteio, contra o solver do Dynare (3 × 1024 sorteios)</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+      <tr><td>estatística e p-valor de Smirnov de cada parâmetro, nos grupos do Dynare</td><td class="num">3e-16</td><td class="ok">OK</td></tr>
+      <tr><td>correlações e seus p-valores dentro de cada grupo</td><td class="num">2e-13</td><td class="ok">OK</td></tr>
+      <tr><td>desenho de Sobol e índices de primeira ordem e totais, contra o SALib</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p>As listas da própria caixa de ferramentas diferem do solver dela em 37 sorteios da amostra
+  explosiva: ela ordena os autovalores pelo valor com sinal quando todos são reais, e a regra dela
+  não enxerga falhas de posto.</p>
 
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de

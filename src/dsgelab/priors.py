@@ -24,6 +24,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 from scipy.special import betaln, gammaln
 
@@ -118,6 +119,26 @@ class Prior:
             return self.lower + self.a / rng.chisquare(self.b, size)
         if s == "uniform":
             return rng.uniform(self.lower, self.upper, size)
+        raise ValueError(s)
+
+    def ppf(self, u: ArrayLike) -> np.ndarray:
+        """The quantile at probability ``u``: how a point of the unit cube becomes a draw."""
+        from scipy import stats
+        u = np.asarray(u, dtype=float)
+        s = self.shape
+        if s == "normal":
+            return self.mean + self.sd * stats.norm.ppf(u)
+        if s == "beta":
+            return self.lower + (self.upper - self.lower) * stats.beta.ppf(u, self.a, self.b)
+        if s == "gamma":
+            return self.lower + stats.gamma.ppf(u, self.a, scale=self.b)
+        if s == "inv_gamma":
+            # decreasing in the chi-square draw, as in sample
+            return self.lower + np.sqrt(self.a / stats.chi2.ppf(1 - u, self.b))
+        if s == "inv_gamma2":
+            return self.lower + self.a / stats.chi2.ppf(1 - u, self.b)
+        if s == "uniform":
+            return self.lower + (self.upper - self.lower) * u
         raise ValueError(s)
 
 

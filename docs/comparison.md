@@ -37,8 +37,8 @@ three states, **dolo** documents time, value and expectations iteration. **gEcon
 through PyMC and its gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
 analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
 second and third order it estimates with a particle filter, and at second order also with an
-inversion filter. Global sensitivity analysis still requires **Dynare**, and Markov regime
-switching requires **RISE**.
+inversion filter. Dynare's reduced-form mapping and RMSE filtering still require **Dynare**, and
+Markov regime switching requires **RISE**.
 
 | Capability | dsgelab | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
 |---|---|---|---|---|---|---|---|
@@ -65,6 +65,7 @@ switching requires **RISE**.
 | Simulation with pruning | ✅ | — (1st order only) | ? | ? | — | ? | ✅ |
 | 2nd-order generalised impulse response | ○ ‡ | — | ? | ? | — | ? | ✅ |
 | Historical decomposition and conditional forecast | ✅ ‡ on the linear solution | ? | — | ? | — | — | ✅ |
+| Global sensitivity | ✅ ‡ stability mapping and Monte Carlo filtering against Dynare's `+gsa`, Sobol indices against SALib | ? | — | — | — | — | ✅ `+gsa`, with reduced-form mapping |
 | Out-of-sample forecast evaluation | ✅ ‡ recursive and rolling re-estimation, RMSE against the random walk, Diebold–Mariano, PIT, coverage and log score; the recursive forecasts against Dynare on `fs2000`, the test against R's `forecast::dm.test` | ? | — | ? | — | — | ✅ recursive estimation (`nobs=[T1:T2]`) |
 | **Optimal policy: Ramsey under commitment** | ✅ ‡ timeless, against Dynare, with IRFs to 5e-13 and the steady state to 5e-11 | — | — | — | — | — | ✅ |
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
@@ -148,8 +149,9 @@ feature is that of the test that validates it.
 Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, occasionally binding
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
 each validated as the table in the following section indicates. Version 0.6 adds local
-identification, the method of moments and the moments of filtered variables. Still absent are
-global sensitivity, global methods beyond Chebyshev collocation, regime switching, heterogeneous
+identification, the method of moments, the moments of filtered variables, calibration
+restrictions, out-of-sample forecast evaluation and global sensitivity. Still absent are global
+methods beyond Chebyshev collocation, regime switching, heterogeneous
 agents, BVAR, DSGE-VAR, plots and the declaration of trends in `from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
@@ -191,8 +193,8 @@ those that set it apart from the Python packages in the table.
    against Dynare's decision rule on `example1` and `example2`.
 
 A model written in `dsgelab` reaches Dynare through `to_dynare`, checked by round trip, when it needs
-what `dsgelab` does not have yet, such as global sensitivity analysis (`+gsa`) or identification
-over draws from the prior (`prior_mc`). The `to_macromodelling` exporter writes the
+what `dsgelab` does not have yet, such as the reduced-form mapping of the sensitivity toolbox
+(`redform`) or identification over draws from the prior (`prior_mc`). The `to_macromodelling` exporter writes the
 same model for MacroModelling.jl, without a round-trip check.
 
 ---
@@ -230,7 +232,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Model diagnostics | ✅ Dynare (`model_diagnostics`) | **done**: `diagnose`, same report as Dynare on a deliberately broken model | 0.4 |
 | Several agents in one equilibrium | 📄 gEconpy (blocks) | **done**: `assemble`, within the limits of `Problem` | 0.4 |
 | Local identification | ✅ Dynare (`+identification`) | **done**: `identification`, the moments, spectrum and minimal-system criteria and the collinearity search, with the same verdicts as Dynare on three models and derivatives within 2e-8 | 0.6 |
-| Global sensitivity | ✅ Dynare (`+gsa`) | missing | 0.6 |
+| Global sensitivity | ✅ Dynare (`+gsa`), SALib | **done**: `stability_map`, `monte_carlo_filtering` and `sobol`, with the classes of Dynare's solver on 3 × 1024 draws of `ls2003a`, its Smirnov tests and correlations within 2e-13, and SALib's Sobol design and indices within 1e-15; reduced-form mapping and RMSE filtering missing | 0.6 |
 | Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`, `moment_calibration`) | **done**: GMM and SMM at first and pruned second order, frequentist IRF matching at first order, and calibration restrictions on IRFs and moments at first order, at a point and over the prior, with the same values and verdicts as Dynare on `ls2003a` | 0.6, 0.7 |
 | Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
 | Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |

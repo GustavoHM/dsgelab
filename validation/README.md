@@ -863,6 +863,62 @@ horizons or lags holds when any one of them is inside the bound. This is the log
 in Dynare's manual, and `dsgelab` applies the same rule. The numbers come from a run on 30 October
 2026, with Dynare 7.2 and Octave 11.3.0.
 
+## Global sensitivity
+
+```bash
+bash fetch.sh
+bash run_gsa.sh                   # Dynare's stability mapping of tests/gsa/ls2003a.mod, three samples
+pip install SALib                 # 1.6.0 for the numbers below
+python compare_gsa.py
+```
+
+```
+Stability mapping against Dynare's sensitivity(stab=1), ls2003a
+  ls2003_prior       94.9% stable   5.1% indeterminate   0.0% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 0; with its rule by modulus: 0
+     filtering on Dynare's groups (2 analyses, 2 the same as dsgelab's): Smirnov d 0.0e+00, p 2.2e-16; correlations 1.1e-16, p 1.8e-14
+  ls2003_range       97.2% stable   2.8% indeterminate   0.0% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 0; with its rule by modulus: 0
+     filtering on Dynare's groups (2 analyses, 2 the same as dsgelab's): Smirnov d 0.0e+00, p 2.2e-16; correlations 1.1e-16, p 3.1e-14
+  ls2003_explosive   79.0% stable   5.1% indeterminate  15.9% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 37; with its rule by modulus: 8, all rank failures (info 5)
+     filtering on Dynare's groups (3 analyses, 1 the same as dsgelab's): Smirnov d 0.0e+00, p 3.3e-16; correlations 7.6e-17, p 1.7e-13
+
+Sobol indices against SALib
+  Ishigami                     design 0.0e+00   indices 8.9e-16   (1 outputs, 20480 evaluations)
+  ls2003, IRFs and moments     design 0.0e+00   indices 7.8e-16   (5 outputs, 1280 evaluations)
+```
+
+The model is Lubik and Schorfheide (2003), from Dynare's `tests/gsa/ls2003a.mod`, with its priors
+and without its calibration blocks. `gsa/prepare.py` writes three drivers: 1024 draws from the
+prior (`prior_range=0`), 1024 uniform draws over the prior's range (`prior_range=1`), and 1024
+draws from the prior with the persistence of technology `rho_A` uniform on [0.5, 1.1], so that
+some draws are explosive. `gsa/export_gsa.m` saves Dynare's draws and classes and runs Dynare's
+`smirnov_test` and `corrcoef` on the groups its `stability_mapping.m` forms, and `dsgelab`
+classifies the same draws with `ModFile.stability_map(points=, names=)`.
+
+Every draw has the class that Dynare's solver gives it: `info` 0 is determinate, 3 explosive, 4
+and 5 indeterminate. In the first two samples the toolbox's own lists agree too. In the third
+they differ in 37 draws. The toolbox lists 36 of them as indeterminate while its solver reports
+them explosive (`info` 3), and one as explosive while its solver reports a rank failure (`info`
+5). `stability_mapping.m` labels a draw
+indeterminate when entry `nspred + 1` of `sort(eigval)` is stable. When every eigenvalue of a
+draw is real, `sort` orders them by signed value, so a large negative unstable root, or `-Inf`,
+comes before the stable ones. Applied to the eigenvalues sorted by modulus, the same rule gives
+`dsgelab`'s class at every draw except the eight rank failures (`info` 5), which no eigenvalue
+count can see and which Dynare's solver, like `dsgelab`, calls indeterminate. The Smirnov
+statistics and p-values and the correlations are computed by `dsgelab` on Dynare's own groups, so
+that they are compared on the same draws in all three samples. Dynare runs the filtering only
+on the structural parameters, and the comparison does the same.
+
+The Sobol check follows the one in `cgelab`: SALib's `sample.sobol` with the same seed draws the
+same points as `dsgelab.sobol`, and SALib's `analyze.sobol`, given `dsgelab`'s outputs in SALib's
+row order, gives the same first-order and total indices. On the Ishigami function the indices are
+also within 0.004 of the closed form. The second case varies `psi1`, `rho_R` and `tau` of the
+same model inside the determinacy region and takes impulse responses to the monetary shock and
+two moments. The numbers come from a run on 30 October 2026, with Dynare 7.2, Octave 11.3.0 and
+SALib 1.6.0.
+
 ## Out-of-sample forecast evaluation
 
 ```bash

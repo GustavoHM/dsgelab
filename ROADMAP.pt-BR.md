@@ -251,11 +251,24 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   mesmos vereditos nos três critérios e derivadas a menos de 2e-8 (18 de outubro de 2026).
   Ficam de fora a repetição sobre sorteios da priori (`prior_mc`), a força da identificação
   pela matriz de informação e os gráficos do Dynare.
-- [ ] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
+- [x] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
   parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare. Índices de Sobol
   de primeira ordem e totais para respostas a impulso e momentos, validados contra o SALib. As
   distribuições têm a mesma interface que as de `cgelab.sensitivity` (`Uniform`, `Normal`,
-  `Triangular`), sem que um pacote importe o outro.
+  `Triangular`), sem que um pacote importe o outro. `stability_map` separa os sorteios em
+  determinados, indeterminados, explosivos e sem solução; `monte_carlo_filtering` (também
+  `StabilityMap.filtering` e `RestrictionSample.filtering`) dá o teste de Smirnov de cada
+  parâmetro e as correlações dentro de cada grupo; `sobol` e `solution_outputs` dão os índices de
+  IRFs e momentos. Validação no `tests/gsa/ls2003a.mod` do Dynare 7.2, em três amostras de 1024
+  sorteios (30 de outubro de 2026): cada sorteio tem a classe que o solver do Dynare lhe dá, e,
+  nos grupos do Dynare, as estatísticas de Smirnov concordam exatamente, os p-valores até
+  `3.3e-16` e os das correlações até `1.7e-13`. As listas da própria caixa de sensibilidade
+  diferem em 37 sorteios da amostra explosiva: em 36 porque ela ordena os autovalores pelo valor
+  com sinal quando todos são reais, e numa falha de posto que a regra dela, baseada nos
+  autovalores, não enxerga. Pelo módulo, a regra dela dá as classes do `dsgelab` em todos os
+  sorteios, exceto nas falhas de posto. O desenho e os índices de Sobol concordam com o SALib 1.6
+  até `8.9e-16` na função de Ishigami e em IRFs e momentos do mesmo modelo. Ficam de fora o
+  mapeamento da forma reduzida (`redform`), a filtragem por RMSE (`rmse`) e o método de Morris.
 - [x] **Método dos momentos** (GMM, SMM e ajuste de IRF). GMM e SMM funcionam em primeira e
   segunda ordem com poda; o ajuste de IRF funciona em primeira ordem. Validação contra o `+mom`
   do Dynare 7.2 em oito casos de GMM/SMM em primeira ordem e dois de ajuste de IRF (24 de outubro

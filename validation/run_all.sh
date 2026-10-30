@@ -97,6 +97,8 @@ step "Dynare: calibration restrictions" bash run_restrictions.sh
 step "compare_restrictions.py" "$PYTHON" compare_restrictions.py
 step "Dynare and R: forecast evaluation" bash run_forecast_eval.sh
 step "compare_forecast_eval.py" "$PYTHON" compare_forecast_eval.py
+step "Dynare: stability mapping" bash run_gsa.sh
+step "compare_gsa.py"       "$PYTHON" compare_gsa.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

@@ -1273,6 +1273,97 @@ below 1, where the Taylor principle fails.
 
 ---
 
+## Global sensitivity
+
+### `Uniform(low, high)`, `Normal(mean, sd)`, `Triangular(low, mode, high)`
+
+Distributions of a parameter, with `mean`, `sd`, `symmetric`, `draw(rng, n)` and
+`ppf(u)`, the interface of `cgelab.sensitivity`'s. A `Prior`, or a prior tuple
+`(shape, mean, sd[, p3, p4])`, works wherever a distribution does: `Prior.ppf` is
+its quantile function.
+
+### `stability_map(model, params, distributions=None, *, draws=2048, seed=0, sampling="sobol", points=None, names=None, cov=None, guess=None, steady_fn=None, qz_criterium=None, pvalue_ks=0.001) -> StabilityMap`
+
+The stability mapping of Dynare's sensitivity toolbox (`dynare_sensitivity(stab=1)`).
+It draws the parameters in `distributions` (a parameter name or `"stderr e"`
+mapped to a distribution), on a scrambled Sobol sequence (`sampling="sobol"`, the
+quasi-random design Dynare uses by default), a Latin hypercube (`"latin"`) or at
+random, solves the model at each draw and records what happened. `points` and
+`names` classify given draws instead. `StabilityMap` has `names`, `draws`, `status`
+per draw, `shares`, `filtering(kind="determinate", columns=None)` and `summary()`.
+A status is `"determinate"` (a unique stable solution), `"indeterminate"` (more
+stable roots than predetermined variables, or Dynare's rank failure),
+`"explosive"` (fewer), `"no_steady_state"` or `"no_solution"`: the verdicts of
+Dynare's solver. `filtering` runs Dynare's three Monte Carlo filtering analyses:
+the determinate draws against all the others, and the indeterminate or explosive
+draws against the other solved draws. By default it tests every parameter but the
+shock standard deviations, which cannot move the roots. `ModFile.stability_map`
+draws from the priors of `estimated_params`.
+
+### `monte_carlo_filtering(points, behaviour, names=None, *, nonbehaviour=None, pvalue_ks=0.001, title="behaviour") -> FilteringResult`
+
+Which parameters separate the draws that show a behaviour from those that do not.
+`behaviour` and `nonbehaviour` are masks or indices of rows of `points`; by default
+the second group is every other draw. For each parameter, `smirnov_test` compares
+its distribution in the two groups. `FilteringResult` has `names`, `d` and `p` (the
+statistic and p-value of each parameter), `n_behaviour`, `n_nonbehaviour`,
+`significant` (the parameters with `p < pvalue_ks`, the most significant first),
+`correlations(group="behaviour", *, pvalue=1e-5, alpha2=0.0)` (pairs of parameters
+correlated inside a group, as Dynare's `pvalue_corr` and `alpha2_stab` select them)
+and `summary()`. `RestrictionSample.filtering(which=None)` filters the solved draws
+of `sample_restrictions` on whether the restrictions `which` hold, as Dynare's
+`map_calibration` does.
+
+### `smirnov_test(x1, x2, alternative="two-sided") -> (d, p)`
+
+The two-sample Smirnov test of Dynare's toolbox: the largest distance between the
+empirical distribution functions, and the asymptotic p-value with Stephens'
+small-sample factor. `alternative` is `"two-sided"`, `"less"` or `"greater"`.
+
+### `sobol(run, parameters, *, n=1024, seed=20260724, bootstrap=200, conf_level=0.95) -> SobolResult`
+
+First-order and total Sobol indices of `run` over independent parameters, on
+Saltelli's design: `A`, `B` and every `AB_i`, from a scrambled Sobol sequence, at
+`n (k + 2)` evaluations, with `n` a power of two. `run` maps `{name: value}` to a
+number, a mapping or an array. The first-order index is Saltelli et al. (2010) and
+the total index Jansen (1999), as in SALib and `cgelab.sobol`; the half-widths come
+from a bootstrap over the base points. `SobolResult` has `names`, `outputs`, `A`,
+`B`, `values` (each output on `A`, `B` and `AB`), `indices()` (per output, `S1`,
+`S1_conf`, `ST`, `ST_conf` and the number `n` of base points used: a base point
+where the output is missing anywhere is left out) and `summary()`.
+
+### `solution_outputs(model, params, *, irf=(), moments=(), cov=None, guess=None, steady_fn=None, qz_criterium=None, relative_irf=False) -> callable`
+
+A `run` for `sobol` from the first-order solution. `irf` lists `(variable, shock,
+horizons)` and `moments` lists `(variable1, variable2, lags)`, with the units of
+`check_restrictions`. Each horizon and lag is one output, named as a restriction
+label (`"pi(4), eps_v"`, `"x, x"`); a point without a determinate solution gives
+NaN. The names in `run.outputs`.
+
+Validated on Dynare 7.2's `tests/gsa/ls2003a.mod`, over three samples of 1024
+draws: each draw's class against Dynare's solver, and the Smirnov tests and
+correlations on Dynare's groups. The Sobol design and indices are validated
+against SALib 1.6 (see `validation/README.md`). Dynare's reduced-form mapping
+(`redform`), RMSE filtering (`rmse`) and Morris screening are not reproduced.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+cov = {"eps_a": 0.01, "eps_v": 0.0025}
+priors = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05),
+          "rho_v": dsg.Uniform(0.0, 0.9)}
+stab = dsg.stability_map(model, params, priors, draws=512, guess=guess, cov=cov)
+print(stab.summary())                                # phi_pi drives determinacy
+
+run = dsg.solution_outputs(model, params, irf=[("pi", "eps_v", 4)],
+                           moments=[("x", "x", 0)], cov=cov, guess=guess)
+inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
+          "rho_v": dsg.Uniform(0.0, 0.9)}
+print(dsg.sobol(run, inside, n=256).summary())
+```
+
 ## Diagnostics
 
 | Function | Answers |

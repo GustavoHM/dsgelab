@@ -57,6 +57,8 @@ validation/out_restrictions/
 validation/work_restrictions/
 validation/out_forecast_eval/
 validation/work_forecast_eval/
+validation/out_gsa/
+validation/work_gsa/
 validation/mmb/mods/
 validation/mmb/out/
 validation/mmb/work/
