@@ -724,7 +724,7 @@ np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</code></
 <pre class="output" data-label="Saída"><code><span class="out-expr">abs(inversao.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9</span>
 True
 <span class="out-expr">com_erro.log_likelihood(theta), particulas.log_likelihood(theta)</span>
-(372.2, 372.4)
+(372.2, 372.1)
 <span class="out-expr">np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</span>
 True</code></pre>
   <p>Com <code>order=2</code>, a verossimilhança vem da regra podada de segunda ordem, e
@@ -805,6 +805,32 @@ Calibration restrictions over 500 draws, 429 solved
   priori, os 71 sorteios deixados de fora têm <code>phi_pi</code> abaixo de 1.
   <code>ModFile.check_restrictions</code> e <code>ModFile.sample_restrictions</code> leem os dois
   blocos e as prioris de um <code>.mod</code>.</p>
+
+  <h3>25. Avaliação de previsões fora da amostra</h3>
+<pre><code>ev = dsg.forecast_evaluation(pb, range(320, 400, 10), 4)   # exemplo 14, reestimado 8 vezes
+ev.relative_rmse()["y"].round(2)                   # RMSE sobre o do passeio aleatório, h = 1..4
+ev.coverage_rate()["y"]                            # fração dentro das bandas de 90%
+dm = ev.diebold_mariano("y", 1, alternative="less")
+round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ev.relative_rmse()["y"].round(2)</span>
+[1.31 1.35 1.34 1.04]
+<span class="out-expr">ev.coverage_rate()["y"]</span>
+[0.75 1 0.75 0.75]
+<span class="out-expr">round(dm.statistic, 2), round(dm.p_value, 2)</span>
+(1.42, 0.9)</code></pre>
+  <p><code>forecast_evaluation</code> faz o que faz a estimação recursiva do Dynare com
+  <code>nobs=[T1:T2]</code> e <code>forecast</code>. Em cada origem, estima a moda posterior na
+  amostra até aquela data, partindo da moda da origem anterior, filtra e prevê as variáveis
+  observadas. <code>window=</code> faz a janela deslizar, <code>estimate="ml"</code> maximiza a
+  verossimilhança e <code>estimate="fixed"</code> mantém parâmetros dados. As previsões são então
+  comparadas com o que veio depois: o RMSE por horizonte, sozinho e dividido pelo do passeio
+  aleatório, o teste de Diebold–Mariano com a correção de Harvey, Leybourne e Newbold (como o
+  <code>forecast::dm.test</code> do R), e a calibração da densidade preditiva gaussiana, com
+  <code>pit()</code>, <code>coverage_rate()</code> e <code>log_score()</code>. A densidade é
+  condicional à estimativa, como a previsão do Dynare depois da moda. Oito origens dão um quadro
+  grosseiro: nelas o AR(1) não se sai melhor que o passeio aleatório, e o teste não distingue os
+  dois. Uma avaliação de verdade usa todos os trimestres, a cerca de dois segundos por origem
+  neste modelo.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1033,6 +1059,20 @@ Calibration restrictions over 500 draws, 429 solved
       <tr><td>valores nos 512 sorteios da priori feitos pelo Dynare</td><td class="num">1e-12</td><td class="ok">OK</td></tr>
       <tr><td>sorteios com solução (486 de 512)</td><td class="num">iguais</td><td class="ok">OK</td></tr>
       <tr><td>veredito de cada restrição em cada sorteio, e as proporções</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Avaliação de previsões comparada com o Dynare e o R</h3>
+  <p>A estimação recursiva do <code>fs2000.mod</code> pelo Dynare nas nove amostras que terminam nas
+  observações 176 a 184, com previsões de 8 trimestres, e o teste de Diebold–Mariano do
+  <code>forecast::dm.test</code> do R.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>médias das previsões nas modas do Dynare</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
+      <tr><td>bandas de 90% nas modas do Dynare</td><td class="num">6e-9</td><td class="ok">OK</td></tr>
+      <tr><td>modas reestimadas pelo dsgelab, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
+      <tr><td>estatística e p-valor de Diebold–Mariano, 48 casos</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

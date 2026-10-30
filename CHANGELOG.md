@@ -24,6 +24,10 @@ order and derivatives).
   propagates between dates. The linear likelihood is exact. Nonlinear rectangular
   and missing-data cases use a local Gaussian approximation and report
   `approximate=True`.
+- `maximum_likelihood` and `posterior_mode` no longer fail when the optimiser tries a point
+  without a determinate solution and asks for the gradient there; the point gets the penalty and
+  a flat gradient, and the line search backs off. It happened with priors whose support lets a
+  persistence parameter pass 1.
 
 ### Added
 
@@ -179,6 +183,18 @@ order and derivatives).
   Dynare 7.2, at the calibration and on the 512 prior draws of its sensitivity toolbox. The values
   agree within 1.3e-12, the same 486 draws solve, and each restriction's verdict agrees on every
   draw.
+- `forecast_evaluation`: out-of-sample forecasts at a sequence of origins, re-estimating the
+  posterior mode (or the likelihood, or keeping given parameters, or calling a given estimator)
+  on an expanding or a rolling window, as Dynare's recursive estimation does. `ForecastEvaluation`
+  holds the forecasts, their predictive covariance and the outcomes, and gives the RMSE by
+  horizon, its ratio to the random walk's, the PIT, the coverage of the bands and the log
+  predictive score, per observable or joint.
+- `diebold_mariano`: the Diebold–Mariano test with the Harvey–Leybourne–Newbold correction, both
+  variance estimators and the three alternatives, as R's `forecast::dm.test`; also
+  `ForecastEvaluation.diebold_mariano` against the random walk or another forecast's errors.
+- `validation/compare_forecast_eval.py`: Dynare 7.2's recursive estimation of `fs2000` over nine
+  samples, with forecasts within 2.6e-15 at Dynare's modes and modes of equal or higher kernel
+  when re-estimated, and 48 Diebold–Mariano tests against R's `forecast::dm.test` within 3.1e-15.
 - `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
   `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
   They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions

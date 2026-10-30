@@ -863,6 +863,45 @@ horizons or lags holds when any one of them is inside the bound. This is the log
 in Dynare's manual, and `dsgelab` applies the same rule. The numbers come from a run on 30 October
 2026, with Dynare 7.2 and Octave 11.3.0.
 
+## Out-of-sample forecast evaluation
+
+```bash
+bash fetch.sh
+bash run_forecast_eval.sh         # Dynare's recursive estimation of fs2000, and R's dm.test
+python compare_forecast_eval.py   # about 12 minutes, most of it the nine posterior modes
+```
+
+```
+fs2000 — recursive estimation, samples ending at 176 to 184, 8-period forecasts
+  at Dynare's modes: forecast means 2.6e-15, 90% bands 6.3e-09
+  dsgelab's own modes: kernel minus Dynare's, worst +4.98e-06   parameters, worst 0.003 posterior sd   forecasts, worst 0.000 predictive sd
+     gp_obs: RMSE relative to the random walk, h=1..8  2.25 2.04 2.42 3.39 2.60 2.46 2.43 2.99
+     gy_obs: RMSE relative to the random walk, h=1..8  0.62 0.87 0.71 0.58 0.72 0.67 0.64 0.84
+
+Diebold-Mariano against R's forecast::dm.test, 48 cases: statistic 3.1e-15, p-value 1.1e-15, same horizon used True
+```
+
+The recursive estimation is that of `fs2000.mod` from Dynare's examples, with model, priors and
+data as they are, and the estimation line replaced by
+`estimation(nobs=[176:184], mode_compute=4, mh_replic=0, forecast=8)`. Dynare estimates the
+posterior mode on each of the nine samples, starting each sample after the first from the first
+sample's mode, and forecasts the two observables eight quarters ahead with 90% bands.
+`forecast_evaluation` runs twice on the same samples. With `estimate="fixed"` and Dynare's mode
+for each sample, the forecast means and the bands are Dynare's. With `estimate="mode"`, `dsgelab`
+finds its own modes, starting each sample from the previous one. The kernel at each of them is at
+least as high as at Dynare's, the parameters lie within 0.003 posterior standard deviations of
+Dynare's, and the forecasts within a thousandth of their predictive standard deviation. The
+relative RMSEs are printed for reference: over these nine origins the model forecasts output
+growth better than the random walk and inflation worse.
+
+The Diebold–Mariano reference is R's `forecast::dm.test` (forecast 8.24.0 on R 4.5.1). Two error
+series of 60 observations, moving averages of orders 2 and 1, are drawn in R with a fixed seed.
+The 48 cases cross horizons 1 to 4, losses `|e|` and `e^2`, both variance estimators and the
+three alternatives. None of them has a negative variance at the requested horizon, so the
+fallback to horizon 1 that both programs make is checked only in the test suite. The numbers
+come from a run on 30 October 2026, with
+Dynare 7.2 and Octave 11.3.0.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

@@ -717,7 +717,7 @@ np.abs(shocks[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</code></p
 <pre class="output" data-label="Output"><code><span class="out-expr">abs(inversion.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9</span>
 True
 <span class="out-expr">noisy.log_likelihood(theta), particle.log_likelihood(theta)</span>
-(372.2, 372.4)
+(372.2, 372.1)
 <span class="out-expr">np.abs(shocks[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</span>
 True</code></pre>
   <p>With <code>order=2</code> the likelihood comes from the pruned second-order rule, and
@@ -798,6 +798,32 @@ Calibration restrictions over 500 draws, 429 solved
   have <code>phi_pi</code> below 1. <code>ModFile.check_restrictions</code> and
   <code>ModFile.sample_restrictions</code> read both blocks and the priors from a
   <code>.mod</code>.</p>
+
+  <h3>25. Out-of-sample forecast evaluation</h3>
+<pre><code>ev = dsg.forecast_evaluation(pb, range(320, 400, 10), 4)   # example 14, re-estimated 8 times
+ev.relative_rmse()["y"].round(2)                   # RMSE over the random walk's, h = 1..4
+ev.coverage_rate()["y"]                            # share inside the 90% bands
+dm = ev.diebold_mariano("y", 1, alternative="less")
+round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ev.relative_rmse()["y"].round(2)</span>
+[1.31 1.35 1.34 1.04]
+<span class="out-expr">ev.coverage_rate()["y"]</span>
+[0.75 1 0.75 0.75]
+<span class="out-expr">round(dm.statistic, 2), round(dm.p_value, 2)</span>
+(1.42, 0.9)</code></pre>
+  <p><code>forecast_evaluation</code> does what Dynare's recursive estimation does with
+  <code>nobs=[T1:T2]</code> and <code>forecast</code>. At each origin it estimates the posterior mode
+  on the sample up to that date, starting from the previous origin's mode, filters, and forecasts
+  the observables. <code>window=</code> makes the window roll, <code>estimate="ml"</code> maximises
+  the likelihood and <code>estimate="fixed"</code> keeps given parameters. The forecasts are then
+  compared with what followed: the RMSE by horizon, alone and over the random walk's, the
+  Diebold–Mariano test with the Harvey–Leybourne–Newbold correction (as R's
+  <code>forecast::dm.test</code>), and the calibration of the Gaussian predictive density, with
+  <code>pit()</code>, <code>coverage_rate()</code> and <code>log_score()</code>. The density is
+  conditional on the estimate, as Dynare's forecast after the mode is. Eight origins give a rough
+  picture: over them the AR(1) does no better than the random walk, and the test cannot tell the
+  two apart. An evaluation in earnest uses every quarter, at about two seconds per origin for this
+  model.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1021,6 +1047,20 @@ Calibration restrictions over 500 draws, 429 solved
       <tr><td>values on Dynare's 512 prior draws</td><td class="num">1e-12</td><td class="ok">OK</td></tr>
       <tr><td>draws that solve (486 of 512)</td><td class="num">same</td><td class="ok">OK</td></tr>
       <tr><td>verdict of each restriction on each draw, and the shares</td><td class="num">same</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Forecast evaluation against Dynare and R</h3>
+  <p>Dynare's recursive estimation of <code>fs2000.mod</code> on the nine samples ending at
+  observations 176 to 184, with 8-quarter forecasts, and the Diebold–Mariano test of R's
+  <code>forecast::dm.test</code>.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>forecast means at Dynare's modes</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
+      <tr><td>90% bands at Dynare's modes</td><td class="num">6e-9</td><td class="ok">OK</td></tr>
+      <tr><td>modes re-estimated by dsgelab, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
+      <tr><td>Diebold–Mariano statistic and p-value, 48 cases</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

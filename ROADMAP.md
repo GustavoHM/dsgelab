@@ -254,11 +254,19 @@ warning that lasts at least one minor version. The public API is what is in `__a
   and a joint HAC covariance; on simulated AR(1) data it recovers the model's IRFs in population
   (Plagborg-Møller and Wolf, 2021). Bayesian IRF matching and MATLAB transformation files are
   left out; Python transformations are accepted explicitly.
-- [ ] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window,
+- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window,
   RMSE against a random walk, the Diebold–Mariano test, and the probability integral transform
   and coverage of the predictive density. The references are the forecast comparisons of Smets
   and Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR waits
-  on the BVAR of 0.9.
+  on the BVAR of 0.9. `forecast_evaluation` re-estimates at each origin over an expanding or a
+  rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random walk's,
+  `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and the
+  log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
+  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands
+  within `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as
+  Dynare's and lies within `0.003` posterior standard deviations of it. The test agrees with R's
+  `forecast::dm.test` within `3.1e-15` in 48 cases. The predictive density is conditional on the
+  point estimate, as Dynare's after the mode; parameter uncertainty at every origin is left out.
 - [x] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`),
   with `check_restrictions` at one point and `sample_restrictions` over draws from the prior, and
   the `.mod` blocks read by `from_mod`. Validated against Dynare 7.2 on its

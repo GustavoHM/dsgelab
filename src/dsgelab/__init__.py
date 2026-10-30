@@ -62,6 +62,8 @@ from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          effective_sample_size, maximum_likelihood, metropolis_hastings,
                          model_probabilities, posterior_forecast, posterior_mode,
                          prior_predictive, rhat, smc)
+from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
+                                  forecast_evaluation)
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
                      shock_decomposition, state_space)
@@ -99,7 +101,8 @@ __all__ = [
     "particle_filter", "ParticleFilterResult", "particle_smoother", "ParticleSmootherResult",
     "inversion_filter", "InversionFilterResult", "inversion_smoother",
     "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
-    "Forecast", "prior", "Prior",
+    "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
+    "prior", "Prior",
     "solve_projection", "Projection",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",

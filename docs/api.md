@@ -987,6 +987,77 @@ Posterior model probabilities from log marginal likelihoods.
 Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
 uncertainty, with keys `mean`, `lower`, `upper` and `paths`.
 
+### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None) -> ForecastEvaluation`
+
+Out-of-sample forecasts, as Dynare's recursive estimation makes them with
+`nobs=[T1:T2]` and `forecast`. For each origin `n`, the sample is the first `n`
+rows of the problem's data (after `first_obs`), or the last `window` rows before
+the origin with `window`. On it the parameters are estimated, the sample is
+filtered, and the observables are forecast `1..horizon` periods ahead. `estimate`
+is `"mode"` (the posterior mode), `"ml"` (maximum likelihood), `"fixed"` (`theta`,
+one vector or one row per origin) or a callable `estimate(problem_at_origin, x0)`
+returning the parameters or a `ModeResult`. Each search starts from the previous
+origin's estimate, and the first from `theta` or the problem's starting values.
+The problem must be at first order.
+
+The predictive density is the Kalman filter's Gaussian forecast at the estimate,
+with mean `d + Z a_{T+h|T}` and variance `Z V_h Z' + H` (without `H` when
+`include_measurement=False`). It is conditional on the point estimate, as
+Dynare's forecast after the mode is; `posterior_forecast` adds parameter
+uncertainty at one origin.
+
+`ForecastEvaluation` has `variables` (the observables), `origins`, `horizon`, and
+per observable `mean`, `std` and `actual` (arrays of origins by horizons, in the
+units of the data, with `actual` NaN past the end of the sample) and `last` (the
+observation at each origin). `covariance` holds the joint predictive covariances,
+`theta` the parameters used at each origin (in the order of `names`), and, when
+they were estimated, `modes` the `ModeResult` of each origin and `objective` the
+posterior kernel or likelihood there. Pairs with a missing outcome are left out of
+every statistic:
+
+| Method | Returns |
+|---|---|
+| `errors`, `random_walk_errors` | `actual - mean`, and `actual - last` |
+| `rmse(benchmark=False)` | RMSE by horizon, of the model or of the random walk |
+| `relative_rmse()` | the model's RMSE over the random walk's |
+| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk or given errors |
+| `pit()` | `Phi((actual - mean) / std)`, uniform when the density is right |
+| `coverage_rate(coverage=None)` | share of outcomes inside the central band, by horizon |
+| `log_score(joint=False)` | log predictive density, per observable or joint |
+
+### `diebold_mariano(e1, e2, horizon=1, *, power=2, alternative="two.sided", varestimator="acf") -> DieboldMariano`
+
+The Diebold–Mariano test of equal accuracy, from two series of forecast errors.
+The loss differential is `|e1|^power - |e2|^power`. Its long-run variance sums the
+autocovariances up to lag `horizon - 1`, with equal (`"acf"`) or Bartlett
+(`"bartlett"`) weights. The statistic carries the Harvey–Leybourne–Newbold
+correction and is compared with Student's t with `n - 1` degrees of freedom.
+`alternative="less"` is that the first forecast is more accurate. When the
+variance is not positive at `horizon > 1`, the test warns and uses horizon 1.
+This is R's `forecast::dm.test`. `DieboldMariano` has `statistic`, `p_value`,
+`horizon`, `power`, `alternative` and `n`.
+
+Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples,
+at Dynare's modes and with modes re-estimated by `dsgelab`, and against R's
+`forecast::dm.test` in 48 cases (see `validation/README.md`).
+
+```python
+import dsgelab as dsg
+
+ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["rho"])
+sol = dsg.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
+series = sol.to_levels(sol.simulate(periods=400, cov={"e": 0.1}, seed=1))["y"]
+pb = dsg.EstimationProblem(
+    model=ar, data={"y": series}, params=dict(rho=0.5), observables=["y"],
+    priors={"rho": ("beta", 0.5, 0.2), "stderr e": ("inv_gamma", 0.1, float("inf"))},
+    guess=dict(a=0, y=1))
+
+ev = dsg.forecast_evaluation(pb, range(320, 400, 10), 4)
+print(ev.relative_rmse()["y"], ev.coverage_rate()["y"])
+print(ev.diebold_mariano("y", 1, alternative="less"))
+```
+
 ### `estimate(model, data, *, params, free, priors, guess, observables, measurement, cov=None, positive=(), bounds=None, draws=0, seed=0, proposal=None) -> EstimationResult`
 
 The 0.2 interface, which remains alongside `EstimationProblem`. It maximises the

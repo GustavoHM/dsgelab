@@ -423,6 +423,8 @@ def _optimise(problem, objective, x0, method, options, gradient=None):
 
     def with_gradient(y):
         value = g(y)
+        if value >= 1e10:      # no solution here: the penalty is flat, and the line search backs off
+            return value, np.zeros(len(y))
         x = _from_unbounded(y, lo, hi)
         derivative = gradient(x).gradient
         scale = np.ones(len(y))

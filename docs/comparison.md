@@ -65,6 +65,7 @@ switching requires **RISE**.
 | Simulation with pruning | ✅ | — (1st order only) | ? | ? | — | ? | ✅ |
 | 2nd-order generalised impulse response | ○ ‡ | — | ? | ? | — | ? | ✅ |
 | Historical decomposition and conditional forecast | ✅ ‡ on the linear solution | ? | — | ? | — | — | ✅ |
+| Out-of-sample forecast evaluation | ✅ ‡ recursive and rolling re-estimation, RMSE against the random walk, Diebold–Mariano, PIT, coverage and log score; the recursive forecasts against Dynare on `fs2000`, the test against R's `forecast::dm.test` | ? | — | ? | — | — | ✅ recursive estimation (`nobs=[T1:T2]`) |
 | **Optimal policy: Ramsey under commitment** | ✅ ‡ timeless, against Dynare, with IRFs to 5e-13 and the steady state to 5e-11 | — | — | — | — | — | ✅ |
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
 | 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare, to 1.4e-12 under Ramsey and 3.5e-13 in an RBC with capital (6.1e-10 under discretion) | — | — | — | — | — | ✅ |
@@ -217,6 +218,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Smoother, diffuse filter, maximum likelihood, SMC, diagnostics | ✅ Dynare | **done**, with smoother and diffuse filter against Dynare | 0.3 |
 | Marginal likelihood and model comparison | ✅ Dynare | **done**: Laplace, modified harmonic mean, SMC | 0.3 |
 | Historical decomposition and conditional forecast | ✅ Dynare (`shock_decomposition`, `+conditional_forecasts`), MacroModelling | **done**, including in real time, against Dynare | 0.3 |
+| Out-of-sample forecast evaluation | ✅ Dynare (recursive estimation, `nobs=[T1:T2]`, `forecast`), R (`forecast::dm.test`) | **done**: `forecast_evaluation`, recursive or rolling, with RMSE against the random walk, Diebold–Mariano, PIT, coverage and log score; forecasts at Dynare's modes on `fs2000` within 3e-15, and the test as R's within 3e-15 | 0.6 |
 | **Read `.mod`** | ✅ MacroModelling (`translate_mod_file`) | **done**: `from_mod`, nine Dynare `.mod` files | 0.4 |
 | Arbitrary lags and leads | 📄 Dynare, 📄 MacroModelling | **done**, in the `.mod` and in `from_equations`, with every auxiliary listed | 0.4 |
 | Occasionally binding constraints | ✅ Dynare (`+occbin`) | **done**: `occbin_simulate`, with one and two constraints at 2e-15 and regime histories identical to Dynare's | 0.4 |
