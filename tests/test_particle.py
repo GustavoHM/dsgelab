@@ -139,11 +139,79 @@ def test_third_order_particle_filter_nonlinear_and_missing_data():
     assert np.all(np.isfinite(third_result.states))
     data[2] = np.nan
     filtered = dsg.particle_filter(third, data, observables=["c"],
-                                   measurement=0.5, particles=100, seed=3)
+                                   measurement=0.5, particles=100, seed=3, store=True)
     assert filtered.loglik_t[2] == 0.0
-    assert filtered.ess[2] == 100
+    assert filtered.ess[2] == pytest.approx(1 / np.sum(filtered.history["weights"][2] ** 2))
     stored = dsg.particle_filter(third, data, observables=["c"], measurement=0.5,
                                  particles=500, seed=3, store=True)
     smoothed = dsg.particle_smoother(stored)
     assert smoothed.mean.shape == (5, 2)
     assert np.all(np.isfinite(smoothed.mean))
+
+
+def test_first_order_filtered_states_use_the_observation_date():
+    model, _ = _ar1_data()
+    first = dsg.solve(model, {"rho": 0.0}, guess={"y": 0.0})
+    filtered = dsg.particle_filter(first, [1.0], observables=["y"], cov={"e": 1.0},
+                                   measurement={"y": 0.01}, particles=100_000, seed=3)
+    # Independent N(0, 1) prior and N(0, .01**2) measurement error.
+    assert filtered.weights @ filtered.states[0, :, 0] == pytest.approx(1 / 1.0001, abs=0.01)
+
+
+def test_smoothing_independent_dates_preserves_filter_and_terminal_weights():
+    z = [np.array([[0.0], [1.0]]), np.array([[0.0], [10.0]])]
+    weights = [np.array([0.3, 0.7]), np.array([0.9, 0.1])]
+    filtered = dsg.ParticleFilterResult(
+        loglik=0.0, loglik_t=np.zeros(2), states=np.stack(z), weights=weights[-1],
+        ess=np.ones(2), particles=2,
+        history=dict(A=np.zeros((1, 1)), B=np.ones((1, 1)), c=np.zeros(1),
+                     Vinov=np.ones((1, 1)), nk=1, second=False, z=z, weights=weights))
+    smoothed = dsg.particle_smoother(filtered)
+    np.testing.assert_allclose(smoothed.mean[:, 0], [0.7, 1.0])
+    np.testing.assert_allclose(smoothed.ess, [1 / 0.58, 1 / 0.82])
+    assert smoothed.method == "backward"
+
+
+def test_rank_deficient_smoothing_preserves_the_deterministic_state_relation():
+    model = dsg.Model(
+        states=["x", "lag"], jumps=[], shocks=["e"],
+        equations=lambda nxt, cur, eps, p: [nxt.x - 0.5 * cur.x - eps.e,
+                                           nxt.lag - cur.x])
+    first = dsg.solve(model, {}, guess={"x": 0.0, "lag": 0.0})
+    filtered = dsg.particle_filter(first, [0.1, 0.2, -0.1, 0.3], observables=["x"],
+                                   cov={"e": 0.2}, measurement=0.1,
+                                   particles=3000, seed=2, store=True)
+    smoothed = dsg.particle_smoother(filtered)
+    assert smoothed.method == "ancestral"
+    np.testing.assert_allclose(smoothed.mean[1:, 1], smoothed.mean[:-1, 0], atol=1e-14)
+    np.testing.assert_allclose(smoothed.mean[-1], filtered.weights @ filtered.states[-1])
+
+
+@pytest.mark.parametrize("order", [2, 3])
+def test_nonlinear_rbc_smoothing_accepts_more_states_than_shocks(order):
+    from dsgelab.examples import rbc
+    model, params, guess = rbc.build_symbolic()
+    second = dsg.solve_second_order(dsg.solve(model, params, guess=guess), cov={"eps_a": 0.007})
+    solution = second if order == 2 else dsg.solve_third_order(second)
+    data = second.simulate(periods=3, burn=20, levels=True, seed=2)
+    filtered = dsg.particle_filter(solution, data, observables=["c"], measurement=0.01,
+                                   particles=500, seed=2, store=True)
+    smoothed = dsg.particle_smoother(filtered)
+    assert smoothed.method == "ancestral"
+    assert np.isfinite(smoothed.mean).all()
+    np.testing.assert_allclose(smoothed.mean[-1], filtered.weights @ filtered.states[-1])
+    assert smoothed.ess[-1] == pytest.approx(1 / np.sum(filtered.weights ** 2))
+
+
+@pytest.mark.parametrize("order", [2, 3])
+def test_ancestral_smoothing_without_resampling_matches_independent_posteriors(order):
+    model, _ = _ar1_data()
+    first = dsg.solve(model, {"rho": 0.0}, guess={"y": 0.0})
+    second = dsg.solve_second_order(first, cov={"e": 1.0})
+    solution = second if order == 2 else dsg.solve_third_order(second)
+    data = np.array([0.2, 0.8, -0.5])
+    filtered = dsg.particle_filter(solution, data, observables=["y"], measurement=1.0,
+                                   particles=20_000, resample=None, seed=3, store=True)
+    smoothed = dsg.particle_smoother(filtered)
+    # Independent unit-variance prior and measurement error give mean y/2.
+    np.testing.assert_allclose(smoothed.mean[:, 0], data / 2, atol=0.04)

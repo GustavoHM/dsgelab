@@ -127,3 +127,24 @@ def test_likelihood_gradient_correlation_missing_and_diffuse():
                                                  abs=1e-12)
     np.testing.assert_allclose(diffuse_result.gradient, _finite_difference(diffuse, diffuse.start()),
                                rtol=2e-4, atol=2e-4)
+
+
+@pytest.mark.parametrize("missing", [False, True])
+def test_diffuse_gradient_with_mixed_stationary_and_unit_root_observation(missing):
+    pytest.importorskip("sympy")
+    model = dsg.from_equations(
+        ["x(+1)=x+e1", "z(+1)=0.5*z+e2", "y=a*x+z"],
+        states=["x", "z"], jumps=["y"], shocks=["e1", "e2"], parameters=["a"])
+    data = np.array([0.2, 0.7, 0.3, 0.5, 0.9, 0.4, 0.1])
+    if missing:
+        data[[0, 3]] = np.nan
+    problem = dsg.EstimationProblem(
+        model, data, params={"a": 2.0}, observables=["y"],
+        free=["a", "stderr e1", "stderr e2", "stderr y"],
+        cov={"e1": 0.2, "e2": 0.3}, measurement={"y": 0.1},
+        guess={"x": 0.0, "z": 0.0, "y": 0.0}, qz_criterium=1.1)
+    theta = problem.start()
+    result = dsg.log_likelihood_gradient(problem, theta)
+    assert result.loglik == pytest.approx(problem.log_likelihood(theta), abs=1e-12)
+    np.testing.assert_allclose(result.gradient, _finite_difference(problem, theta),
+                               rtol=1e-5, atol=1e-5)

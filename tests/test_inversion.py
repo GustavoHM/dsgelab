@@ -55,3 +55,88 @@ def test_pruned_inversion_handles_nonlinear_model_and_missing_data():
     with pytest.raises(ValueError, match="at least as many shocks"):
         dsg.inversion_filter(second, {"a": simulated["a"], "c": simulated["c"]},
                              observables=["a", "c"])
+
+
+def test_two_shock_inversion_preserves_state_shock_interactions():
+    pytest.importorskip("sympy")
+    model = dsg.from_equations(
+        ["x(+1)=0.4*x+e1+0.5*x*e2", "z(+1)=0.3*z+e2"],
+        states=["x", "z"], jumps=[], shocks=["e1", "e2"], parameters=[])
+    second = dsg.solve_second_order(dsg.solve(model, {}, guess={"x": 0.0, "z": 0.0}),
+                                    cov={"e1": 0.2, "e2": 0.3})
+    # Pruned recursion: xf'=.4*xf+e1, xs'=.4*xs+.5*xf*e2, z'=.3*z+e2.
+    shocks = np.array([[0.1, 0.2], [0.3, 0.4], [-0.2, 0.1]])
+    data = np.array([[0.1, 0.2], [0.36, 0.46], [-0.039, 0.238]])
+    result = dsg.inversion_filter(second, data, observables=["x", "z"])
+    np.testing.assert_allclose(result.shocks, shocks, atol=1e-9)
+    np.testing.assert_allclose(result.states, data, atol=1e-9)
+    assert not result.approximate
+
+
+@pytest.mark.parametrize("order", [1, 2])
+@pytest.mark.parametrize("partial_missing", [False, True])
+def test_rectangular_and_missing_inversions_match_joint_gaussian_density(order, partial_missing):
+    from scipy.stats import multivariate_normal
+    pytest.importorskip("sympy")
+    model = dsg.from_equations(
+        ["x(+1)=0.5*x+0.2*z+e1", "z(+1)=0.4*z+e2"],
+        states=["x", "z"], jumps=[], shocks=["e1", "e2"], parameters=[])
+    first = dsg.solve(model, {}, guess={"x": 0.0, "z": 0.0})
+    Sigma = np.array([[0.04, 0.015], [0.015, 0.09]])
+    solution = first if order == 1 else dsg.solve_second_order(first, cov=Sigma)
+    data = np.array([[0.1, 0.2], [0.7, np.nan], [np.nan, np.nan],
+                     [-0.2, 0.1], [0.3, -0.1]])
+    observables = ["x", "z"] if partial_missing else ["x"]
+    if not partial_missing:
+        data = data[:, :1]
+    nobs, periods = len(observables), len(data)
+    # Joint law from the independent structural innovations, starting at zero.
+    loading = np.zeros((periods * nobs, periods * 2))
+    for t in range(periods):
+        for s in range(t + 1):
+            loading[t * nobs:(t + 1) * nobs, s * 2:(s + 1) * 2] = np.linalg.matrix_power(
+                first.P, t - s)[:nobs] @ first.Q
+    joint_cov = loading @ np.kron(np.eye(periods), Sigma) @ loading.T
+    observed = ~np.isnan(data.ravel())
+    expected = multivariate_normal.logpdf(data.ravel()[observed],
+                                          cov=joint_cov[np.ix_(observed, observed)])
+    result = dsg.inversion_filter(solution, data, observables=observables, cov=Sigma)
+    assert result.loglik == pytest.approx(expected, abs=1e-9)
+    assert result.loglik_t[2] == 0.0
+    assert np.all(result.jacobians[np.isnan(data)] == 0.0)
+    assert result.approximate == (order == 2)
+    for t in range(periods):
+        prefix = data[:t + 1].ravel()
+        seen = np.flatnonzero(~np.isnan(prefix))
+        rows = slice(t * nobs, (t + 1) * nobs)
+        conditional = joint_cov[rows][:, seen] @ np.linalg.solve(
+            joint_cov[np.ix_(seen, seen)], prefix[seen])
+        np.testing.assert_allclose(result.states[t, :nobs], conditional, atol=1e-9)
+
+
+def test_rectangular_inversion_whitens_unequal_correlated_shocks():
+    model = dsg.Model(states=["x"], jumps=[], shocks=["e1", "e2"],
+                      equations=lambda nxt, cur, eps, p: [nxt.x - eps.e1 - eps.e2])
+    first = dsg.solve(model, {}, guess={"x": 0.0})
+    Sigma = np.array([[0.04, 0.01], [0.01, 0.09]])
+    result = dsg.inversion_filter(first, [0.3], observables=["x"], cov=Sigma)
+    expected = Sigma @ np.ones(2) * 0.3 / Sigma.sum()
+    np.testing.assert_allclose(result.shocks[0], expected, atol=1e-12)
+    assert result.loglik == pytest.approx(norm.logpdf(0.3, scale=np.sqrt(Sigma.sum())))
+
+
+def test_nonlinear_rectangular_inversion_finds_the_minimum_norm_root():
+    pytest.importorskip("sympy")
+    model = dsg.from_equations(
+        ["x(+1)=e1+e2+0.1*(e1+e2)**2"], states=["x"], jumps=[],
+        shocks=["e1", "e2"], parameters=[])
+    Sigma = np.array([[0.04, 0.01], [0.01, 0.09]])
+    second = dsg.solve_second_order(dsg.solve(model, {}, guess={"x": 0.0}), cov=Sigma)
+    # The small inverse root is e1+e2=.3. Its standardized minimum norm is known.
+    result = dsg.inversion_filter(second, [0.309], observables=["x"])
+    expected = Sigma @ np.ones(2) * 0.3 / Sigma.sum()
+    np.testing.assert_allclose(result.shocks[0], expected, atol=1e-8)
+    assert result.states[0, 0] == pytest.approx(0.309, abs=1e-9)
+    assert result.loglik == pytest.approx(
+        norm.logpdf(0.3, scale=np.sqrt(Sigma.sum())) - np.log(1.06), abs=1e-8)
+    assert result.approximate

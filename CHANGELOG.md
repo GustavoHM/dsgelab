@@ -8,6 +8,23 @@ before 1.0, a minor version may add to the API and a patch version only fixes bu
 Work toward milestone 0.6 (identification, moments and data) and milestone 0.7 (complete third
 order and derivatives).
 
+### Fixed
+
+- Particle-filter states now use the observation date at first order. Smoothing
+  retains filtered weights and predictive normalization, and uses terminal weights
+  for the final mean and ESS. Nonlinear and rank-deficient transitions use stored
+  particle ancestry, including the two-state, one-shock RBC. The result reports
+  the smoothing method. Missing dates retain their actual effective sample size.
+- Inversion and second-order SMM use the same state-shock product ordering as the
+  pruned transition matrices, including models with multiple states and shocks.
+- The diffuse likelihood gradient differentiates every term in the finite
+  covariance update, including the observation's parameter-dependent loading.
+- Inversion accepts rectangular observation Jacobians and partial missing data.
+  Shocks are standardized by their covariance, and unresolved state uncertainty
+  propagates between dates. The linear likelihood is exact. Nonlinear rectangular
+  and missing-data cases use a local Gaussian approximation and report
+  `approximate=True`.
+
 ### Added
 
 - `SecondOrderSolution.h_uu` and `h_ku`: quadratic innovation and state-innovation blocks of the
@@ -82,7 +99,7 @@ order and derivatives).
   Second order uses the augmented pruned state and the correct `C z_{t-1} + D inov_t` observation
   timing. Validated against Dynare 7.2's sequential importance particle filter on an AR(1).
   `EstimationProblem(order=2)` exposes the particle likelihood to posterior mode and samplers,
-  with common random draws. `particle_smoother` adds backward-information smoothing of
+  with common random draws. `particle_smoother` adds smoothing of
   `particle_filter(..., store=True)`, with smoothed means and effective sample sizes at all three
   orders. Missing observations are skipped in the filter and smoother. The pruned third-order
   particle filter uses `[xf; xs; xt]` and the full rule, including `ghxss` and `ghuss`, in both
@@ -91,11 +108,12 @@ order and derivatives).
   likelihood within Monte Carlo error.
   `EstimationProblem(order=3)` exposes the likelihood to posterior mode and samplers, and its
   `smoother` method returns third-order smoothed means.
-- `inversion_filter`: minimum-norm shock inversion and exact likelihood at first and pruned
-  second order, with the observation-Jacobian correction and missing-data support.
+- `inversion_filter`: minimum-norm shock inversion at first and pruned second order,
+  with the observation-Jacobian correction and missing-data support. The linear
+  likelihood is exact; nonlinear underdetermined cases use a local Gaussian approximation.
   `EstimationProblem(nonlinear_filter="inversion")` selects it instead of the particle filter.
   Validated against Dynare OccBin's `IVF_core` on an AR(1). `inversion_smoother` returns the
-  exact inverted paths without a backward approximation.
+  inverted paths without a backward pass.
 - `identification`: local identification of the free parameters at one point, from the
   distribution of the observables, as Dynare's `identification` command computes it. Three
   criteria: the derivatives of the moments (Iskrev 2010), the Gram matrix of the derivatives

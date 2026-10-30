@@ -153,9 +153,10 @@ def _univariate_gradient(ss, Y, a, P, Pinf, derivatives, dP, tol=1e-12):
                         da[j] += dK0 * v + K0 * dv
                         dP[j] += ((dMi[:, None] * Mi[None, :] + Mi[:, None] * dMi[None, :])
                                   * F / Fi ** 2 + np.outer(Mi, Mi) * dF / Fi ** 2
-                                  - (dM[:, None] * Mi[None, :] + Mi[:, None] * dM[None, :]) / Fi
-                                  + np.outer(M, Mi) * dF / Fi ** 2
-                                  - np.outer(Mi, M) * dF / Fi ** 2)
+                                  - 2 * np.outer(Mi, Mi) * F * dFi / Fi ** 3
+                                  - (np.outer(dM, Mi) + np.outer(M, dMi)
+                                     + np.outer(dMi, M) + np.outer(Mi, dM)) / Fi
+                                  + (np.outer(M, Mi) + np.outer(Mi, M)) * dFi / Fi ** 2)
                         dPinf[j] -= ((dMi[:, None] * Mi[None, :]
                                       + Mi[:, None] * dMi[None, :]) / Fi
                                      - np.outer(Mi, Mi) * dFi / Fi ** 2)

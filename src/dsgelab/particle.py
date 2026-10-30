@@ -19,10 +19,11 @@ __all__ = ["ParticleFilterResult", "ParticleSmootherResult", "particle_filter", 
 
 @dataclass
 class ParticleSmootherResult:
-    """Smoothed state means and effective sample sizes."""
+    """Smoothed state means, effective sample sizes and the smoothing method."""
 
     mean: np.ndarray
     ess: np.ndarray
+    method: str = "backward"
 
 
 @dataclass
@@ -93,7 +94,7 @@ def particle_filter(solution: FirstOrderSolution | SecondOrderSolution | ThirdOr
     loglik_t = np.zeros(Y.shape[0])
     ess = np.zeros(Y.shape[0])
     states = np.zeros((Y.shape[0], particles, nk))
-    z_history, weight_history = [], []
+    z_history, weight_history, ancestors = [], [], []
     for t in range(Y.shape[0]):
         eps = rng.standard_normal((particles, ss.Sigma.shape[0])) @ shock_factor.T
         if second is not None:
@@ -108,7 +109,7 @@ def particle_filter(solution: FirstOrderSolution | SecondOrderSolution | ThirdOr
         missing = np.isnan(Y[t])
         if np.all(missing):
             loglik_t[t] = 0.0
-            ess[t] = particles
+            ess[t] = 1.0 / np.sum(weights ** 2)
         else:
             if second is not None:
                 error = Y[t, ~missing] - (d[~missing] + z @ C[~missing].T + inov @ D[~missing].T)
@@ -126,18 +127,26 @@ def particle_filter(solution: FirstOrderSolution | SecondOrderSolution | ThirdOr
             loglik_t[t] = np.log(total) + shift
             weights = raw / total
             ess[t] = 1.0 / np.sum(weights ** 2)
-        z = c + z @ A.T + inov @ B.T
+        # The nonlinear observation includes this date's innovation. At first
+        # order it observes z itself, so store z before predicting the next date.
+        if second is not None:
+            z = c + z @ A.T + inov @ B.T
+        indices = np.arange(particles)
         if resample is not None and ess[t] < resample * particles:
             positions = (rng.random() + np.arange(particles)) / particles
             indices = np.searchsorted(np.cumsum(weights), positions)
             z = z[indices]
             weights.fill(1.0 / particles)
-        z_history.append(z.copy())
-        weight_history.append(weights.copy())
+        if store:
+            z_history.append(z.copy())
+            weight_history.append(weights.copy())
+            ancestors.append(indices)
         states[t] = z[:, :nk] if second is None else z[:, :nk] + z[:, nk:2 * nk]
+        if second is None:
+            z = c + z @ A.T + eps @ B.T
     history = None
     if store:
-        history = dict(z=z_history, weights=weight_history, A=A, B=B, c=c,
+        history = dict(z=z_history, weights=weight_history, ancestors=ancestors, A=A, B=B, c=c,
                        Vinov=ss.Sigma if second is None else system["Vinov"],
                        vec_sigma=None if second is None else system["vec_sigma"],
                        nk=nk, second=second is not None)
@@ -212,13 +221,13 @@ def _third_order_particle_filter(third: ThirdOrderSolution, data: Data, *, obser
     loglik_t = np.zeros(Y.shape[0])
     ess = np.zeros(Y.shape[0])
     states = np.zeros((Y.shape[0], particles, nk))
-    z_history, weight_history = [], []
+    z_history, weight_history, ancestors = [], [], []
     for t in range(Y.shape[0]):
         kf, ks, kt = z[:, :nk], z[:, nk:2 * nk], z[:, 2 * nk:]
         eps = rng.standard_normal((particles, ne)) @ shock_factor.T
         missing = np.isnan(Y[t])
         if np.all(missing):
-            ess[t] = particles
+            ess[t] = 1.0 / np.sum(weights ** 2)
         else:
             error = Y[t, ~missing] - observation(kf, ks, kt, eps, ~missing)
             H = ss.H[np.ix_(~missing, ~missing)]
@@ -234,19 +243,22 @@ def _third_order_particle_filter(third: ThirdOrderSolution, data: Data, *, obser
             weights = raw / total_weight
             ess[t] = 1.0 / np.sum(weights ** 2)
         z = np.concatenate(transition(kf, ks, kt, eps), axis=1)
+        indices = np.arange(particles)
         if resample is not None and ess[t] < resample * particles:
             positions = (rng.random() + np.arange(particles)) / particles
             indices = np.searchsorted(np.cumsum(weights), positions)
             z = z[indices]
             weights.fill(1.0 / particles)
         states[t] = z[:, :nk] + z[:, nk:2 * nk] + z[:, 2 * nk:]
-        z_history.append(z.copy())
-        weight_history.append(weights.copy())
+        if store:
+            z_history.append(z.copy())
+            weight_history.append(weights.copy())
+            ancestors.append(indices)
     A = np.zeros((3 * nk, 3 * nk))
     A[:nk, :nk] = rule["P"]
     B = np.vstack([rule["Q"], np.zeros((2 * nk, ne))])
     c = np.zeros(3 * nk)
-    history = dict(z=z_history, weights=weight_history, A=A, B=B, c=c,
+    history = dict(z=z_history, weights=weight_history, ancestors=ancestors, A=A, B=B, c=c,
                    Vinov=Sigma, vec_sigma=Sigma.reshape(-1), nk=nk,
                    second=False, third=True) if store else None
     return ParticleFilterResult(loglik=float(loglik_t.sum()), loglik_t=loglik_t,
@@ -255,62 +267,81 @@ def _third_order_particle_filter(third: ThirdOrderSolution, data: Data, *, obser
 
 
 def particle_smoother(filtered: ParticleFilterResult) -> ParticleSmootherResult:
-    """Backward-information smoothing from a filter built with ``store=True``."""
+    """Smooth a filter built with ``store=True``.
+
+    Full-rank first-order transitions use forward-filtering backward smoothing.
+    Nonlinear and rank-deficient transitions trace the stored particle ancestry,
+    preserving deterministic state relations and the observation's shock timing.
+    Ancestral estimates can lose effective sample size over long histories.
+    ``result.method`` identifies the recursion used.
+    """
     from scipy.special import logsumexp
+
     history = filtered.history
     if history is None:
         raise ValueError("particle_smoother needs particle_filter(..., store=True)")
-    A, B, c = history["A"], history["B"], history["c"]
-    Vinov = history["Vinov"]
     nk, second = history["nk"], history["second"]
     third = history.get("third", False)
-    if second:
-        ne = int(round(len(history["vec_sigma"]) ** 0.5))
-        inov_mean = np.concatenate([np.zeros(ne), -history["vec_sigma"],
-                                    np.zeros(nk * ne)])
-    else:
-        inov_mean = np.zeros(B.shape[1])
-    active = np.arange(nk) if second or third else np.arange(B.shape[0])
-    B_active = B[active]
-    covariance = B_active @ Vinov @ B_active.T
-    sign, logdet = np.linalg.slogdet(covariance)
-    if third and sign <= 0:
+    ancestral = second or third
+    if not ancestral:
+        A, B, c = history["A"], history["B"], history["c"]
+        covariance = B @ history["Vinov"] @ B.T
         eigenvalues = np.linalg.eigvalsh(covariance)
-        cutoff = max(float(np.max(np.abs(eigenvalues))) * 1e-12, 1e-14)
-        logdet = float(np.log(eigenvalues[eigenvalues > cutoff]).sum())
-        inverse = np.linalg.pinv(covariance)
-    else:
-        if sign <= 0:
-            raise np.linalg.LinAlgError("singular transition covariance in particle smoothing")
-        inverse = np.linalg.inv(covariance)
+        cutoff = np.max(np.abs(eigenvalues), initial=0.0) * 1e-12
+        ancestral = bool(np.any(eigenvalues <= cutoff))
+        if not ancestral:
+            factor = linalg.cholesky(covariance, lower=True)
+    method = "ancestral" if ancestral else "backward"
     z_history, weight_history = history["z"], history["weights"]
-    backward = weight_history[-1].copy()
     mean = np.zeros((len(z_history), nk))
     ess = np.zeros(len(z_history))
+    if not z_history:
+        return ParticleSmootherResult(mean=mean, ess=ess, method=method)
+    if ancestral and "ancestors" not in history:
+        raise ValueError("ancestral smoothing requires stored particle ancestors")
+
+    def summarize(t, weights):
+        state = z_history[t][:, :nk].copy()
+        if second or third:
+            state += z_history[t][:, nk:2 * nk]
+        if third:
+            state += z_history[t][:, 2 * nk:3 * nk]
+        mean[t] = weights @ state
+        ess[t] = 1.0 / np.sum(weights ** 2)
+
+    backward = weight_history[-1].copy()
+    summarize(len(z_history) - 1, backward)
     for t in range(len(z_history) - 2, -1, -1):
         current, following = z_history[t], z_history[t + 1]
-        mean_next = c + current @ A.T
-        if not third:
-            mean_next = mean_next + inov_mean @ B.T
-        mean_next = mean_next[:, active]
-        logw = np.empty(len(current))
-        for start in range(0, len(current), 500):
-            stop = min(start + 500, len(current))
-            error = following[:, active][None, :, :] - mean_next[start:stop, None, :]
-            quadratic = np.sum((error @ inverse) * error, axis=-1)
-            logw[start:stop] = logsumexp(
-                -0.5 * (covariance.shape[0] * np.log(2 * np.pi) + logdet + quadratic)
-                + np.log(backward)[None, :], axis=1)
-        backward = logw.copy()
-        backward -= logsumexp(backward)
-        backward = np.exp(backward)
-        ess[t] = 1.0 / np.sum(backward ** 2)
-        state = (current[:, :nk] + current[:, nk:2 * nk] + current[:, 2 * nk:] if third else
-                 current[:, :nk] + current[:, nk:2 * nk] if second else current)
-        mean[t] = backward @ state
-    ess[-1] = 1.0 / np.sum(backward ** 2)
-    final = z_history[-1]
-    final_state = (final[:, :nk] + final[:, nk:2 * nk] + final[:, 2 * nk:] if third else
-                   final[:, :nk] + final[:, nk:2 * nk] if second else final)
-    mean[-1] = backward @ final_state
-    return ParticleSmootherResult(mean=mean, ess=ess)
+        if ancestral:
+            backward = np.bincount(history["ancestors"][t + 1], weights=backward,
+                                   minlength=len(current))
+        else:
+            # w(t|T,i) = w(t|t,i) sum_j f(j|i) w(t+1|T,j) /
+            #                           sum_l w(t|t,l) f(j|l).
+            # Two passes keep the pairwise transition array bounded in memory.
+            mean_next = c + current @ A.T
+            with np.errstate(divide="ignore"):
+                log_filtered = np.log(weight_history[t])
+                log_backward = np.log(backward)
+
+            def log_transition(start, stop):
+                error = following[None, :, :] - mean_next[start:stop, None, :]
+                whitened = linalg.solve_triangular(
+                    factor, error.reshape(-1, error.shape[-1]).T, lower=True).T
+                return -0.5 * np.sum(whitened ** 2, axis=1).reshape(stop - start, len(following))
+
+            denominator = np.full(len(following), -np.inf)
+            for start in range(0, len(current), 500):
+                stop = min(start + 500, len(current))
+                kernel = log_transition(start, stop)
+                denominator = np.logaddexp(denominator, logsumexp(
+                    log_filtered[start:stop, None] + kernel, axis=0))
+            logw = np.empty(len(current))
+            for start in range(0, len(current), 500):
+                stop = min(start + 500, len(current))
+                logw[start:stop] = log_filtered[start:stop] + logsumexp(
+                    log_transition(start, stop) + (log_backward - denominator)[None, :], axis=1)
+            backward = np.exp(logw - logsumexp(logw))
+        summarize(t, backward)
+    return ParticleSmootherResult(mean=mean, ess=ess, method=method)

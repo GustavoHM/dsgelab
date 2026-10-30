@@ -461,6 +461,7 @@ def _second_order_system(second, lags=0):
     P, Q = rule.g_k[:nk], rule.g_u[:nk]
     Sigma = second.Sigma
     hkk = rule.g_kk[:nk].reshape(nk, nk * nk, order="F")
+    # Mixed innovations use kron(xf, u): the shock index varies fastest.
     hku = rule.g_ku[:nk].transpose(0, 2, 1).reshape(nk, nk * ne, order="F")
     huu = rule.g_uu[:nk].reshape(nk, ne * ne, order="F")
     gkk = rule.g_kk.reshape(n, nk * nk, order="F")
@@ -593,7 +594,7 @@ def _smm_moments_second(second, observables, transforms, specs, first, index,
     for t in range(draws.shape[0]):
         u = eps[t]
         inov = np.concatenate([u, np.outer(u, u).reshape(-1, order="F") - vec_sigma,
-                               np.outer(z[:nk], u).reshape(-1, order="F")])
+                               np.outer(z[:nk], u).ravel()])
         Ysim[t] = base + scale * (d + C @ z + D @ inov)[rows]
         z = c + A @ z + B @ inov
     Ysim = Ysim[-long:]

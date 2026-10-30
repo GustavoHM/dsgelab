@@ -801,28 +801,40 @@ size threshold as a fraction of `particles`, or `None` to disable systematic
 resampling. Missing observations are skipped and contribute zero to the likelihood.
 The result contains `loglik`, `loglik_t`, posterior `states`, final `weights`,
 per-date `ess` and the particle count. With `store=True`, it also contains the
-augmented state and weight history required by `particle_smoother`.
+augmented state, weight and ancestry history required by `particle_smoother`.
+`states[t]` refers to the state at the date of observation `t` at every order.
 
 ### `particle_smoother(filtered) -> ParticleSmootherResult`
 
-Backward-information smoothing from `particle_filter(..., store=True)`. The
-backward pass uses Gaussian transition densities of the pruned ABCD system and
-returns smoothed state means and effective sample sizes. For singular augmented
-covariances, the density is evaluated only on `xf`.
+Smoothing from `particle_filter(..., store=True)`, returning state means, effective
+sample sizes and `method`. Full-rank first-order transitions use the Gaussian
+backward recursion with filtered weights and predictive normalization
+(`method="backward"`). Nonlinear and rank-deficient transitions use the stored
+particle ancestry (`method="ancestral"`), preserving deterministic state relations
+and the timing of observations and shocks. Ancestral smoothing can lose effective
+sample size over long histories. The terminal mean and ESS use the terminal
+filtered weights.
 
 ### `inversion_filter(solution, data, *, observables, transforms=None, cov=None, presample=0, tol=1e-9) -> InversionFilterResult`
 
-Minimum-norm inversion of the shocks that reproduce the data, at first or pruned
-second order, and the exact likelihood with the observation-Jacobian correction.
-Measurement error is not supported, and there must be at least as many shocks as
-observables. Higher-order inversions start at the origin. The result contains
-`loglik`, `loglik_t`, recovered `states` and `shocks`, and the observation
-`jacobians`. Missing observations are skipped.
+Minimum-norm inversion in standardized shock coordinates, at first or pruned
+second order, with the observation-Jacobian correction. Measurement error is not
+supported, and there must be at least as many shocks as observables. First order
+starts at zero and gives the exact Gaussian likelihood, propagating uncertainty
+from unobserved shocks and missing observations. Second order starts at the pruned
+system's mean and follows one local inverse. When observations are missing or fewer
+than shocks, it uses a local Gaussian approximation to the unresolved uncertainty
+and marginal density. The result flags this case with `approximate=True`.
+
+The result also contains `loglik`, `loglik_t`, recovered `states` and `shocks`, and
+the observation `jacobians`. Missing Jacobian rows are zero. A fully missing date
+contributes zero to the likelihood while its state uncertainty propagates forward.
 
 ### `inversion_smoother(solution, data, *, observables, transforms=None, cov=None, presample=0, tol=1e-9) -> InversionFilterResult`
 
-Returns the exact inverted state and shock paths. Inversion already recovers every
-shock exactly, so no backward approximation is needed.
+Returns the inversion filter's paths and approximation flag without a backward
+pass. When observations leave shocks unidentified, these are filtered paths and
+do not condition on later observations.
 
 ### `kalman_smoother(ss, data=None, *, filtered=None, init="auto") -> SmootherResult`
 

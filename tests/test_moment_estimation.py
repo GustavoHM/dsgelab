@@ -187,3 +187,19 @@ def test_moment_estimation_argument_errors():
         dsg.method_of_moments(model, {"y": np.zeros(10)}, moments=["y*y"], weighting=(), **kwargs)
     with pytest.raises(ValueError, match="order must be 1 or 2"):
         dsg.method_of_moments(model, {"y": np.zeros(10)}, moments=["y*y"], order=3, **kwargs)
+
+
+def test_second_order_smm_preserves_state_shock_interactions():
+    pytest.importorskip("sympy")
+    model = dsg.from_equations(
+        ["x(+1)=0.4*x+e1+0.5*x*e2", "z(+1)=0.3*z+e2"],
+        states=["x", "z"], jumps=[], shocks=["e1", "e2"], parameters=[])
+    shocks = np.array([[0.1, 0.2], [0.3, 0.4], [-0.2, 0.1]])
+    # Exact pruned path for these shocks and zero initial conditions.
+    data = np.array([[0.1, 0.2], [0.36, 0.46], [-0.039, 0.238]])
+    result = dsg.method_of_moments(
+        model, data, params={}, free={}, observables=["x", "z"], moments=["x", "z"],
+        method="SMM", order=2, cov={"e1": 0.2, "e2": 0.3}, guess={"x": 0.0, "z": 0.0},
+        weighting=("identity",), optimize_=False, simulation_multiple=1, burnin=0,
+        shocks=shocks / np.array([0.2, 0.3]))
+    np.testing.assert_allclose(result.model_moments, data.mean(axis=0), atol=1e-12)
