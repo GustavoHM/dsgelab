@@ -59,6 +59,19 @@ get "$DY/7.2/tests/trend_var/fs2000_nonstationary.mod" examples/fs2000_nonstatio
 mkdir -p identification
 get "$DY/7.2/tests/identification/kim/kim2.mod" identification/kim2.mod
 get "$DY/7.2/tests/identification/as2007/as2007.mod" identification/as2007.mod
+# Method of moments (tests/estimation/method_of_moments of Dynare 7.2). The
+# working cases are generated from this model; the second dataset is simulated.
+mkdir -p method_of_moments
+for f in AnScho_MoM_common.inc AnScho_MoM_data_2.mat; do
+  get "$DY/7.2/tests/estimation/method_of_moments/AnScho/$f" "method_of_moments/$f"
+done
+get "$DY/7.2/examples/estimation/rbc_irf_matching.mod" method_of_moments/rbc_irf_matching.mod
+# Calibration restrictions (tests/gsa of Dynare 7.2): Lubik and Schorfheide (2003), with
+# irf_calibration and moment_calibration blocks evaluated over the prior by the sensitivity toolbox
+mkdir -p gsa
+for f in ls2003a.mod ls2003_model.inc; do
+  get "$DY/7.2/tests/gsa/$f" "gsa/$f"
+done
 mkdir -p bgp
 for f in solow-1/solow.mod ramsey-1/ramsey.mod nk-1/nk.mod; do
   get "$DY/7.2/tests/bgp/$f" "bgp/$(dirname "$f").mod"

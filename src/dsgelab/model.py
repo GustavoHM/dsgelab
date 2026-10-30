@@ -30,6 +30,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence, TypeAlias
 import numpy as np
 from numpy.typing import ArrayLike
 
+from .tensors import SparseSecondDerivatives, SparseThirdDerivatives
+
 __all__ = ["Model", "VarView", "get_param", "set_params"]
 
 #: Parameters as the routines accept them: a dataclass, a mapping or any object
@@ -160,6 +162,9 @@ class Model:
     #: quotient divides by the square of the step and loses roughly six digits.
     jacobian_fn: Callable | None = None
     hessian_fn: Callable | None = None
+    #: Optional exact third derivatives in MODEL LEVELS, with the same argument
+    #: layout as ``jacobian_fn`` and ``hessian_fn``.
+    third_fn: Callable | None = None
 
     def __post_init__(self) -> None:
         self.states = list(self.states)
@@ -255,18 +260,35 @@ class Model:
         return J
 
     def hessian(self, x_next: ArrayLike, x_now: ArrayLike, eps: ArrayLike | None,
-                params: Params, ctx: Any = None) -> np.ndarray | None:
-        """Exact ``(n_eq, m, m)`` second derivatives with ``m = 2n + n_shocks``, or ``None``."""
+                params: Params, ctx: Any = None) -> np.ndarray | SparseSecondDerivatives | None:
+        """Exact second derivatives, dense or sparse, or ``None`` if unavailable."""
         if self.hessian_fn is None:
             return None
         eps = np.zeros(self.n_shocks) if eps is None else np.asarray(eps, dtype=float)
-        H = np.asarray(self.hessian_fn(np.asarray(x_next, dtype=float),
-                                       np.asarray(x_now, dtype=float),
-                                       eps, params, ctx), dtype=float)
+        H = self.hessian_fn(np.asarray(x_next, dtype=float), np.asarray(x_now, dtype=float),
+                            eps, params, ctx)
+        if not isinstance(H, SparseSecondDerivatives):
+            H = np.asarray(H, dtype=float)
         m = 2 * self.n_vars + self.n_shocks
         if H.shape != (self.n_vars, m, m):
             raise ValueError(f"hessian_fn returned {H.shape}, expected {(self.n_vars, m, m)}")
         return H
+
+    def third(self, x_next: ArrayLike, x_now: ArrayLike, eps: ArrayLike | None,
+              params: Params, ctx: Any = None) -> np.ndarray | SparseThirdDerivatives | None:
+        """Exact third derivatives, dense or sparse, or ``None`` if unavailable."""
+        if self.third_fn is None:
+            return None
+        eps = np.zeros(self.n_shocks) if eps is None else np.asarray(eps, dtype=float)
+        T = self.third_fn(np.asarray(x_next, dtype=float), np.asarray(x_now, dtype=float),
+                          eps, params, ctx)
+        if not isinstance(T, SparseThirdDerivatives):
+            T = np.asarray(T, dtype=float)
+        m = 2 * self.n_vars + self.n_shocks
+        want = (self.n_vars, m, m, m)
+        if T.shape != want:
+            raise ValueError(f"third_fn returned {T.shape}, expected {want}")
+        return T
 
     def vector(self, values: Mapping[str, float]) -> np.ndarray:
         """Pack a name->value mapping into the model's variable order."""

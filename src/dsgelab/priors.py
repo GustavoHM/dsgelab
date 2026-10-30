@@ -24,6 +24,7 @@ import math
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.typing import ArrayLike
 from scipy.optimize import brentq
 from scipy.special import betaln, gammaln
 
@@ -76,6 +77,32 @@ class Prior:
             return float(-math.log(self.upper - self.lower))
         raise ValueError(f"unknown prior shape {s!r}")
 
+    def score(self, x: float) -> float:
+        """Derivative of ``logpdf`` at ``x``, or NaN outside the support."""
+        x = float(x)
+        if not (self.lower <= x <= self.upper) or (x == self.lower and self.shape != "normal"
+                                                  and self.shape != "uniform"):
+            return float("nan")
+        s = self.shape
+        if s == "normal":
+            return float(-(x - self.mean) / self.sd ** 2)
+        if s == "beta":
+            aa, bb = self.lower, self.upper
+            if x >= bb:
+                return float("nan")
+            return float((self.a - 1) / (x - aa) - (self.b - 1) / (bb - x))
+        if s == "gamma":
+            return float((self.a - 1) / (x - self.lower) - 1 / self.b)
+        if s == "inv_gamma":
+            y = x - self.lower
+            return float(-(self.b + 1) / y + self.a / y ** 3)
+        if s == "inv_gamma2":
+            y = x - self.lower
+            return float(-(self.b / 2 + 1) / y + self.a / (2 * y ** 2))
+        if s == "uniform":
+            return 0.0
+        raise ValueError(f"unknown prior shape {s!r}")
+
     def sample(self, rng: np.random.Generator,
                size: int | tuple[int, ...] | None = None) -> float | np.ndarray:
         s = self.shape
@@ -92,6 +119,26 @@ class Prior:
             return self.lower + self.a / rng.chisquare(self.b, size)
         if s == "uniform":
             return rng.uniform(self.lower, self.upper, size)
+        raise ValueError(s)
+
+    def ppf(self, u: ArrayLike) -> np.ndarray:
+        """The quantile at probability ``u``: how a point of the unit cube becomes a draw."""
+        from scipy import stats
+        u = np.asarray(u, dtype=float)
+        s = self.shape
+        if s == "normal":
+            return self.mean + self.sd * stats.norm.ppf(u)
+        if s == "beta":
+            return self.lower + (self.upper - self.lower) * stats.beta.ppf(u, self.a, self.b)
+        if s == "gamma":
+            return self.lower + stats.gamma.ppf(u, self.a, scale=self.b)
+        if s == "inv_gamma":
+            # decreasing in the chi-square draw, as in sample
+            return self.lower + np.sqrt(self.a / stats.chi2.ppf(1 - u, self.b))
+        if s == "inv_gamma2":
+            return self.lower + self.a / stats.chi2.ppf(1 - u, self.b)
+        if s == "uniform":
+            return self.lower + (self.upper - self.lower) * u
         raise ValueError(s)
 
 

@@ -60,7 +60,7 @@ def example1():
             "b(+1) - tau*a - rho*b - eps_u",
         ],
         states=["k", "a", "b"], jumps=["y", "c", "h"],
-        shocks=["eps_e", "eps_u"], parameters=list(p), name="example1",
+        shocks=["eps_e", "eps_u"], parameters=list(p), derivatives="third", name="example1",
     )
     guess = {"y": 1.08068253095672, "c": 0.80359242014163, "h": 0.29175631001732,
              "k": 11.08360443260358, "a": 0.0, "b": 0.0}
@@ -92,7 +92,7 @@ def example2():
             "b(+1) - tau*a - rho*b - eps_u",
         ],
         states=["k", "a", "b"], jumps=["y", "c", "h"],
-        shocks=["eps_e", "eps_u"], parameters=list(p), name="example2",
+        shocks=["eps_e", "eps_u"], parameters=list(p), derivatives="third", name="example2",
     )
     guess = {"y": 0.1, "c": -0.2, "h": -1.2, "k": 2.4, "a": 0.0, "b": 0.0}
     cov = np.diag([0.009 ** 2, 0.009 ** 2])

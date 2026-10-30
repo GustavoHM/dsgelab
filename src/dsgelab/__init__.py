@@ -33,6 +33,9 @@ from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
 from .bgp import BalancedGrowth, balanced_growth
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .identification import Identification, IdentificationCheck, identification
+from .irf_matching import IRFMatchingResult, irf_matching
+from .local_projection import LocalProjectionResult, local_projection
+from .moment_estimation import MomentsResult, method_of_moments
 from .foresight import News, TransitionPath, perfect_foresight, perfect_foresight_with_expectation_errors
 from .klein import BlanchardKahnError, KleinSolution, klein
 from .linearize import (Coordinates, LinearSystem, first_order_system, second_derivatives,
@@ -44,23 +47,42 @@ from .optimal import (DiscretionError, DiscretionSolution, OSRError, OSRResult, 
                       RamseyError, discretionary_policy, osr, ramsey_model, ramsey_multipliers,
                       ramsey_steady_state)
 from .welfare import Welfare, WelfareError, consumption_equivalent, welfare, welfare_model
-from .secondorder import SecondOrderSolution, solve_second_order
-from .thirdorder import ThirdOrderSolution, solve_third_order
+from .secondorder import DecisionRule, SecondOrderSolution, solve_second_order
+from .thirdorder import ThirdOrderSolution, solve_third_order, stochastic_steady_state
+from .tensors import SparseSecondDerivatives, SparseThirdDerivatives
+from .derivatives import (SecondOrderSolutionJacobian, SolutionJacobian, PosteriorGradient,
+                          ThirdOrderSolutionJacobian, second_order_jacobian,
+                          solution_jacobian, third_order_jacobian, log_likelihood_gradient,
+                          log_posterior_gradient)
+from .gradient import LikelihoodGradient, kalman_likelihood_gradient
+from .hmc import hmc
+from .nuts import NUTSResult, nuts
 from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
 from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          effective_sample_size, maximum_likelihood, metropolis_hastings,
                          model_probabilities, posterior_forecast, posterior_mode,
                          prior_predictive, rhat, smc)
+from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
+                                  forecast_evaluation)
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
-                     shock_decomposition, state_space)
+                     low_frequency, shock_decomposition, state_space)
+from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
+from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
+from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plot_posterior,
+                    posterior_density, prior_density)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
+                           sample_restrictions)
+from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
+                          monte_carlo_filtering, smirnov_test, sobol, solution_outputs,
+                          stability_map)
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.5.0"
+__version__ = "0.7.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -68,19 +90,37 @@ __all__ = [
     "solve", "FirstOrderSolution", "shock_covariance",
     "klein", "KleinSolution", "BlanchardKahnError",
     "first_order_system", "second_derivatives", "LinearSystem", "Coordinates",
-    "solve_second_order", "SecondOrderSolution",
-    "solve_third_order", "ThirdOrderSolution", "third_derivatives",
+    "solve_second_order", "SecondOrderSolution", "DecisionRule",
+    "solve_third_order", "ThirdOrderSolution", "third_derivatives", "SparseThirdDerivatives",
+    "stochastic_steady_state",
+    "SparseSecondDerivatives",
+    "solution_jacobian", "SolutionJacobian", "second_order_jacobian", "SecondOrderSolutionJacobian",
+    "third_order_jacobian", "ThirdOrderSolutionJacobian",
+    "log_likelihood_gradient", "LikelihoodGradient", "kalman_likelihood_gradient",
+    "log_posterior_gradient", "PosteriorGradient", "hmc", "nuts", "NUTSResult",
     "estimate", "EstimationResult", "log_likelihood", "log_posterior",
     "EstimationProblem", "posterior_mode", "maximum_likelihood", "metropolis_hastings", "smc",
     "prior_predictive", "model_probabilities", "posterior_forecast", "rhat",
     "effective_sample_size", "ModeResult", "MCMCResult", "SMCResult",
     "state_space", "StateSpace", "kalman_filter", "kalman_smoother", "FilterResult",
+    "particle_filter", "ParticleFilterResult", "particle_smoother", "ParticleSmootherResult",
+    "inversion_filter", "InversionFilterResult", "inversion_smoother",
     "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
-    "Forecast", "prior", "Prior",
+    "low_frequency",
+    "plot_irf", "plot_paths", "plot_decomposition", "plot_forecast", "plot_posterior",
+    "prior_density", "posterior_density",
+    "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
+    "prior", "Prior",
     "solve_projection", "Projection",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",
+    "method_of_moments", "MomentsResult", "irf_matching", "IRFMatchingResult",
+    "local_projection", "LocalProjectionResult",
+    "check_restrictions", "sample_restrictions", "Restriction", "RestrictionCheck",
+    "RestrictionSample",
+    "stability_map", "StabilityMap", "monte_carlo_filtering", "FilteringResult", "smirnov_test",
+    "sobol", "SobolResult", "solution_outputs", "Uniform", "Normal", "Triangular",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance", "diagnose",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",

@@ -33,6 +33,8 @@ from .model import Covariance, Model, Params, Point, set_params
 from .priors import Prior, prior as make_prior
 
 if TYPE_CHECKING:
+    from .inversion import InversionFilterResult
+    from .particle import ParticleFilterResult, ParticleSmootherResult
     from .solution import FirstOrderSolution
     from .steady import SteadyState
 
@@ -47,16 +49,23 @@ def unpack_point(model: Model, params: Params, cov: Covariance,
                  theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
     """``(params, shock covariance, measurement sds)`` with ``names`` set to ``theta``.
 
-    A name is a parameter, ``"stderr e"`` for a shock or ``"stderr y"`` for the
-    measurement error on an observable. A shock's new standard deviation rescales
-    its row and column of ``cov``, so its correlations with the other shocks stay.
+    A name is a parameter, ``"stderr e"`` for a shock, ``"stderr y"`` for the
+    measurement error on an observable, or ``"corr e1, e2"`` for the correlation of
+    two shocks. A shock's new standard deviation rescales its row and column of
+    ``cov``, so its correlations with the other shocks stay; a correlation is set
+    after the standard deviations.
     """
     from .solution import shock_covariance
     theta = np.asarray(theta, dtype=float)
-    updates, sds = {}, {}
+    updates, sds, corrs = {}, {}, {}
     meas = dict(measurement)
     for n, v in zip(names, theta):
-        if n.startswith("stderr "):
+        if n.startswith("corr "):
+            pair = tuple(x.strip() for x in n[5:].split(","))
+            if len(pair) != 2 or not all(e in model.shocks for e in pair):
+                raise KeyError(f"{n!r}: name two shocks, as 'corr e1, e2'")
+            corrs[pair] = float(v)
+        elif n.startswith("stderr "):
             target = n[7:]
             if target in model.shocks:
                 sds[target] = float(v)
@@ -76,6 +85,9 @@ def unpack_point(model: Model, params: Params, cov: Covariance,
             S[:, i] *= v / old
         else:
             S[i, i] = v * v
+    for (a, b), rho in corrs.items():
+        i, j = model.shocks.index(a), model.shocks.index(b)
+        S[i, j] = S[j, i] = rho * math.sqrt(S[i, i] * S[j, j])
     return p, S, meas
 
 
@@ -101,9 +113,15 @@ class EstimationProblem:
         :func:`dsgelab.steady_state` from ``guess``, warm-started from the
         previous trial.
     init : Kalman initialisation, ``"auto"``, ``"stationary"`` or ``"diffuse"``.
+    order : 1 for the Kalman likelihood, 2 for a pruned nonlinear likelihood.
+    nonlinear_filter : ``"particle"`` or ``"inversion"`` when ``order=2``.
+    particles, particle_seed, resample : particle count, common random seed and
+        systematic-resampling threshold for ``order=2``.
     first_obs, presample : observations dropped before, and observations used but
         not counted in, the likelihood -- Dynare's options of the same names
         (``first_obs`` counted from 1).
+    aggregation : observables seen at a lower frequency, ``{name: (how, every)}``,
+        as for :func:`dsgelab.state_space`; first order only.
     """
 
     model: Model
@@ -122,6 +140,12 @@ class EstimationProblem:
     presample: int = 0
     free: Sequence[str] | None = None
     bounds: Mapping | None = None
+    order: int = 1
+    nonlinear_filter: str = "particle"
+    particles: int = 1000
+    particle_seed: int | None = 0
+    resample: float | None = 0.5
+    aggregation: Mapping[str, tuple[str, int]] | None = None
     _last_ss: SteadyState | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -135,6 +159,18 @@ class EstimationProblem:
         self.free = list(self.free)
         if not self.free:
             raise ValueError("nothing to estimate: give priors, or free= with bounds=")
+        if self.order not in (1, 2, 3):
+            raise ValueError("order must be 1, 2 or 3")
+        if self.nonlinear_filter not in ("particle", "inversion"):
+            raise ValueError("nonlinear_filter must be 'particle' or 'inversion'")
+        if self.order == 3 and self.nonlinear_filter != "particle":
+            raise ValueError("third order requires nonlinear_filter='particle'")
+        if self.particles < 1:
+            raise ValueError("particles must be positive")
+        if self.order >= 2 and self.aggregation:
+            raise ValueError("temporal aggregation needs order=1 (the Kalman filter)")
+        if self.order >= 2 and self.init == "diffuse":
+            raise ValueError("the particle filter starts at the stationary distribution")
         Y = self._data_matrix()
         self.Y = Y[self.first_obs - 1:]
 
@@ -213,16 +249,39 @@ class EstimationProblem:
         sol = solve(self.model, p, steady=ss, qz_criterium=self.qz_criterium)
         self._last_ss = ss
         space = state_space(sol, self.observables, transforms=self.transforms,
-                            measurement=meas or None, cov=S)
+                            measurement=meas or None, cov=S, aggregation=self.aggregation)
         return sol, space
 
     def log_likelihood(self, theta: ArrayLike) -> float:
         try:
-            _, space = self.solve(theta)
-            fr = kalman_filter(space, self.Y, init=self.init)
+            sol, space = self.solve(theta)
+            fr: FilterResult | ParticleFilterResult | InversionFilterResult
+            from .secondorder import solve_second_order
+            if self.order == 2:
+                second = solve_second_order(sol, cov=space.Sigma)
+                if self.nonlinear_filter == "inversion":
+                    from .inversion import inversion_filter
+                    fr = inversion_filter(second, self.Y, observables=self.observables,
+                                          transforms=self.transforms, presample=self.presample)
+                else:
+                    from .particle import particle_filter
+                    fr = particle_filter(second, self.Y, observables=self.observables,
+                                         transforms=self.transforms, measurement=space.H,
+                                         particles=self.particles, seed=self.particle_seed,
+                                         resample=self.resample)
+            elif self.order == 3:
+                from .thirdorder import solve_third_order
+                third = solve_third_order(solve_second_order(sol, cov=space.Sigma))
+                from .particle import particle_filter
+                fr = particle_filter(third, self.Y, observables=self.observables,
+                                     transforms=self.transforms, measurement=space.H,
+                                     particles=self.particles, seed=self.particle_seed,
+                                     resample=self.resample)
+            else:
+                fr = kalman_filter(space, self.Y, init=self.init)
         except Exception:
             return -np.inf
-        ll = fr.loglik_t[self.presample:].sum()
+        ll: float = fr.loglik_t[self.presample:].sum()
         return float(ll) if np.isfinite(ll) else -np.inf
 
     def log_posterior(self, theta: ArrayLike) -> float:
@@ -232,13 +291,46 @@ class EstimationProblem:
         ll = self.log_likelihood(theta)
         return float(lp + ll) if np.isfinite(ll) else -np.inf
 
-    def smoother(self, theta: ArrayLike) -> SmootherResult:
+    def smoother(self, theta: ArrayLike) -> SmootherResult | ParticleSmootherResult | InversionFilterResult:
         """Smoothed states, shocks and measurement errors at ``theta``."""
+        if self.order == 3:
+            from .particle import particle_smoother
+            return particle_smoother(self.filter(theta))
+        if self.order == 2:
+            if self.nonlinear_filter == "inversion":
+                from .inversion import inversion_smoother
+                sol, space = self.solve(theta)
+                from .secondorder import solve_second_order
+                second = solve_second_order(sol, cov=space.Sigma)
+                return inversion_smoother(second, self.Y, observables=self.observables,
+                                          transforms=self.transforms, presample=self.presample)
+            from .particle import particle_smoother
+            return particle_smoother(self.filter(theta))
         _, space = self.solve(theta)
         return kalman_smoother(space, self.Y, init=self.init)
 
-    def filter(self, theta: ArrayLike) -> FilterResult:
-        _, space = self.solve(theta)
+    def filter(self, theta: ArrayLike) -> FilterResult | ParticleFilterResult | InversionFilterResult:
+        sol, space = self.solve(theta)
+        from .secondorder import solve_second_order
+        if self.order == 2:
+            second = solve_second_order(sol, cov=space.Sigma)
+            if self.nonlinear_filter == "inversion":
+                from .inversion import inversion_filter
+                return inversion_filter(second, self.Y, observables=self.observables,
+                                        transforms=self.transforms, presample=self.presample)
+            from .particle import particle_filter
+            return particle_filter(second, self.Y, observables=self.observables,
+                                   transforms=self.transforms, measurement=space.H,
+                                   particles=self.particles, seed=self.particle_seed,
+                                   resample=self.resample, store=True)
+        if self.order == 3:
+            from .thirdorder import solve_third_order
+            third = solve_third_order(solve_second_order(sol, cov=space.Sigma))
+            from .particle import particle_filter
+            return particle_filter(third, self.Y, observables=self.observables,
+                                   transforms=self.transforms, measurement=space.H,
+                                   particles=self.particles, seed=self.particle_seed,
+                                   resample=self.resample, store=True)
         return kalman_filter(space, self.Y, init=self.init)
 
     # -- support, for unconstrained optimisation --------------------------
@@ -323,7 +415,7 @@ def hessian(f: Callable[[np.ndarray], float], x: ArrayLike,
     return H
 
 
-def _optimise(problem, objective, x0, method, options):
+def _optimise(problem, objective, x0, method, options, gradient=None):
     from scipy.optimize import minimize
     lo, hi = problem._support()
     x0 = np.asarray(x0 if x0 is not None else problem.start(), float)
@@ -334,8 +426,26 @@ def _optimise(problem, objective, x0, method, options):
         v = objective(_from_unbounded(y, lo, hi))
         return 1e10 if not np.isfinite(v) else -v
 
+    def with_gradient(y):
+        value = g(y)
+        if value >= 1e10:      # no solution here: the penalty is flat, and the line search backs off
+            return value, np.zeros(len(y))
+        x = _from_unbounded(y, lo, hi)
+        derivative = gradient(x).gradient
+        scale = np.ones(len(y))
+        for i, (a, b) in enumerate(zip(lo, hi)):
+            if np.isfinite(a) and np.isfinite(b):
+                scale[i] = (b - a) * math.exp(-y[i]) / (1 + math.exp(-y[i])) ** 2
+            elif np.isfinite(a):
+                scale[i] = math.exp(y[i])
+            elif np.isfinite(b):
+                scale[i] = math.exp(-y[i])
+        return value, -derivative * scale
+
     y0 = _to_unbounded(x0, lo, hi)
-    res = minimize(g, y0, method=method or "BFGS", options={"gtol": 1e-8, **(options or {})})
+    use_gradient = gradient is not None and (method is None or method == "BFGS")
+    res = minimize(with_gradient if use_gradient else g, y0, jac=use_gradient,
+                   method=method or "BFGS", options={"gtol": 1e-8, **(options or {})})
     pol = minimize(g, res.x, method="Nelder-Mead",
                    options={"xatol": 1e-10, "fatol": 1e-12, "maxiter": 20000, "maxfev": 20000})
     if pol.fun < res.fun:
@@ -375,7 +485,11 @@ def posterior_mode(problem: EstimationProblem, x0: ArrayLike | None = None, *,
     ``laplace`` is ``log p(Y)`` by the Laplace approximation,
     ``log posterior kernel + k/2 log 2 pi - 1/2 log det H``.
     """
-    x, res, n = _optimise(problem, problem.log_posterior, x0, method, options)
+    gradient = None
+    if problem.order == 1:
+        from .derivatives import log_posterior_gradient
+        gradient = lambda theta: log_posterior_gradient(problem, theta)
+    x, res, n = _optimise(problem, problem.log_posterior, x0, method, options, gradient)
     return _mode_result(problem, problem.log_posterior, x, res, n, True)
 
 
@@ -393,7 +507,11 @@ def maximum_likelihood(problem: EstimationProblem, x0: ArrayLike | None = None, 
             return -np.inf
         return problem.log_likelihood(x)
 
-    x, res, n = _optimise(problem, ll, x0, method, options)
+    gradient = None
+    if problem.order == 1:
+        from .derivatives import log_likelihood_gradient
+        gradient = lambda theta: log_likelihood_gradient(problem, theta)
+    x, res, n = _optimise(problem, ll, x0, method, options, gradient)
     return _mode_result(problem, ll, x, res, n, False)
 
 
@@ -716,7 +834,7 @@ def posterior_forecast(problem: EstimationProblem, draws: MCMCResult | SMCResult
         for h in range(horizon):
             e = L @ rng.standard_normal(len(space.shocks)) if shocks else 0.0
             a = space.T @ a + (space.R @ e if shocks else 0.0)
-            xs = J @ a
+            xs = J @ a[:space.n_model_states]
             for i, v in enumerate(names):
                 j = sol.model.position(v)
                 c, s = sol.coords.center[j], sol.coords.scale[j]

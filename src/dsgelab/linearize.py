@@ -33,6 +33,7 @@ from numpy.typing import ArrayLike
 
 from .model import Model, Params
 from .steady import SteadyState
+from .tensors import SparseSecondDerivatives, SparseThirdDerivatives
 
 __all__ = ["Coordinates", "LinearSystem", "first_order_system", "second_derivatives",
            "third_derivatives"]
@@ -141,12 +142,14 @@ def _assemble(dF_next, dF_now, dF_eps, coords, steady_residual, equilibrate):
 
 def second_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any = "inherit",
                        h: float = 1e-4, row_scale: np.ndarray | None = None,
-                       at: ArrayLike | None = None) -> np.ndarray:
+                       at: ArrayLike | None = None,
+                       sparse: bool = False) -> np.ndarray | SparseSecondDerivatives:
     """Hessian of every residual with respect to ``w = [y_{t+1}; y_t; eps]``.
 
-    Returns an ``(n_eq, m, m)`` array with ``m = 2 n + n_shocks``, in the same
-    rescaled coordinates as :func:`first_order_system` and divided by the same
-    row scaling, so the first- and second-order objects are commensurate.
+    Returns an ``(n_eq, m, m)`` array, or ``SparseSecondDerivatives`` when
+    ``sparse=True``, with ``m = 2 n + n_shocks``, in the same rescaled coordinates
+    as :func:`first_order_system` and divided by the same row scaling, so the
+    first- and second-order objects are commensurate.
 
     The step defaults to ``1e-4``. Second differences divide by ``h**2``, so
     round-off grows as ``eps_machine / h**2`` while truncation falls as ``h**2``;
@@ -166,12 +169,16 @@ def second_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: An
 
     exact = model.hessian(coords.to_level(w0[:n]), coords.to_level(w0[n:2 * n]),
                           w0[2 * n:], params, ctx)
+    if isinstance(exact, SparseSecondDerivatives):
+        s_full = np.concatenate([coords.scale, coords.scale, np.ones(ne)])
+        exact = exact.scaled(s_full, row_scale)
+        return exact if sparse else exact.to_dense()
     if exact is not None:
         s_full = np.concatenate([coords.scale, coords.scale, np.ones(ne)])
         H = exact * s_full[None, :, None] * s_full[None, None, :]
         if row_scale is not None:
             H = H / np.asarray(row_scale, dtype=float)[:, None, None]
-        return H
+        return SparseSecondDerivatives.from_dense(H) if sparse else H
 
     def F(w):
         return f(w[:n], w[n:2 * n], w[2 * n:])
@@ -208,21 +215,22 @@ def second_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: An
 
     if row_scale is not None:
         H = H / np.asarray(row_scale, dtype=float)[:, None, None]
-    return H
+    return SparseSecondDerivatives.from_dense(H) if sparse else H
 
 
 def third_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any = "inherit",
                       h: float = 1e-3, h_hess: float = 1e-4,
-                      row_scale: np.ndarray | None = None) -> np.ndarray:
+                      row_scale: np.ndarray | None = None,
+                      sparse: bool = False) -> np.ndarray | SparseThirdDerivatives:
     """Third derivatives of each residual, ``(n_eq, m, m, m)`` with ``m = 2n + n_shocks``.
 
-    Obtained by central differences of the HESSIAN, not of the function. That choice is what makes
-    the third order feasible. Differentiating the function three times costs ``O(m^3)``
-    evaluations and divides by the CUBE of the step: for a model with 19 variables and 5 shocks
-    that is eighty thousand evaluations, and less than half of the digits survive. Differentiating
-    the Hessian costs ``2m`` evaluations of it, and when the Hessian is analytic, as the symbolic
-    front end supplies it, a single central difference of it leaves only the O(h^2) truncation
-    error of that difference.
+    Uses exact third derivatives when ``model.third_fn`` supplies them. Otherwise,
+    obtains them by central differences of the HESSIAN, not of the function. That
+    choice makes third order feasible without ``O(m^3)`` residual evaluations and
+    division by the cube of the step. Differentiating the Hessian costs ``2m``
+    evaluations of it, and an analytic Hessian leaves only the O(h^2) truncation
+    error of that difference. With ``sparse=True``, returns coordinate entries;
+    the numerical fallback still forms a dense tensor before extracting them.
 
     The outer step ``h`` is larger than the inner ``h_hess`` on purpose: differentiating an object
     that was itself obtained by differences needs a step that dominates that object's noise, not a
@@ -232,6 +240,20 @@ def third_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any
         ctx = ss.ctx
     n, ne = model.n_vars, model.n_shocks
     m = 2 * n + ne
+    coords = Coordinates.from_steady_state(ss)
+    zero = np.zeros(m)
+    exact = model.third(coords.to_level(zero[:n]), coords.to_level(zero[n:2 * n]),
+                        zero[2 * n:], params, ctx)
+    scale = np.concatenate([coords.scale, coords.scale, np.ones(ne)])
+    if isinstance(exact, SparseThirdDerivatives):
+        exact = exact.scaled(scale, row_scale)
+        return exact if sparse else exact.to_dense()
+    if exact is not None:
+        T = (exact * scale[None, :, None, None] * scale[None, None, :, None]
+             * scale[None, None, None, :])
+        if row_scale is not None:
+            T = T / np.asarray(row_scale, dtype=float)[:, None, None, None]
+        return SparseThirdDerivatives.from_dense(T) if sparse else T
 
     def hess(w):
         return second_derivatives(model, ss, params, ctx=ctx, h=h_hess, at=w)
@@ -249,4 +271,4 @@ def third_derivatives(model: Model, ss: SteadyState, params: Params, *, ctx: Any
          + np.transpose(T, (0, 3, 2, 1))) / 6.0
     if row_scale is not None:
         T = T / np.asarray(row_scale, dtype=float)[:, None, None, None]
-    return T
+    return SparseThirdDerivatives.from_dense(T) if sparse else T

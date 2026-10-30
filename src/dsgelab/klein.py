@@ -72,6 +72,15 @@ class KleinSolution:
         return M
 
 
+def _ordered_qz(A, B, tol: float, qz_criterium: float | None):
+    cut = 1.0 if qz_criterium is None else float(qz_criterium)
+    sort = "iuc" if qz_criterium is None else (lambda a, b: np.abs(a) < cut * np.abs(b))
+    try:
+        return ordqz(B, A, sort=sort, output="real")
+    except ValueError:
+        return ordqz(B, A, sort=sort, output="complex")
+
+
 def klein(A: ArrayLike, B: ArrayLike, n_k: int, C: ArrayLike | None = None, tol: float = 1e-9,
           qz_criterium: float | None = None) -> KleinSolution:
     """Solve ``A E_t x_{t+1} = B x_t + C eps_{t+1}`` for the saddle path.
@@ -113,20 +122,13 @@ def klein(A: ArrayLike, B: ArrayLike, n_k: int, C: ArrayLike | None = None, tol:
 
     # Stability is governed by the generalised eigenvalues of the pencil (B, A);
     # order the ones inside the unit circle into the leading block.
-    if qz_criterium is None:
-        sort, cut = "iuc", 1.0 - tol
-    else:
-        cut = float(qz_criterium)
-        sort = lambda a, b: np.abs(a) < cut * np.abs(b)   # noqa: E731
+    cut = 1.0 - tol if qz_criterium is None else float(qz_criterium)
     # The REAL ordered QZ is the default: a complex pair stays in a 2x2 block, which is
     # never read entry by entry: Z11 is inverted, T11 enters a linear solve and S11 a product. In SciPy 1.18's
     # LAPACK the complex reordering loses up to 1e-8 on a pencil with a zero root and
     # refuses outright one with several infinite roots, while the real one is exact on
     # both. The complex reordering remains as the fallback.
-    try:
-        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort=sort, output="real")
-    except ValueError:
-        S, T, alpha, beta, Qz, Z = ordqz(B, A, sort=sort, output="complex")
+    S, T, alpha, beta, Qz, Z = _ordered_qz(A, B, tol, qz_criterium)
     with np.errstate(divide="ignore", invalid="ignore"):
         lam = np.abs(alpha) / np.where(np.abs(beta) < tol, tol, np.abs(beta))
     n_stable = int(np.sum(lam < cut))
@@ -179,6 +181,29 @@ def klein(A: ArrayLike, B: ArrayLike, n_k: int, C: ArrayLike | None = None, tol:
     return KleinSolution(F=F, P=P, Q=Qm, n_stable=n_stable, n_k=n_k,
                          eigenvalues=np.sort(lam), shock_rows=shock_rows,
                          shock_residual=shock_residual)
+
+
+def _implicit_derivative(A, B, C, P, F, Q, shock_rows, dA, dB, dC):
+    """Differentiate the saddle-path conditions without another QZ decomposition."""
+    n_k = P.shape[0]
+    n = A.shape[0]
+    A1, A2, B2 = A[:, :n_k], A[:, n_k:], B[:, n_k:]
+    Z = np.vstack([P, F @ P])
+    N = np.vstack([np.eye(n_k), F])
+    lhs_P = np.kron(np.eye(n_k), A1 + A2 @ F)
+    lhs_F = np.kron(P.T, A2) - np.kron(np.eye(n_k), B2)
+    lhs = np.hstack([lhs_P, lhs_F])
+    rhs = -dA @ Z + dB @ N
+    solved = np.linalg.solve(lhs, rhs.ravel(order="F"))
+    dP = solved[:n_k * n_k].reshape(n_k, n_k, order="F")
+    dF = solved[n_k * n_k:].reshape(n - n_k, n_k, order="F")
+    if Q is None:
+        return dP, dF, None
+    rows = np.asarray(shock_rows, dtype=int)
+    M = A[rows][:, :n_k] + A[rows][:, n_k:] @ F
+    dM = dA[rows][:, :n_k] + dA[rows][:, n_k:] @ F + A[rows][:, n_k:] @ dF
+    dQ = np.linalg.lstsq(M, dC[rows] - dM @ Q, rcond=None)[0]
+    return dP, dF, dQ
 
 
 def shock_loading(A, C, F, n_k: int, tol: float = 1e-9):

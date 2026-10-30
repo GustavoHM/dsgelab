@@ -62,7 +62,9 @@ creates `LEAD1_y`. Each auxiliary has its own equation and is listed in
 `model.auxiliary`. The lag of a jump becomes a new state, and the jump keeps its
 classification.
 
-`derivatives` is `"both"`, `"jacobian"` or `"none"`. `steady_state_model` is a
+`derivatives` is `"third"`, `"both"`, `"jacobian"` or `"none"`. The default
+`"both"` builds the Jacobian and Hessian. `"third"` adds the exact third-derivative
+tensor. `steady_state_model` is a
 closed form given as assignments `"name = expr"` in order (Dynare's block), which
 `steady_state(model, None, params)` uses after checking it.
 `calibration_equations` is `{parameter: "steady-state condition"}`, the
@@ -210,6 +212,57 @@ the row scaling. Uses `model.jacobian_fn` when available.
 `center`, `scale`; `to_level(yhat)`, `to_hat(x)`,
 `Coordinates.from_steady_state(ss, floor=1e-8)`.
 
+### `solution_jacobian(first, names, *, step=1e-3, levels=4, qz_criterium=None) -> SolutionJacobian`
+
+Differentiates `P`, `F`, `Q` and the steady state. Purely backward models use
+implicit differentiation: `dP = A^-1(dB-dA P)` and `dQ = A^-1(dC-dA Q)`.
+General QZ solutions differentiate the implicit saddle-path conditions
+`A[P; FP] = B[I; F]`, so perturbed parameters require a new steady state and
+linearization but no new QZ decomposition. Central parameter differences use
+Richardson extrapolation at halving step sizes, retaining the best triple.
+`SolutionJacobian` contains `names`, `P`, `F`, `Q`, `steady` and `error`. The
+arrays have a trailing parameter axis. `error` contains a second estimate as a
+diagnostic.
+
+### `second_order_jacobian(second, names, *, step=1e-3, levels=4) -> SecondOrderSolutionJacobian`
+
+Differentiates the full second-order decision rule with the same central-difference
+and Richardson procedure. `names` contains model parameters, shock standard
+deviations (`"stderr e"`) and shock correlations (`"corr e1, e2"`). The result
+contains `g_k`, `g_u`, `g_kk`, `g_uu`, `g_ku`, `g_s2`, `steady` and `error`, all
+with a trailing parameter axis. The composition includes the predetermined-state
+timing used by Dynare.
+
+### `third_order_jacobian(third, names, *, step=1e-3, levels=4, sparse=False, direct_limit=6000) -> ThirdOrderSolutionJacobian`
+
+Differentiates `g_kkk`, `g_kku`, `g_kuu`, `g_uuu`, `g_s2` and the steady state
+with central differences and Richardson extrapolation. `names` contains model
+parameters, shock standard deviations and correlations. `sparse` and
+`direct_limit` select the storage and Sylvester route at every perturbed point.
+The cubic composition
+uses the same endogenous-state timing as the Dynare comparison. The risk-state
+and risk-innovation terms `ghxss` and `ghuss` are not included.
+
+### `log_likelihood_gradient(problem, theta) -> LikelihoodGradient`
+
+Differentiates a first-order `EstimationProblem` likelihood through the Kalman
+recursion. Model parameters use `solution_jacobian`; shock and measurement-error
+standard deviations and correlations use direct formulas. `level` and `log`
+observation transforms and `presample` are supported. Missing observations and
+diffuse starts use the univariate recursion; the stable Schur block supplies
+initial derivatives. Nonlinear filters raise `NotImplementedError`.
+This is a recursive gradient, not automatic differentiation of the model solver.
+
+`LikelihoodGradient` contains `loglik`, `loglik_t`, `gradient` and `gradient_t`.
+The lower-level `kalman_likelihood_gradient(space, data, derivatives)` accepts a
+mapping from names to dictionaries with `T`, `R`, `Sigma`, `Z`, `d` and `H`.
+
+### `log_posterior_gradient(problem, theta) -> PosteriorGradient`
+
+Adds the prior score to `log_likelihood_gradient`. `PosteriorGradient` contains
+`logposterior`, `gradient`, `loglik` and `logprior`. An invalid support point
+returns `logposterior = -inf` and a NaN gradient.
+
 ### `shock_covariance(shocks, cov) -> ndarray`
 
 Coerces a mapping of standard deviations, a vector of standard deviations, or a
@@ -229,30 +282,35 @@ is the unknown count above which the Sylvester solve goes iterative.
 
 | Member | Meaning |
 |---|---|
-| `g_kk`, `h_kk` | quadratic terms, `(n_u, n_k, n_k)` and `(n_k, n_k, n_k)` |
-| `g_ss`, `h_ss` | risk coefficients; the rules add half of each |
-| `sylvester_residual` | residual of the generalised Sylvester solve |
-| `jumps(k, risk=True)` / `next_states(k, eps=None, risk=True)` | the decision rules |
+| `g_kk`, `h_kk` | quadratic state terms, `(n_u, n_k, n_k)` and `(n_k, n_k, n_k)` |
+| `h_uu`, `h_ku` | quadratic innovation and state-innovation terms of the state rule |
+| `g_ss`, `h_ss` | risk coefficients; the reduced rules add half of each |
+| `h_s2` | the full state risk constant, `h_ss - h_uu:Sigma` |
+| `sylvester_residual`, `innovation_residual` | residuals of the Sylvester and ex-post innovation solves |
+| `decision_rule()` | a `DecisionRule` for `[k'; u']`, with `g_k`, `g_u`, `g_kk`, `g_uu`, `g_ku` and `g_s2 = [h_s2; g_ss]` in Dynare's coefficient convention |
+| `jumps(k, risk=True)` / `next_states(k, eps=None, risk=True)` | the reduced decision rules used in simulation |
+| `irf(name, size=0.01, periods=40, *, n_draws=0, seed=0, state=None, percent=False)` | conditional impulse response of the pruned reduced rule; the innovation enters in period 0 |
 | `simulate(periods=1000, cov=None, *, seed=None, burn=200, pruning=True, levels=False)` | pruned by default |
 | `mean_correction(cov=None)` / `ergodic_mean(cov=None, levels=True)` | closed-form ergodic mean |
 | `at_covariance(cov)` | this solution if `cov` is the covariance it was computed at, else a solution computed at `cov`; `simulate`, `mean_correction` and `ergodic_mean` go through it, because `g_ss` and `h_ss` depend on the covariance |
 | `accuracy(sizes=(0.02, 0.01, 0.005), seed=0)` | implied order of accuracy, about 3 for a correct solution |
 
-### `second_derivatives(model, ss, params, *, ctx="inherit", h=1e-4, row_scale=None, at=None) -> ndarray`
+### `second_derivatives(model, ss, params, *, ctx="inherit", h=1e-4, row_scale=None, at=None, sparse=False) -> ndarray | SparseSecondDerivatives`
 
 The `(n_eq, m, m)` Hessian with `m = 2 n_vars + n_shocks`, in rescaled
 coordinates. Uses `model.hessian_fn` when available. `at` is the point
 `[ŷ_{t+1}; ŷ_t; eps]`, in rescaled coordinates, at which it is evaluated (the
-steady state by default).
+steady state by default). With `sparse=True`, returns coordinate entries; the
+numerical fallback still forms the dense Hessian first.
 
 ---
 
 ## Third order
 
-### `solve_third_order(second, cov=None, *, h=1e-3, h_hess=1e-4, direct_limit=6000, third=None) -> ThirdOrderSolution`
+### `solve_third_order(second, cov=None, *, h=1e-3, h_hess=1e-4, direct_limit=6000, third=None, hessian=None, sparse=False) -> ThirdOrderSolution`
 
-Adds to a second-order solution the cubic terms `g_kkk` and `h_kkk` and the risk
-slope `g_ssk` and `h_ssk`, the coefficients on `σ² k`. The rules become
+Adds to a second-order solution the cubic terms `g_kkk`, `h_kkk`, `h_uuu`, `h_kuu` and `h_kku`,
+and the risk slope `g_ssk` and `h_ssk`, the coefficients on `σ² k`. The reduced simulation rules become
 
 ```
 u_t     = F k + ½ g_kk[k,k] + ½ g_ss + ⅙ g_kkk[k,k,k] + ½ g_ssk k
@@ -260,29 +318,65 @@ k_{t+1} = P k + ½ h_kk[k,k] + ½ h_ss + ⅙ h_kkk[k,k,k] + ½ h_ssk k + Q eps
 ```
 
 `cov` defaults to the covariance of `second`. `h` and `h_hess` are the outer and
-inner steps of `third_derivatives`, and `third` reuses a precomputed tensor.
-Dynare's full third-order tensor, with the innovation in every monomial, and the
-stochastic steady state are not implemented; both are planned for 0.7.
+inner steps of `third_derivatives`. `third` and `hessian` reuse precomputed third
+and second derivatives without recomputing them.
+With `sparse=True`, the model derivatives and the cubic state coefficients
+`g_kkk` and `h_kkk` stay in coordinate form. The coefficients store one entry
+per equation and independent symmetric state triple. Contractions used by the
+solver, risk terms, simulation and stochastic steady state do not densify them;
+`to_dense()` and explicit `decision_rule()` composition do. Above `direct_limit`,
+matrix-free LGMRES solves on the `n_k(n_k+1)(n_k+2)/6` independent symmetric
+state triples. Its known term and residual use the same canonical coordinates,
+and each matvec expands one equation at a time rather than the whole tensor.
+The risk-state blocks `g_xss` and `h_xss` are converted to Dynare's `ghxss`,
+and `g_uss` and `h_uss` form `ghuss`. All four agree with Dynare in validation.
+Simulation and IRFs use the full pruned rule, including the risk and cubic innovation terms.
+`stochastic_steady_state(third)` solves the fixed point of the full unpruned rule
+with `sigma=1`, starting from the deterministic steady state by default.
 
 ### `ThirdOrderSolution`
 
 | Member | Meaning |
 |---|---|
 | `second` | the `SecondOrderSolution` it extends |
-| `g_kkk`, `h_kkk` | cubic terms, `(n_u, n_k, n_k, n_k)` and `(n_k, n_k, n_k, n_k)` |
+| `g_kkk`, `h_kkk` | cubic state terms, `(n_u, n_k, n_k, n_k)` and `(n_k, n_k, n_k, n_k)` |
+| `h_uuu` | cubic innovation term, `(n_k, n_eps, n_eps, n_eps)` |
+| `h_kuu`, `h_kku` | cubic mixed terms, `(n_k, n_k, n_eps, n_eps)` and `(n_k, n_k, n_k, n_eps)` |
 | `g_ssk`, `h_ssk` | risk slope, `(n_u, n_k)` and `(n_k, n_k)` |
-| `sylvester_residual`, `risk_slope_residual` | residuals of the two linear solves |
-| `jumps(k, risk=True)` / `next_states(k, eps=None, risk=True)` | the decision rules |
+| `g_xss`, `h_xss` | risk-state blocks, `(n_u, n_k)` and `(n_k, n_k)` |
+| `g_uss`, `h_uss` | risk-innovation blocks, `(n_u, n_eps)` and `(n_k, n_eps)` |
+| `sylvester_residual`, `risk_slope_residual`, `risk_state_residual`, `risk_shock_residual`, `innovation_residual` | residuals of the linear solves |
+| `decision_rule()` | the second-order `DecisionRule`, plus `g_uuu`, `g_kuu`, `g_kku` and `g_kkk` |
+| `jumps(k, eps=None, risk=True)` / `next_states(k, eps=None, risk=True)` | the full unpruned decision rules, including innovation curvature |
+| `irf(name, size=0.01, periods=40, *, n_draws=0, seed=0, state=None, percent=False, drop=100)` | conditional response of the full pruned rule, or a generalized response over `n_draws` stochastic paths with the impulse after `drop` |
 | `simulate(periods=1000, cov=None, *, seed=None, burn=200, levels=False)` | simulation pruned in three layers (Andreasen, Fernández-Villaverde and Rubio-Ramírez) |
 | `accuracy(sizes=(0.02, 0.01, 0.005), seed=0)` | implied order of the cubic block with the risk terms switched off, about 4 for a correct solution |
 
-### `third_derivatives(model, ss, params, *, ctx="inherit", h=1e-3, h_hess=1e-4, row_scale=None) -> ndarray`
+### `third_derivatives(model, ss, params, *, ctx="inherit", h=1e-3, h_hess=1e-4, row_scale=None, sparse=False) -> ndarray | SparseThirdDerivatives`
 
 The `(n_eq, m, m, m)` tensor of third derivatives with `m = 2 n_vars + n_shocks`,
-in rescaled coordinates. It is a central difference, with step `h`, of the
-Hessian, which costs `2m` Hessian evaluations. The Hessian is the model's exact
-one when it has `hessian_fn`, and a second difference with step `h_hess`
-otherwise.
+in rescaled coordinates. Uses `model.third_fn` directly when available. Otherwise,
+it is a central difference, with step `h`, of the Hessian, which costs `2m`
+Hessian evaluations. The Hessian is the model's exact one when it has
+`hessian_fn`, and a second difference with step `h_hess` otherwise. With
+`sparse=True`, returns coordinate entries; the numerical fallback still forms
+the dense tensor before extracting them.
+
+### `SparseSecondDerivatives`
+
+Coordinate storage for Hessians with `equations`, `indices`, `values`, `shape` and `nnz`.
+`to_dense()` returns the full tensor. `contract(u, v)` evaluates
+`H[e,a,b] u[a,i] v[b,j]` without densifying `H`. `scaled(scale, row_scale=None)`
+applies the coordinate and equation scales. `from_dense(array)` converts an
+existing Hessian.
+
+### `SparseThirdDerivatives`
+
+Coordinate storage with `equations`, `indices`, `values`, `shape` and `nnz`.
+`to_dense()` returns the full tensor. `contract(u, v, w)` evaluates
+`T[e,a,b,c] u[a,i] v[b,j] w[c,k]` without densifying `T`. `scaled(scale, row_scale=None)`
+applies the coordinate and equation scales. `from_dense(array)` converts an
+existing tensor.
 
 ---
 
@@ -491,6 +585,7 @@ A construct that is not read raises `DynareImportError`, with the offending text
 | `homotopy` | `homotopy_setup`, `{parameter: (start, end)}` |
 | `trends` | the declared `deflators` and `trend_vars` |
 | `shock_states` | the state that carries each shock, for `shock_decomposition` |
+| `irf_calibration`, `moment_calibration`, `relative_irf` | the calibration blocks, as restriction tuples for `check_restrictions` |
 
 A Dynare exogenous variable is a level with a steady state of its own. The state
 `SHK_e` follows `SHK_e(+1) = EXO_SS_e + e`, and `EXO_SS_e` (from `initval`, zero by
@@ -509,6 +604,8 @@ default) is a parameter, so a permanent change in the level is a change in it.
 | `balanced_growth(params=None, **kwargs)` | `balanced_growth` with the exogenous variables held at their level |
 | `estimation_problem(data, **kwargs)` | an `EstimationProblem` from `estimated_params`, `varobs` and the `estimation(...)` options; `kwargs` override them |
 | `identification(point="prior_mean", **kwargs)` | `identification` of the `estimated_params`, observing `varobs`, at the prior mean (Dynare's default), the calibration or a given point |
+| `check_restrictions(point="calibration", *, qz_criterium=None, **kwargs)` | `check_restrictions` of the `irf_calibration` and `moment_calibration` blocks at the calibration, the prior mean or a given point |
+| `sample_restrictions(draws=1000, **kwargs)` | `sample_restrictions` of the same blocks over the priors of `estimated_params`; `points=` and `names=` evaluate given draws |
 
 The example reads `fs2000.mod` from Dynare 6.4's examples, which
 `validation/fetch.sh` downloads into `validation/mods/examples/`; it runs from the
@@ -666,7 +763,7 @@ utility and no variable called consumption is assumed. `kwargs` go to `welfare`.
 
 ## State space and Kalman filter
 
-### `state_space(sol, observables, *, transforms=None, measurement=None, cov=None) -> StateSpace`
+### `state_space(sol, observables, *, transforms=None, measurement=None, cov=None, aggregation=None) -> StateSpace`
 
 `k_{t+1} = T k_t + R eps_{t+1}`, `y_t = d + Z k_t + e_t` from a first-order
 solution. Each observable is a `"level"` (default) or a `"log"`. A log observable
@@ -677,8 +774,46 @@ measurement errors (`{name: sd}`, a scalar, or a covariance). An observed growth
 rate or a measured inflation rate is a variable of the model, defined by a model
 equation, as in a `.mod`. Missing data are `nan`.
 
+`aggregation` declares observables seen at a lower frequency than the model's,
+`{name: (how, every)}`: the data are the `"mean"` or the `"sum"` of the variable
+over the last `every` periods, in the units of its transform (a mean of logs for a
+log observable; a sum of logs is refused), with `nan` in the periods between
+observations. The state then stacks `every - 1` lags of the model's states, named
+`"k(-1)"` and so on, as an auxiliary variable `(y + y(-1) + y(-2) + y(-3))/4` does in
+a `.mod`. The filter, the smoother, the likelihood and its gradient, the shock
+decompositions and the forecasts work on the stacked state, and the smoothed
+variables are the model's. A stock observed at the end of each low-frequency
+period needs no aggregation, only the missing values. `EstimationProblem` takes the
+same `aggregation=`, at first order. Validated against Dynare on `fs2000.mod` with
+output growth observed only as its annual mean, through the auxiliary variable a
+Dynare user writes: the likelihood at two points within 8e-13, the smoothed
+variables within 1.3e-14, and a posterior mode with a kernel at least Dynare's.
+
 `StateSpace`: `T`, `R`, `Sigma`, `Z`, `d`, `H` (the measurement covariance),
-`observables`, `states`, `shocks`, `transforms`, `solution`.
+`observables`, `states`, `shocks`, `transforms`, `solution`, `aggregation` and
+`n_model_states` (the model's states, before the lags).
+
+### `low_frequency(values, every, *, periods=None, offset=None) -> ndarray`
+
+Places low-frequency observations on the model's grid, with `nan` in between:
+`values[j]` lands in period `offset + j * every`, by default at the last period of
+each low-frequency period (`offset = every - 1`), where an aggregate over the last
+`every` periods is complete.
+
+```python
+import numpy as np
+import dsgelab as dsg
+
+ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["rho"])
+sol = dsg.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
+y = sol.to_levels(sol.simulate(periods=400, cov={"e": 0.1}, seed=1))["y"]
+annual = dsg.low_frequency(y.reshape(-1, 4).mean(axis=1), 4)
+pb = dsg.EstimationProblem(model=ar, data={"y": annual}, params=dict(rho=0.5), observables=["y"],
+                           priors={"rho": ("beta", 0.5, 0.2), "stderr e": ("inv_gamma", 0.1, float("inf"))},
+                           guess=dict(a=0, y=1), aggregation={"y": ("mean", 4)})
+print(dsg.posterior_mode(pb).values)
+```
 
 ### `kalman_filter(ss, data, *, init="auto", univariate=None, tol=1e-12) -> FilterResult`
 
@@ -693,6 +828,54 @@ the variance below which a diffuse or prediction-error variance counts as zero.
 `FilterResult`: `loglik`, `loglik_t` (per date), `a_pred`, `P_pred`, `a_filt`,
 `P_filt` (predicted and filtered states and variances), `diffuse_periods`,
 `univariate`.
+
+### `particle_filter(solution, data, *, observables, transforms=None, measurement=None, cov=None, particles=1000, seed=0, resample=0.5, store=False) -> ParticleFilterResult`
+
+Bootstrap particle filter at first, pruned second or pruned third order. Second-order particles
+use the augmented state `[xf; xs; kron(xf,xf)]`; third-order particles use `[xf; xs; xt]`,
+with observations evaluated before the state transition as `d + C z_{t-1} + D inov_t`.
+Third order uses the full pruned rule, including `ghxss` and `ghuss`, for both the
+transition and the observation, and starts each particle from its own 1,000-period path.
+`measurement` is required and must have positive-definite covariance. `cov` sets the structural covariance at
+first order; second order uses `solution.Sigma`. `resample` is the effective-sample-
+size threshold as a fraction of `particles`, or `None` to disable systematic
+resampling. Missing observations are skipped and contribute zero to the likelihood.
+The result contains `loglik`, `loglik_t`, posterior `states`, final `weights`,
+per-date `ess` and the particle count. With `store=True`, it also contains the
+augmented state, weight and ancestry history required by `particle_smoother`.
+`states[t]` refers to the state at the date of observation `t` at every order.
+
+### `particle_smoother(filtered) -> ParticleSmootherResult`
+
+Smoothing from `particle_filter(..., store=True)`, returning state means, effective
+sample sizes and `method`. Full-rank first-order transitions use the Gaussian
+backward recursion with filtered weights and predictive normalization
+(`method="backward"`). Nonlinear and rank-deficient transitions use the stored
+particle ancestry (`method="ancestral"`), preserving deterministic state relations
+and the timing of observations and shocks. Ancestral smoothing can lose effective
+sample size over long histories. The terminal mean and ESS use the terminal
+filtered weights.
+
+### `inversion_filter(solution, data, *, observables, transforms=None, cov=None, presample=0, tol=1e-9) -> InversionFilterResult`
+
+Minimum-norm inversion in standardized shock coordinates, at first or pruned
+second order, with the observation-Jacobian correction. Measurement error is not
+supported, and there must be at least as many shocks as observables. First order
+starts at zero and gives the exact Gaussian likelihood, propagating uncertainty
+from unobserved shocks and missing observations. Second order starts at the pruned
+system's mean and follows one local inverse. When observations are missing or fewer
+than shocks, it uses a local Gaussian approximation to the unresolved uncertainty
+and marginal density. The result flags this case with `approximate=True`.
+
+The result also contains `loglik`, `loglik_t`, recovered `states` and `shocks`, and
+the observation `jacobians`. Missing Jacobian rows are zero. A fully missing date
+contributes zero to the likelihood while its state uncertainty propagates forward.
+
+### `inversion_smoother(solution, data, *, observables, transforms=None, cov=None, presample=0, tol=1e-9) -> InversionFilterResult`
+
+Returns the inversion filter's paths and approximation flag without a backward
+pass. When observations leave shocks unidentified, these are filtered paths and
+do not condition on later observations.
 
 ### `kalman_smoother(ss, data=None, *, filtered=None, init="auto") -> SmootherResult`
 
@@ -736,22 +919,28 @@ standard deviation, where `sd = inf` gives `nu = 2`), `inv_gamma2` and
 `uniform`.
 
 `Prior`: `shape`, `mean`, `sd`, `a` and `b` (the two parameters of the density),
-`lower`, `upper`. `logpdf(x)` uses Dynare's normalising constants, and
-`sample(rng, size=None)` draws from it.
+`lower`, `upper`. `logpdf(x)` uses Dynare's normalising constants,
+`score(x)` differentiates it, and `sample(rng, size=None)` draws from it.
 
-### `EstimationProblem(model, data, params, observables, priors={}, cov=None, measurement=None, transforms=None, steady_fn=None, guess=None, init="auto", qz_criterium=None, first_obs=1, presample=0, free=None, bounds=None)`
+### `EstimationProblem(model, data, params, observables, priors={}, cov=None, measurement=None, transforms=None, steady_fn=None, guess=None, init="auto", qz_criterium=None, first_obs=1, presample=0, free=None, bounds=None, order=1, nonlinear_filter="particle", particles=1000, particle_seed=0, resample=0.5)`
 
 What is estimated and against which data. Names follow Dynare's
 `estimated_params`, with a parameter's own name, `"stderr e"` for the standard
 deviation of a shock and `"stderr y"` for that of the measurement error on an
 observable. `priors` map names to `Prior` or `(shape, mean, sd[, p3, p4])`.
+With `order=2` or `order=3`, `nonlinear_filter="particle"` uses the bootstrap
+filter with `particles`, `particle_seed` for common random draws and `resample` as
+its ESS threshold. Third order requires the particle route.
+`nonlinear_filter="inversion"` uses the exact shock inversion and does not allow
+measurement error. Particle and inversion smoothing are available through `smoother`.
 
 | Method | Meaning |
 |---|---|
 | `log_likelihood(theta)`, `log_prior(theta)` | the two parts of the posterior |
 | `log_posterior(theta)` | `-inf` where the model has no determinate solution |
 | `solve(theta)` | `(FirstOrderSolution, StateSpace)` at `theta` |
-| `filter(theta)`, `smoother(theta)` | a `FilterResult` and a `SmootherResult` |
+| `filter(theta)` | a `FilterResult`, `ParticleFilterResult` or `InversionFilterResult` |
+| `smoother(theta)` | a `SmootherResult`, `ParticleSmootherResult` or `InversionFilterResult` |
 | `start()` | the calibration, or the prior mean |
 
 `ModFile.estimation_problem(data, **kwargs)` builds one from a `.mod`'s
@@ -760,7 +949,9 @@ Dynare starts from the prior mean, and so does `EstimationProblem`.
 
 ### `posterior_mode(problem, x0=None, *, method=None, options=None) -> ModeResult`
 
-BFGS and a simplex polish in an unbounded reparametrisation of each prior's support.
+BFGS with `log_posterior_gradient` and a simplex polish in an unbounded
+reparametrisation of each prior's support. `maximum_likelihood` uses
+`log_likelihood_gradient` in the same way.
 `ModeResult`: `values`, `log_posterior`, `log_likelihood`, `hessian` (of minus the log
 posterior, central differences), `covariance`, `std`, `laplace` (log marginal density).
 
@@ -773,6 +964,27 @@ The same on the likelihood, with standard errors from the inverse Hessian.
 Random-walk Metropolis–Hastings with proposal `N(0, scale^2 * mode.covariance)`
 (Dynare's `mh_jscale`), chains started over-dispersed (`mh_init_scale`), and the
 first share `burn` of each chain dropped (`mh_drop`).
+
+### `hmc(problem, mode=None, *, draws=1000, chains=2, step_size=0.05, leapfrog=10, burn=0.5, target=0.8, adapt=True, init_scale=1.0, seed=0) -> MCMCResult`
+
+Hamiltonian Monte Carlo for problems supported by `log_posterior_gradient`.
+The mode's inverse covariance is the mass matrix when available. Leapfrog
+integration and a Metropolis correction preserve the target density. With
+`adapt=True`, `step_size` is a starting value: a heuristic finds a step with
+acceptance near one half, and dual averaging (Hoffman and Gelman, 2014) moves it
+toward `target` during `burn`, after which it stays fixed. Each trajectory
+multiplies the step by a uniform draw on [0.8, 1.2]. `acceptance` is the mean
+acceptance probability after burn-in. `init_scale` sets initial overdispersion.
+
+### `nuts(problem, mode=None, *, draws=1000, chains=2, step_size=0.05, max_depth=8, burn=0.5, target=0.8, adapt=True, init_scale=1.0, seed=0) -> NUTSResult`
+
+No-U-Turn sampling (Hoffman and Gelman, 2014; Betancourt, 2017). Each draw
+doubles a trajectory in a random direction until the generalised U-turn
+criterion holds or `max_depth` doublings are reached, and picks a point from it
+with multinomial weights. The step adapts as in `hmc`. Points that cannot be
+solved end the trajectory. `NUTSResult` extends `MCMCResult` with `divergences`,
+`max_depth_hit` and `mean_depth`, all reported per chain after burn-in. Energy
+errors above 1000 count as divergences.
 
 `MCMCResult`: `names`, `chains` `(n_chains, n_draws, n_params)`, `draws` (the
 chains pooled), `log_posterior`, `acceptance`, `burn`. Its methods are `mean()`,
@@ -812,6 +1024,77 @@ Posterior model probabilities from log marginal likelihoods.
 
 Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
 uncertainty, with keys `mean`, `lower`, `upper` and `paths`.
+
+### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None) -> ForecastEvaluation`
+
+Out-of-sample forecasts, as Dynare's recursive estimation makes them with
+`nobs=[T1:T2]` and `forecast`. For each origin `n`, the sample is the first `n`
+rows of the problem's data (after `first_obs`), or the last `window` rows before
+the origin with `window`. On it the parameters are estimated, the sample is
+filtered, and the observables are forecast `1..horizon` periods ahead. `estimate`
+is `"mode"` (the posterior mode), `"ml"` (maximum likelihood), `"fixed"` (`theta`,
+one vector or one row per origin) or a callable `estimate(problem_at_origin, x0)`
+returning the parameters or a `ModeResult`. Each search starts from the previous
+origin's estimate, and the first from `theta` or the problem's starting values.
+The problem must be at first order.
+
+The predictive density is the Kalman filter's Gaussian forecast at the estimate,
+with mean `d + Z a_{T+h|T}` and variance `Z V_h Z' + H` (without `H` when
+`include_measurement=False`). It is conditional on the point estimate, as
+Dynare's forecast after the mode is; `posterior_forecast` adds parameter
+uncertainty at one origin.
+
+`ForecastEvaluation` has `variables` (the observables), `origins`, `horizon`, and
+per observable `mean`, `std` and `actual` (arrays of origins by horizons, in the
+units of the data, with `actual` NaN past the end of the sample) and `last` (the
+observation at each origin). `covariance` holds the joint predictive covariances,
+`theta` the parameters used at each origin (in the order of `names`), and, when
+they were estimated, `modes` the `ModeResult` of each origin and `objective` the
+posterior kernel or likelihood there. Pairs with a missing outcome are left out of
+every statistic:
+
+| Method | Returns |
+|---|---|
+| `errors`, `random_walk_errors` | `actual - mean`, and `actual - last` |
+| `rmse(benchmark=False)` | RMSE by horizon, of the model or of the random walk |
+| `relative_rmse()` | the model's RMSE over the random walk's |
+| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk or given errors |
+| `pit()` | `Phi((actual - mean) / std)`, uniform when the density is right |
+| `coverage_rate(coverage=None)` | share of outcomes inside the central band, by horizon |
+| `log_score(joint=False)` | log predictive density, per observable or joint |
+
+### `diebold_mariano(e1, e2, horizon=1, *, power=2, alternative="two.sided", varestimator="acf") -> DieboldMariano`
+
+The Diebold–Mariano test of equal accuracy, from two series of forecast errors.
+The loss differential is `|e1|^power - |e2|^power`. Its long-run variance sums the
+autocovariances up to lag `horizon - 1`, with equal (`"acf"`) or Bartlett
+(`"bartlett"`) weights. The statistic carries the Harvey–Leybourne–Newbold
+correction and is compared with Student's t with `n - 1` degrees of freedom.
+`alternative="less"` is that the first forecast is more accurate. When the
+variance is not positive at `horizon > 1`, the test warns and uses horizon 1.
+This is R's `forecast::dm.test`. `DieboldMariano` has `statistic`, `p_value`,
+`horizon`, `power`, `alternative` and `n`.
+
+Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples,
+at Dynare's modes and with modes re-estimated by `dsgelab`, and against R's
+`forecast::dm.test` in 48 cases (see `validation/README.md`).
+
+```python
+import dsgelab as dsg
+
+ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["rho"])
+sol = dsg.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
+series = sol.to_levels(sol.simulate(periods=400, cov={"e": 0.1}, seed=1))["y"]
+pb = dsg.EstimationProblem(
+    model=ar, data={"y": series}, params=dict(rho=0.5), observables=["y"],
+    priors={"rho": ("beta", 0.5, 0.2), "stderr e": ("inv_gamma", 0.1, float("inf"))},
+    guess=dict(a=0, y=1))
+
+ev = dsg.forecast_evaluation(pb, range(320, 400, 10), 4)
+print(ev.relative_rmse()["y"], ev.coverage_rate()["y"])
+print(ev.diebold_mariano("y", 1, alternative="less"))
+```
 
 ### `estimate(model, data, *, params, free, priors, guess, observables, measurement, cov=None, positive=(), bounds=None, draws=0, seed=0, proposal=None) -> EstimationResult`
 
@@ -926,6 +1209,240 @@ print(ident.summary())
 ```
 
 ---
+
+## Method of moments
+
+### `method_of_moments(model, data, *, params, free, observables, moments, method="GMM", order=1, ...) -> MomentsResult`
+
+Matches means, covariances and autocovariances declared in Dynare's
+`matched_moments` syntax. GMM computes them analytically; SMM uses fixed simulation
+draws. With `order=2`, both use the pruned second-order ABCD representation
+`[xf; xs; kron(xf,xf)]`. GMM solves its covariance by a Lyapunov equation, and SMM
+simulates it with the same draws at every parameter point. First order remains the
+default. The importer reads `order` from the `.mod` options.
+
+`MomentsResult` contains estimates, standard errors, the objective, matched moments,
+weighting stages and Hansen's J test. `ModFile.method_of_moments` takes parameters
+from `estimated_params`, moments from `matched_moments` and observables from `varobs`.
+
+## Calibration restrictions
+
+### `check_restrictions(solution, *, irf=(), moments=(), cov=None, relative_irf=False) -> RestrictionCheck`
+
+Checks sign and interval restrictions on impulse responses and theoretical moments,
+as Dynare's `irf_calibration` and `moment_calibration` blocks state them. An IRF
+restriction is `(variable, shock, horizons, bound)`, with the impact period numbered
+1. A moment restriction is `(variable1, variable2, lags, bound)`. At lag 0 it is the
+variance when the two variables are the same and their correlation otherwise. At lag
+`l` it is the correlation of `variable1` at `t` with `variable2` at `t + l`. Horizons
+and lags are an integer, a sequence or a `"first:last"` string. A bound is `"+"`,
+`"-"` or `(lower, upper)`, with strict inequalities.
+
+The conventions are Dynare's. Values are absolute deviations from the steady state.
+The impulse is one standard deviation of the shock, taken from the diagonal of its
+covariance without a Cholesky factor, or 100 times a unit innovation with
+`relative_irf=True`. A restriction over several horizons or lags holds when any one
+of them is inside the bound, the logical OR of Dynare's manual. The list holds when
+every restriction holds. To require every horizon, write one restriction per horizon.
+
+`RestrictionCheck` has `restrictions` (each a `Restriction`, with `label`, `bound`
+and `periods`), `values` (one array per restriction, over its periods), `inside`
+(the same shape, booleans), `holds_each`, `holds`, `failed` (the labels of the
+restrictions that fail) and `summary()`.
+
+### `sample_restrictions(model, params, priors=None, *, irf=(), moments=(), cov=None, draws=1000, seed=0, points=None, names=None, relative_irf=False, guess=None, steady_fn=None, qz_criterium=None) -> RestrictionSample`
+
+Evaluates the same restrictions over draws from the prior. This is the
+`map_calibration` step of Dynare's sensitivity toolbox. `priors` takes the form used
+by `EstimationProblem`: a parameter name or `"stderr e"` mapped to a `Prior` or to
+`(shape, mean, sd[, p3, p4])`. `points` evaluates given rows instead of drawing,
+with one column per name in `names`. Draws without a determinate solution keep
+their status (`"blanchard_kahn"`, `"no_steady_state"` or `"other"`) and `nan`
+values, and they are left out of the shares, as in Dynare. `RestrictionSample` has
+`draws`, `status`, `solved`, `values` (an array of draws by periods per restriction),
+`inside`, `holds_each` (draws by restrictions), `holds`, `shares`, `share(which=None)`
+for the share of solved draws where the restrictions `which` all hold, and
+`summary()`.
+
+Validated against Dynare 7.2 on `tests/gsa/ls2003a.mod`. The comparison covers the
+values at every horizon and lag, at the calibration and on Dynare's 512 prior draws,
+the draws that solve, each restriction's verdict per draw and the shares (see
+`validation/README.md`). The functions work at first order, as Dynare's do.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+sol = dsg.solve(model, params, guess=guess)
+cov = {"eps_a": 0.01, "eps_v": 0.0025}
+
+irf = [("pi", "eps_v", "1:4", "-"),           # inflation falls in the first year after a monetary shock
+       ("x", "eps_v", 1, (-0.01, -0.002))]    # the output gap falls by 0.2 to 1 point on impact
+moments = [("x", "pi", 0, "+"),               # output gap and inflation move together
+           ("pi", "pi", 1, (0.5, 0.88))]      # inflation is persistent, but not too much
+
+check = dsg.check_restrictions(sol, irf=irf, moments=moments, cov=cov)
+print(check.summary())
+
+priors = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05)}
+sample = dsg.sample_restrictions(model, params, priors, irf=irf, moments=moments, cov=cov,
+                                 guess=guess, draws=500, seed=0)
+print(sample.summary())
+```
+
+```
+Calibration restrictions: 4 of 4 hold
+  ok   irf    pi(1:4), eps_v                       -   -0.0006015, -0.0003008, -0.0001504, -7.519e-05
+  ok   irf    x(1), eps_v            [-0.01, -0.002]   -0.003038
+  ok   moment x, pi                                +   0.8141
+  ok   moment pi, pi(1)                  [0.5, 0.88]   0.8754
+Calibration restrictions over 500 draws, 429 solved
+    share  kind   restriction                      bound
+   100.0%  irf    pi(1:4), eps_v                       -
+    98.4%  irf    x(1), eps_v            [-0.01, -0.002]
+   100.0%  moment x, pi                                +
+    51.0%  moment pi, pi(1)                  [0.5, 0.88]
+    49.4%  all together
+```
+
+The 71 draws left out have no determinate equilibrium. Each of them has `phi_pi`
+below 1, where the Taylor principle fails.
+
+---
+
+## Global sensitivity
+
+### `Uniform(low, high)`, `Normal(mean, sd)`, `Triangular(low, mode, high)`
+
+Distributions of a parameter, with `mean`, `sd`, `symmetric`, `draw(rng, n)` and
+`ppf(u)`, the interface of `cgelab.sensitivity`'s. A `Prior`, or a prior tuple
+`(shape, mean, sd[, p3, p4])`, works wherever a distribution does: `Prior.ppf` is
+its quantile function.
+
+### `stability_map(model, params, distributions=None, *, draws=2048, seed=0, sampling="sobol", points=None, names=None, cov=None, guess=None, steady_fn=None, qz_criterium=None, pvalue_ks=0.001) -> StabilityMap`
+
+The stability mapping of Dynare's sensitivity toolbox (`dynare_sensitivity(stab=1)`).
+It draws the parameters in `distributions` (a parameter name or `"stderr e"`
+mapped to a distribution), on a scrambled Sobol sequence (`sampling="sobol"`, the
+quasi-random design Dynare uses by default), a Latin hypercube (`"latin"`) or at
+random, solves the model at each draw and records what happened. `points` and
+`names` classify given draws instead. `StabilityMap` has `names`, `draws`, `status`
+per draw, `shares`, `filtering(kind="determinate", columns=None)` and `summary()`.
+A status is `"determinate"` (a unique stable solution), `"indeterminate"` (more
+stable roots than predetermined variables, or Dynare's rank failure),
+`"explosive"` (fewer), `"no_steady_state"` or `"no_solution"`: the verdicts of
+Dynare's solver. `filtering` runs Dynare's three Monte Carlo filtering analyses:
+the determinate draws against all the others, and the indeterminate or explosive
+draws against the other solved draws. By default it tests every parameter but the
+shock standard deviations, which cannot move the roots. `ModFile.stability_map`
+draws from the priors of `estimated_params`.
+
+### `monte_carlo_filtering(points, behaviour, names=None, *, nonbehaviour=None, pvalue_ks=0.001, title="behaviour") -> FilteringResult`
+
+Which parameters separate the draws that show a behaviour from those that do not.
+`behaviour` and `nonbehaviour` are masks or indices of rows of `points`; by default
+the second group is every other draw. For each parameter, `smirnov_test` compares
+its distribution in the two groups. `FilteringResult` has `names`, `d` and `p` (the
+statistic and p-value of each parameter), `n_behaviour`, `n_nonbehaviour`,
+`significant` (the parameters with `p < pvalue_ks`, the most significant first),
+`correlations(group="behaviour", *, pvalue=1e-5, alpha2=0.0)` (pairs of parameters
+correlated inside a group, as Dynare's `pvalue_corr` and `alpha2_stab` select them)
+and `summary()`. `RestrictionSample.filtering(which=None)` filters the solved draws
+of `sample_restrictions` on whether the restrictions `which` hold, as Dynare's
+`map_calibration` does.
+
+### `smirnov_test(x1, x2, alternative="two-sided") -> (d, p)`
+
+The two-sample Smirnov test of Dynare's toolbox: the largest distance between the
+empirical distribution functions, and the asymptotic p-value with Stephens'
+small-sample factor. `alternative` is `"two-sided"`, `"less"` or `"greater"`.
+
+### `sobol(run, parameters, *, n=1024, seed=20260724, bootstrap=200, conf_level=0.95) -> SobolResult`
+
+First-order and total Sobol indices of `run` over independent parameters, on
+Saltelli's design: `A`, `B` and every `AB_i`, from a scrambled Sobol sequence, at
+`n (k + 2)` evaluations, with `n` a power of two. `run` maps `{name: value}` to a
+number, a mapping or an array. The first-order index is Saltelli et al. (2010) and
+the total index Jansen (1999), as in SALib and `cgelab.sobol`; the half-widths come
+from a bootstrap over the base points. `SobolResult` has `names`, `outputs`, `A`,
+`B`, `values` (each output on `A`, `B` and `AB`), `indices()` (per output, `S1`,
+`S1_conf`, `ST`, `ST_conf` and the number `n` of base points used: a base point
+where the output is missing anywhere is left out) and `summary()`.
+
+### `solution_outputs(model, params, *, irf=(), moments=(), cov=None, guess=None, steady_fn=None, qz_criterium=None, relative_irf=False) -> callable`
+
+A `run` for `sobol` from the first-order solution. `irf` lists `(variable, shock,
+horizons)` and `moments` lists `(variable1, variable2, lags)`, with the units of
+`check_restrictions`. Each horizon and lag is one output, named as a restriction
+label (`"pi(4), eps_v"`, `"x, x"`); a point without a determinate solution gives
+NaN. The names in `run.outputs`.
+
+Validated on Dynare 7.2's `tests/gsa/ls2003a.mod`, over three samples of 1024
+draws: each draw's class against Dynare's solver, and the Smirnov tests and
+correlations on Dynare's groups. The Sobol design and indices are validated
+against SALib 1.6 (see `validation/README.md`). Dynare's reduced-form mapping
+(`redform`), RMSE filtering (`rmse`) and Morris screening are not reproduced.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+cov = {"eps_a": 0.01, "eps_v": 0.0025}
+priors = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05),
+          "rho_v": dsg.Uniform(0.0, 0.9)}
+stab = dsg.stability_map(model, params, priors, draws=512, guess=guess, cov=cov)
+print(stab.summary())                                # phi_pi drives determinacy
+
+run = dsg.solution_outputs(model, params, irf=[("pi", "eps_v", 4)],
+                           moments=[("x", "x", 0)], cov=cov, guess=guess)
+inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
+          "rho_v": dsg.Uniform(0.0, 0.9)}
+print(dsg.sobol(run, inside, n=256).summary())
+```
+
+## Plots
+
+matplotlib is optional: `pip install "dsgelab[plot]"`. Each function returns a
+matplotlib `Figure`, built without `pyplot`, so nothing global changes; save it
+with `fig.savefig(...)` or let a notebook show it.
+
+| Function | Draws |
+|---|---|
+| `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values |
+| `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}` |
+| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line |
+| `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given |
+| `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed |
+
+### `prior_density(prior, *, steps=200, truncation=1e-3) -> (x, f)`
+
+A prior's density on a grid between the quantiles `truncation` and
+`1 - truncation` (`10 truncation` for the inverse gammas), with the values above 10
+dropped where the density peaks at the edge: Dynare's `draw_prior_density`.
+
+### `posterior_density(draws, *, grid_points=512) -> (x, f)`
+
+The kernel density of `posterior_moments` in Dynare: a Gaussian kernel with
+Silverman's bandwidth, corrected for the draws a Metropolis chain repeats when it
+rejects, by linear binning and a fast Fourier transform on `grid_points` points.
+
+Both densities are validated against Dynare: `draw_prior_density` on the nine
+priors of `fs2000.mod` within 2e-12, and `posterior_moments` on two sets of draws,
+one with repeated values, within 9e-16 (see `validation/README.md`). The plots draw
+what they are given; the test suite checks the numbers on each figure.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+sol = dsg.solve(model, params, guess=guess)
+fig = dsg.plot_irf({"monetary": sol.irf("eps_v"), "technology": sol.irf("eps_a")},
+                   ["x", "pi", "i"])
+fig.savefig("irf.png")
+```
 
 ## Diagnostics
 

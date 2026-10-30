@@ -48,6 +48,19 @@ política ótima, previsão perfeita, estimação, OccBin, trajetória estendida
 e diagnóstico. As equações de calibração são validadas contra o MacroModelling.jl. Os detalhes
 estão em [`validation/`](validation/README.md).
 
+A versão 0.7.0 traz os marcos 0.6 e 0.7. Em terceira ordem, a regra de decisão está completa na
+forma do Dynare, com todos os blocos cúbicos e de risco, o estado estacionário estocástico e tensores
+esparsos para modelos grandes, e a solução tem derivadas analíticas em relação aos parâmetros nas
+três ordens. A estimação ganha HMC e NUTS sobre o gradiente da verossimilhança de Kalman, e filtros
+de partículas e de inversão em segunda e terceira ordem. Para identificação e dados, há
+identificação local, GMM, SMM e ajuste de IRF, projeções locais, momentos filtrados, restrições de
+calibração sobre IRFs e momentos, sensibilidade global (mapeamento de estabilidade, filtragem de
+Monte Carlo e índices de Sobol), avaliação de previsões fora da amostra, dados de frequência mista
+e gráficos. Cada um é validado contra uma referência independente: o Dynare na maioria dos casos, o
+SALib para os índices de Sobol, o `forecast::dm.test` do R para o teste de Diebold–Mariano e o
+resultado populacional de Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes
+estão em [`validation/`](validation/README.md).
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada
@@ -251,31 +264,139 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   mesmos vereditos nos três critérios e derivadas a menos de 2e-8 (18 de outubro de 2026).
   Ficam de fora a repetição sobre sorteios da priori (`prior_mc`), a força da identificação
   pela matriz de informação e os gráficos do Dynare.
-- [ ] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
-  parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare.
-- [ ] **Método dos momentos** (GMM, SMM e ajuste de IRF). Validação contra o `+mom` do Dynare.
-- [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
+- [x] **Sensibilidade global**, cobrindo a região de estabilidade e determinação no espaço de
+  parâmetros e a filtragem de Monte Carlo. A referência é o `+gsa` do Dynare. Índices de Sobol
+  de primeira ordem e totais para respostas a impulso e momentos, validados contra o SALib. As
+  distribuições têm a mesma interface que as de `cgelab.sensitivity` (`Uniform`, `Normal`,
+  `Triangular`), sem que um pacote importe o outro. `stability_map` separa os sorteios em
+  determinados, indeterminados, explosivos e sem solução; `monte_carlo_filtering` (também
+  `StabilityMap.filtering` e `RestrictionSample.filtering`) dá o teste de Smirnov de cada
+  parâmetro e as correlações dentro de cada grupo; `sobol` e `solution_outputs` dão os índices de
+  IRFs e momentos. Validação no `tests/gsa/ls2003a.mod` do Dynare 7.2, em três amostras de 1024
+  sorteios (30 de outubro de 2026): cada sorteio tem a classe que o solver do Dynare lhe dá, e,
+  nos grupos do Dynare, as estatísticas de Smirnov concordam exatamente, os p-valores até
+  `3.3e-16` e os das correlações até `1.7e-13`. As listas da própria caixa de sensibilidade
+  diferem em 37 sorteios da amostra explosiva: em 36 porque ela ordena os autovalores pelo valor
+  com sinal quando todos são reais, e numa falha de posto que a regra dela, baseada nos
+  autovalores, não enxerga. Pelo módulo, a regra dela dá as classes do `dsgelab` em todos os
+  sorteios, exceto nas falhas de posto. O desenho e os índices de Sobol concordam com o SALib 1.6
+  até `8.9e-16` na função de Ishigami e em IRFs e momentos do mesmo modelo. Ficam de fora o
+  mapeamento da forma reduzida (`redform`), a filtragem por RMSE (`rmse`) e o método de Morris.
+- [x] **Método dos momentos** (GMM, SMM e ajuste de IRF). GMM e SMM funcionam em primeira e
+  segunda ordem com poda; o ajuste de IRF funciona em primeira ordem. Validação contra o `+mom`
+  do Dynare 7.2 em oito casos de GMM/SMM em primeira ordem e dois de ajuste de IRF (24 de outubro
+  de 2026). As médias e autocovariâncias de segunda ordem concordam em `example1` e `example2`
+  até `1e-14`. Os modelos importados, com suas variáveis auxiliares, concordam até `2.93e-8` e
+  `1.59e-6` nas médias e até `6.08e-9` e `2.87e-8` nos segundos momentos.
+  O ajuste de IRF é frequentista e aceita alvos externos, inclusive projeções locais ou estudos
+  de evento, com a sua covariância conjunta. `local_projection` fornece IRFs de um choque observado
+  e covariância HAC conjunta; em dados AR(1) simulados, recupera as IRFs do modelo na população
+  (Plagborg-Møller e Wolf, 2021). Ficam de fora o ajuste bayesiano de IRF e a execução de arquivos
+  de transformação MATLAB; transformações Python podem ser passadas explicitamente.
+- [x] **Avaliação de previsão fora da amostra**: estimação recursiva em janela crescente, RMSE
+  contra o passeio aleatório, o teste de Diebold–Mariano, e a transformada integral de
+  probabilidade e a cobertura da densidade preditiva. As referências são as comparações de
+  previsão de Smets e Wouters (2007) e de Del Negro e Schorfheide (2013). A comparação com um
+  BVAR espera o BVAR da 0.9. `forecast_evaluation` reestima em cada origem, com janela
+  crescente ou deslizante, e `ForecastEvaluation` dá o RMSE, a razão dele para o do passeio
+  aleatório, `diebold_mariano` com a correção de Harvey, Leybourne e Newbold, a PIT, a cobertura
+  e o escore logarítmico. Validação contra a estimação recursiva do Dynare 7.2 no `fs2000`, em
+  nove amostras (30 de outubro de 2026): nas modas do Dynare, as previsões concordam até
+  `2.6e-15` e as bandas de 90% até `6.3e-9`. Reestimada pelo `dsgelab`, cada moda tem kernel pelo
+  menos tão alto quanto o do Dynare e fica a menos de `0.003` desvio-padrão posterior dela. O
+  teste concorda com o `forecast::dm.test` do R até `3.1e-15` em 48 casos. A densidade
+  preditiva é condicional à estimativa pontual, como a do Dynare depois da moda; a incerteza dos
+  parâmetros em cada origem fica de fora.
+- [x] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`),
+  com `check_restrictions` num ponto e `sample_restrictions` em sorteios da priori, e os blocos do
+  `.mod` lidos por `from_mod`. Validação contra o Dynare 7.2 no seu `tests/gsa/ls2003a.mod`, com e
+  sem `relative_irf` (30 de outubro de 2026): na calibração e nos 512 sorteios da priori da sua
+  caixa de ferramentas de sensibilidade, os valores concordam até `1.3e-12`, os mesmos sorteios
+  têm solução, e cada restrição tem o mesmo veredito em cada sorteio. Como as do Dynare, as
+  restrições funcionam em primeira ordem. A filtragem de Monte Carlo dos parâmetros por trás de
+  cada restrição pertence ao item de sensibilidade global, acima.
 - [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
   `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
   `stoch_simul` do Dynare em cinco modelos, um deles com raiz unitária (24 de outubro de 2026).
-- [ ] **Dados de frequência mista**.
-- [ ] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
-  posteriori.
+- [x] **Dados de frequência mista**. `aggregation={nome: ("mean" | "sum", every)}` em `state_space` e
+  em `EstimationProblem` empilha as defasagens do estado, de modo que uma variável observada pode
+  ser a média ou a soma de uma variável nos últimos `every` períodos, e `low_frequency` posiciona as
+  observações. Filtro, suavizador, gradiente da verossimilhança, decomposições e previsões
+  funcionam sobre o estado empilhado. Validação contra o Dynare 7.2 no `fs2000.mod` com o
+  crescimento do produto observado só como média anual, escrito no Dynare como a variável auxiliar
+  que um usuário acrescentaria (30 de outubro de 2026): a verossimilhança em dois pontos concorda
+  até `8.0e-13`, as variáveis suavizadas até `1.3e-14`, e a moda posterior tem kernel pelo menos
+  tão alto quanto o do Dynare, a menos de `0.003` desvio-padrão posterior. Ficam de fora os
+  agregados de taxas de crescimento de níveis (o crescimento anual de um nível trimestral) e os
+  filtros não lineares.
+- [x] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
+  posteriori: `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` e `plot_posterior`,
+  que devolvem figuras do matplotlib, com o matplotlib como dependência opcional
+  (`dsgelab[plot]`). As duas densidades que o gráfico da posteriori desenha são as do Dynare:
+  `prior_density` concorda com `draw_prior_density` nas nove prioris do `fs2000` até `1.9e-12`, e
+  `posterior_density` com a estimativa de núcleo de `posterior_moments`, com a largura de banda
+  corrigida para sorteios repetidos, até `8.9e-16` (30 de outubro de 2026). A suíte de testes
+  confere que cada figura desenha os números que recebe. Ficam de fora os gráficos de diagnóstico
+  do MCMC e os gráficos de identificação e de sensibilidade do Dynare.
 
 ### 0.7 — terceira ordem completa e derivadas
 
-- [ ] **Núcleo de perturbação na forma de regra de decisão do Dynare**, com a inovação como
+- [x] **Núcleo de perturbação na forma de regra de decisão do Dynare**, com a inovação como
   argumento (`g_u`, `g_uu`, `g_ku`). Os termos de risco na inclinação das regras (`g_ssk` e
-  `h_ssk`) já estão implementados, e o tensor com a inovação em todos os monômios ainda falta.
-- [ ] **Estado estacionário estocástico** e IRFs generalizadas analíticas. O teste é a ida e volta
-  contra o Dynare em `order=3`.
-- [ ] **Terceira ordem no tamanho do modelo aplicado**, com tensores esparsos. No modelo aplicado
-  inédito do autor, com 71 variáveis, `m = 2n + n_ε` fica perto de 150 e o tensor denso não
-  cabe.
-- [ ] **Derivadas da solução em relação aos parâmetros**, por diferenciação automática, e
-  **estimação com gradiente** (HMC/NUTS).
-- [ ] **Filtros não lineares** (filtro por inversão e filtro de partículas), para estimar em
-  segunda e terceira ordem. O MacroModelling.jl serve de referência.
+  `h_ssk`) já estão implementados. Os blocos de inovação de segunda ordem e a `DecisionRule`
+  composta foram validados contra o Dynare 7.2 em `example1` e `example2` (24 de outubro de 2026).
+  Os blocos cúbicos `h_uuu`, `h_kuu` e `h_kku`, com suas composições, também concordam com
+  `ghuuu` e com todas as linhas de `ghxuu`, `ghxxu` e `ghxxx`. A constante completa de risco de
+  segunda ordem também concorda com `ghs2`. `ghxss` e `ghuss` concordam em todas as linhas, com
+  erros abaixo de `1,5e-16` nos dois modelos.
+- [x] **Estado estacionário estocástico** e IRFs generalizadas analíticas. As IRFs condicionais
+  da regra completa com poda estão implementadas em terceira ordem, incluindo `ghxss`, `ghuss` e
+  os blocos cúbicos de inovação, com testes unitários da recursão. As IRFs generalizadas usam
+  trajetórias estocásticas com `drop=100` e concordam com o Dynare em `example1` e `example2`.
+  `stochastic_steady_state` resolve o ponto fixo da regra completa sem poda e se distingue da
+  média ergódica.
+- [x] **Terceira ordem no tamanho do modelo aplicado**, com tensores esparsos. O frontend
+  simbólico fornece derivadas segunda e terceira exatas com `derivatives="third"`, guardadas em coordenadas.
+  `solve_third_order(sparse=True)` também guarda os coeficientes cúbicos de estado por triplo
+  simétrico independente e os contrai diretamente na avaliação da regra e nos termos de risco.
+  O termo conhecido e o residual iterativos usam coordenadas canônicas, com uma equação expandida
+  por matvec e caminho de contração otimizado. Uma pipeline sintética não linear completa, com 71
+  variáveis, 35 estados e cinco choques, tem residual máximo de `3,05e-20` e pico de 321 MB.
+  A composição explícita da regra de decisão ainda expande arrays densos. O modelo aplicado inédito
+  em si não é público.
+- [x] **Derivadas da solução em relação aos parâmetros**, por diferenciação implícita e numérica, e
+  **estimação com gradiente** (HMC/NUTS). `solution_jacobian` calcula derivadas de `P`, `F`, `Q`
+  e do estado estacionário. Soluções QZ gerais diferenciam as condições implícitas da saddle path,
+  sem outra decomposição QZ nos parâmetros perturbados; soluções puramente backward usam as fórmulas
+  do sistema inverso. `second_order_jacobian` também calcula `g_k`, `g_u`, `g_kk`, `g_uu`, `g_ku`
+  e `g_s2`, para parâmetros do modelo, desvios-padrão e correlações dos choques.
+  `third_order_jacobian` adiciona `g_kkk`, `g_kku`, `g_kuu` e `g_uuu`. Todas são validadas contra
+  as derivadas analíticas do Dynare; os erros relativos ficam abaixo de `0.552%` em segunda ordem
+  e `0.159%` em terceira. Derivadas exatas do modelo reduzem os erros da regra cúbica abaixo de
+  `3e-13` em `example1` e `2e-14` em `example2`. `log_likelihood_gradient` diferencia a
+  verossimilhança de Kalman de primeira ordem pela recursão, verificada contra diferenças finitas
+  para parâmetros, desvios e correlações dos choques, erros de medição, dados faltantes, início
+  difuso, transformações logarítmicas e modelos com saltos. `hmc` usa o gradiente posterior com
+  integração leapfrog, matriz de massa baseada na moda e adaptação do passo por média dual durante o
+  burn-in. `nuts` adiciona amostragem multinomial na trajetória, o critério generalizado de U-turn
+  e diagnósticos de divergência. Na suíte de testes, os dois reproduzem a posterior exata de um
+  coeficiente AR(1) e uma cadeia longa de Metropolis–Hastings.
+  `posterior_mode` e `maximum_likelihood` usam esses gradientes no BFGS.
+- [x] **Filtros não lineares** para estimação em segunda e terceira ordem. O filtro de partículas
+  bootstrap funciona em primeira, segunda e terceira ordens, com poda nas ordens não lineares e
+  reamostragem sistemática, e reproduz a verossimilhança do Dynare no AR(1) com diferença de
+  `0.006` (24 de outubro de 2026). `EstimationProblem(order=2)` expõe a mesma verossimilhança ao
+  modo posterior e aos amostradores, com sorteios comuns. O filtro de inversão também funciona em
+  primeira e segunda ordem com poda e reproduz exatamente os choques, o Jacobiano e a
+  verossimilhança do OccBin no AR(1). `EstimationProblem(nonlinear_filter=)` escolhe a rota. Os
+  choques também concordam com o MacroModelling.jl dentro de `0.006` em um RBC não linear; como
+  sua convenção de verossimilhança difere, apenas os choques são comparados. O `particle_smoother`
+  funciona com `store=True` nas três ordens. Transições de primeira ordem com posto completo usam
+  a recursão gaussiana backward; transições não lineares ou de posto deficiente usam a ancestralidade
+  armazenada das partículas, cujo tamanho efetivo de amostra pode degenerar em históricos longos.
+  O smoothing de inversão retorna as trajetórias do filtro sem passo backward: elas são exatas
+  quando os dados identificam todos os choques e filtradas nos demais casos. O filtro de partículas de terceira ordem usa a regra completa,
+  incluindo `ghxss` e `ghuss`, e reproduz a verossimilhança de Kalman num modelo linear. `EstimationProblem(order=3)` expõe a verossimilhança e o smoothing.
 
 ### 0.8 — métodos globais
 

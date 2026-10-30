@@ -58,7 +58,7 @@ if TYPE_CHECKING:
 
 __all__ = ["StateSpace", "FilterResult", "SmootherResult", "Forecast", "state_space",
            "kalman_filter", "kalman_smoother", "shock_decomposition",
-           "realtime_shock_decomposition", "forecast"]
+           "realtime_shock_decomposition", "forecast", "low_frequency"]
 
 _LOG2PI = np.log(2.0 * np.pi)
 
@@ -82,10 +82,17 @@ class StateSpace:
     shocks: list
     transforms: list
     solution: FirstOrderSolution | None = field(default=None, repr=False)
+    #: per observable, ``(how, every)`` for a temporal aggregate, or None
+    aggregation: list | None = None
 
     @property
     def n_states(self) -> int:
         return self.T.shape[0]
+
+    @property
+    def n_model_states(self) -> int:
+        """The model's own states: the first block of the state vector, before any lags."""
+        return self.T.shape[0] if self.solution is None else self.solution.model.n_states
 
     @property
     def n_obs(self) -> int:
@@ -110,7 +117,8 @@ class StateSpace:
 def state_space(sol: FirstOrderSolution, observables: Sequence[str], *,
                 transforms: str | Mapping[str, str] | None = None,
                 measurement: Mapping[str, float] | ArrayLike | None = None,
-                cov: Covariance = None) -> StateSpace:
+                cov: Covariance = None,
+                aggregation: Mapping[str, tuple[str, int]] | None = None) -> StateSpace:
     """The state space of a :class:`~dsgelab.FirstOrderSolution`.
 
     Parameters
@@ -125,6 +133,16 @@ def state_space(sol: FirstOrderSolution, observables: Sequence[str], *,
         Standard deviations of the measurement errors: ``{name: sd}``, one number
         for all, or a full covariance matrix. None by default.
     cov : shock covariance, as for :func:`dsgelab.solve` (identity if absent).
+    aggregation : mapping, optional
+        Observables seen at a lower frequency than the model's, ``{name: (how,
+        every)}``: the data are the ``"mean"`` or the ``"sum"`` of the variable
+        over the last ``every`` periods, in the units of its transform (a mean of
+        logs for a ``"log"`` observable), and are missing (NaN) in the periods
+        between observations (see :func:`low_frequency`). The state then carries
+        ``every - 1`` lags of the model's states, as an auxiliary variable
+        ``(y + y(-1) + y(-2) + y(-3))/4`` does in a ``.mod`` file. A variable
+        observed at the end of each low-frequency period (a stock) needs no
+        aggregation, only the missing values.
     """
     from .solution import shock_covariance
 
@@ -170,9 +188,93 @@ def state_space(sol: FirstOrderSolution, observables: Sequence[str], *,
             raise ValueError("measurement covariance has the wrong shape")
     Sigma = shock_covariance(model.shocks, cov)
     Q = sol.Q if sol.Q is not None else np.zeros((nk, model.n_shocks))
-    return StateSpace(T=np.asarray(sol.P, float), R=np.asarray(Q, float), Sigma=Sigma, Z=Z,
-                      d=d, H=H, observables=observables, states=list(model.states),
-                      shocks=list(model.shocks), transforms=tr, solution=sol)
+    T, R = np.asarray(sol.P, float), np.asarray(Q, float)
+    states = list(model.states)
+    agg = _aggregation_spec(observables, tr, aggregation)
+    if agg is not None:
+        T, R, Z, d = _aggregate(T, R, Z, d, agg)
+        lags = T.shape[0] // nk - 1
+        states += [f"{s}(-{j})" for j in range(1, lags + 1) for s in model.states]
+    return StateSpace(T=T, R=R, Sigma=Sigma, Z=Z, d=d, H=H, observables=observables,
+                      states=states, shocks=list(model.shocks), transforms=tr, solution=sol,
+                      aggregation=agg)
+
+
+def _aggregation_spec(observables, transforms, aggregation) -> list | None:
+    """Per observable, ``(how, every)`` or None; None for the whole list when nothing aggregates."""
+    if not aggregation:
+        return None
+    unknown = set(aggregation) - set(observables)
+    if unknown:
+        raise ValueError(f"aggregation of {sorted(unknown)}, which are not observed")
+    out = []
+    for name, tr in zip(observables, transforms):
+        if name not in aggregation:
+            out.append(None)
+            continue
+        how, every = aggregation[name]
+        if how not in ("mean", "sum"):
+            raise ValueError(f"aggregation is 'mean' or 'sum', got {how!r}")
+        if int(every) != every or every < 1:
+            raise ValueError(f"aggregation of {name!r} needs a positive whole number of periods")
+        if how == "sum" and tr == "log":
+            raise ValueError(f"{name!r} is observed in logs: a sum of logs is not an aggregate; "
+                             f"use 'mean' (and shift the data by log(every) for a log of a sum)")
+        out.append((how, int(every)))
+    return out if any(a is not None for a in out) else None
+
+
+def _aggregate(T, R, Z, d, agg, *, derivative=False):
+    """Stack ``every - 1`` lags of the states and aggregate the observation rows.
+
+    Linear in ``(T, R, Z, d)`` apart from the identity blocks that shift the
+    lags, so with ``derivative=True`` (no identity) it carries their derivatives.
+    """
+    nk = T.shape[0]
+    L = max(a[1] for a in agg if a is not None) - 1
+    n = nk * (L + 1)
+    Ta = np.zeros((n, n))
+    Ta[:nk, :nk] = T
+    for j in range(1, L + 1):
+        if not derivative:
+            Ta[j * nk:(j + 1) * nk, (j - 1) * nk:j * nk] = np.eye(nk)
+    Ra = np.zeros((n, R.shape[1]))
+    Ra[:nk] = R
+    Za = np.zeros((Z.shape[0], n))
+    da = np.array(d, dtype=float)
+    for i, a in enumerate(agg):
+        if a is None:
+            Za[i, :nk] = Z[i]
+            continue
+        how, every = a
+        w = 1.0 / every if how == "mean" else 1.0
+        for j in range(every):
+            Za[i, j * nk:(j + 1) * nk] = w * Z[i]
+        if how == "sum":
+            da[i] = every * d[i]
+    return Ta, Ra, Za, da
+
+
+def low_frequency(values: ArrayLike, every: int, *, periods: int | None = None,
+                  offset: int | None = None) -> np.ndarray:
+    """Low-frequency observations on the model's grid, with NaN in between.
+
+    ``values[j]`` lands in period ``offset + j * every``; by default ``offset``
+    is ``every - 1``, the last period of the first low-frequency period, where an
+    aggregate over the last ``every`` periods is complete. ``periods`` is the
+    length of the result, by default just long enough for the values.
+    """
+    v = np.asarray(values, dtype=float).ravel()
+    every = int(every)
+    if every < 1:
+        raise ValueError("every must be a positive whole number")
+    offset = every - 1 if offset is None else int(offset)
+    n = offset + every * (v.size - 1) + 1 if periods is None else int(periods)
+    out = np.full(n, np.nan)
+    pos = offset + every * np.arange(v.size)
+    keep = pos < n
+    out[pos[keep]] = v[keep]
+    return out
 
 
 # ------------------------------------------------------------------ initial state
@@ -369,7 +471,7 @@ class SmootherResult:
     def variables(self) -> dict:
         """Smoothed paths of every model variable, in levels."""
         sol = self.space.solution
-        paths = sol.variables(self.states)
+        paths = sol.variables(self.states[:, :self.space.n_model_states])
         return sol.to_levels(paths)
 
     def shocks_by_name(self) -> dict:
@@ -502,8 +604,8 @@ def shock_decomposition(smoothed: SmootherResult, *, variables: Sequence[str] | 
                 piece[0, i] = k[0, i]
         for t in range(1, Tn):
             piece[t] = P @ piece[t - 1] + Q[:, m] * eps[t, m]
-        pieces[e] = sol.variables(piece)
-    total = sol.variables(k)
+        pieces[e] = sol.variables(piece[:, :ss.n_model_states])
+    total = sol.variables(k[:, :ss.n_model_states])
     out = {"shocks": {e: {v: pieces[e][v] for v in names} for e in ss.shocks},
            "total": {v: total[v] for v in names}}
     out["initial"] = {v: total[v] - sum(out["shocks"][e][v] for e in ss.shocks) for v in names}
@@ -585,11 +687,12 @@ def forecast(space: StateSpace, data: Data, horizon: int, *, init: str = "auto",
     mean = {v: np.zeros(horizon) for v in names}
     sd = {v: np.zeros(horizon) for v in names}
     J = sol._J()
+    nk = space.n_model_states
     for h in range(horizon):
         a = space.T @ a
         V = space.T @ V @ space.T.T + RQR
-        xs = J @ a
-        Vx = J @ V @ J.T
+        xs = J @ a[:nk]
+        Vx = J @ V[:nk, :nk] @ J.T
         for v in names:
             j = sol.model.position(v)
             c, s = sol.coords.center[j], sol.coords.scale[j]

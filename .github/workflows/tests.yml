@@ -54,7 +54,7 @@ jobs:
           path: dist/
       - name: Install the wheel
         shell: bash
-        run: python -m pip install "$(ls dist/*.whl)[symbolic,test]"
+        run: python -m pip install "$(ls dist/*.whl)[symbolic,test,plot]"
       - run: python -m pytest -q
 
   # The Heutel port's algebra is translated from Heutel's files on the user's machine;
@@ -94,7 +94,7 @@ jobs:
       - name: Install from the sdist and test from its tree
         run: |
           mkdir sdist && tar -xzf dist/*.tar.gz -C sdist --strip-components=1
-          python -m pip install "./sdist[symbolic,test]"
+          python -m pip install "./sdist[symbolic,test,plot]"
           cd sdist && python -m pytest -q
 
   # Every code block on the site has to run.
@@ -110,7 +110,7 @@ jobs:
         with:
           name: dist
           path: dist/
-      - run: python -m pip install "$(ls dist/*.whl)[symbolic]"
+      - run: python -m pip install "$(ls dist/*.whl)[symbolic,plot]"
       - run: python tools/check_site_examples.py
 
   # The development install the README describes.
@@ -121,5 +121,5 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
-      - run: python -m pip install -e ".[symbolic,test]"
+      - run: python -m pip install -e ".[symbolic,test,plot]"
       - run: python -m pytest -q

@@ -132,6 +132,136 @@ stock, which corresponds to `k(+1)` in the package's convention, so the port too
 wrong period's stock. The steady state matched exactly, while the IRF of `log_k` lagged by one
 period. This case is the reason the comparison covers trajectories as well as points.
 
+## Second- and third-order decision rules
+
+```bash
+bash run_decision_rule.sh
+python compare_decision_rule.py
+```
+
+`example1` and `example2` compare `ghx`, `ghu`, `ghxx`, `ghuu`, `ghxu` and `ghs2` with Dynare 7.2.
+The comparison uses the steady state exported by Dynare as the common point of linearisation. All
+five tensors agree in the state-rule rows. `ghu` and `ghuu` also agree in the jump rows, with
+absolute errors below `5e-14` in both models. The full risk constant `g_s2 = [h_s2; g_ss]`, with
+`h_s2 = h_ss - h_uu:Sigma`, agrees in every row. The jump block `g_ku` is covered by a closed-form
+RBC test in the unit suite. The comparison accounts for the extra exogenous transition in Dynare's
+endogenous predetermined-state rows and for the different deviation scales of the two programs.
+
+At third order, `ghuuu`, `ghxuu`, `ghxxu`, `ghxxx`, `ghxss` and `ghuss` agree in every row.
+Both models use `derivatives="third"`. The largest absolute errors stay below `3e-13` in
+`example1` and `2e-14` in `example2`. The `ghxss` errors are `1.44e-16` and `5.39e-17`;
+the `ghuss` errors are `1.46e-16` and `5.35e-17`.
+The exact RBC test also checks `h_uuu`, `h_kuu`,
+`h_kku`, `h_kkk` and the composed jump blocks `g_uuu`, `g_kuu`, `g_kku` and `g_kkk`.
+The sparse residual tensors have 161 and 216 nonzeros, below 1.4% of their 16,464 dense
+entries. The Hessians have 46 and 56 nonzeros, below 4.8% of their 1,176 dense entries.
+`solve_third_order(sparse=True)` gives the same solution and stays below `3e-13`
+against Dynare on both models. With `direct_limit=0`, the matrix-free Sylvester solve uses
+60 independent symmetric unknowns instead of 162 in these models. Its largest Dynare error
+is `5.67e-13`, and its equation residual stays below `3.7e-14`.
+
+`python compare_third_sparse.py` checks the canonical solver at larger scale against a closed-form
+diagonal system. With 71 equations and 35 states it solves 551,670 unknowns in 1.9 seconds, with
+a peak RSS of 175 MB on macOS. The residual and closed-form error are both `8.88e-16`. The known
+term and residual use canonical coordinates, and each matvec expands one equation at a time with
+an optimized contraction path. This benchmark covers the Sylvester core, not the unpublished
+71-variable applied model or the dense decision-rule composition available on explicit request.
+`python compare_third_sparse.py --full` runs the complete nonlinear pipeline with 71 variables,
+35 states, 36 jumps and five shocks. Exact sparse third derivatives of the cubic state transitions
+drive `K3`, all risk blocks and the iterative solution. The maximum residual is `3.05e-20`, elapsed
+time is 135 seconds and peak RSS is 321 MB on macOS. This is a synthetic scale test, distinct from
+the unpublished applied model.
+
+The unit suite also checks conditional IRFs of the pruned rules at second and third order,
+including the impact period and the nonlinear AR(1) recursion. `run_third_irf.sh` and
+`compare_third_irf.py` compare 40 periods of the full third-order pruned rule on `example1` and
+`example2`, with 5,000 replications and `drop=100`. The largest errors are `5.65e-4` in `example1`
+and `1.50e-5` in `example2`, below the `1e-3` tolerance for Monte Carlo variation. Correlated shocks use the Cholesky factor.
+Contracting `ghuuu` with the shock covariance does not recover `ghuss`.
+
+`stochastic_steady_state` solves the fixed point of the full unpruned rule with `sigma=1`. Its
+residual is zero on `example1`, `example2` and the linear NK model. In the logarithmic RBC, the
+technology fixed point is zero in deviation (level 1), which is different from the positive
+ergodic mean.
+
+## Parameter Jacobians
+
+```bash
+bash run_derivatives.sh
+python compare_derivatives.py
+```
+
+`example1` and `example2` compare `solution_jacobian` with Dynare's analytical `dghx` and `dghu`.
+The composition covers `F P`, `F Q`, the extra exogenous transition of endogenous states and the
+derivatives of the deviation scales. The comparison uses Dynare's steady state as the common point.
+The largest errors are `3.49e-6` and `3.58e-6` in `example1` and `1.88e-5` and `6.96e-2` in
+`example2`, below the tolerances of `0.1` absolute and `1%` relative. The largest relative error is
+`0.512%`.
+
+### Second-order Jacobians
+
+```bash
+bash run_second_derivatives.sh
+python compare_second_derivatives.py
+```
+
+`second_order_jacobian` is compared with Dynare's analytical `dghxx`, `dghxu`, `dghuu` and
+`dghs2` in every variable row, for model parameters, shock standard deviations and correlations.
+The largest absolute errors are `6.22e-6` in `example1` and `1.56e-2` in `example2`; the largest
+relative errors are `5.76e-8` and `0.552%`. The comparison uses the same tolerances as the
+first-order case: `0.1` absolute and `1%` relative. Dynare 7.2 omits cross-covariance changes in
+`dghs2` for `stderr` with correlated shocks. The package differentiates the full covariance; only
+the comparator reproduces Dynare's omission to check that column.
+
+### Third-order Jacobians
+
+```bash
+bash run_third_derivatives.sh
+python compare_third_derivatives.py
+```
+
+`third_order_jacobian` is compared with `dghxxx`, `dghxxu`, `dghxuu` and `dghuuu` for model
+parameters, shock standard deviations and correlations. `ghxss` and `ghuss` remain outside its
+scope. The largest relative errors are `4.73e-8` in `example1` and `0.159%` in `example2`.
+The tolerance is `0.1` absolute and `5%` relative for the parameter derivatives, which remain
+numerical even when the model's third derivative is exact. The comparator uses
+`sparse=True, direct_limit=0` for the solution and for every perturbed Jacobian point.
+
+### Particle filter
+
+```bash
+bash run_particle.sh
+python compare_particle.py
+```
+
+The scalar AR(1) comparison runs Dynare's `sequential_importance_particle_filter` with 100,000
+particles and systematic resampling at first and second order. The likelihood differences are
+`3.18e-2` and `5.22e-3`; the comparison allows `0.05` for Monte Carlo variation. The second-order
+path checks the augmented pruned state and the `C z_{t-1} + D inov_t` observation timing.
+The pruned third-order filter uses `[xf; xs; xt]` and the full rule, including `ghxss` and `ghuss`.
+Its linear AR(1) likelihood is within `0.38` of Kalman; on the nonlinear RBC it differs from second order by
+`0.0847`. Missing observations are skipped. `EstimationProblem(order=3)` exposes the same
+likelihood to posterior mode and samplers. Third-order backward-information smoothing uses the
+linear transition of `xf`, with a pseudoinverse for singular transition covariances. Its AR(1)
+means agree with the Kalman smoother within `0.2` in the unit suite.
+
+### Inversion filter
+
+```bash
+bash run_inversion.sh
+python compare_inversion.py
+```
+
+The AR(1) comparison uses Dynare's `occbin.IVF_core` with a slack constraint. Recovered shocks,
+the observation Jacobian, the total likelihood and every per-date contribution agree exactly
+(tolerance `1e-8`). Unit tests also check the exact Gaussian density at first and pruned second
+order, a nonlinear RBC path and missing observations.
+
+`macromodelling/inversion.jl` and `compare_inversion_julia.py` also check a nonlinear RBC at
+pruned second order. Recovered shocks differ from MacroModelling.jl by at most `0.0057` (tolerance
+`0.01`). MacroModelling's likelihood uses `log|G|` once and omits `Sigma^-1`; dsgelab follows the
+Dynare convention, so the likelihoods are not compared with a numerical adjustment.
+
 ## Optimal policy: the Ramsey planner
 
 ```bash
@@ -598,6 +728,75 @@ when the moments have full rank. In kim2 the columns of `phi` and `theta` are co
 error, and a regression of `alph` on both measures that error: Dynare finds a cosine of 0.79 for
 the pair and `dsgelab` keeps `theta` alone, at 0.72, because the second regressor only adds noise.
 
+## Method of moments
+
+```bash
+bash fetch.sh
+bash run_mom.sh                  # first-order GMM and SMM, eight cases
+python compare_mom.py
+```
+
+```
+case            differences at Dynare's estimate (est.: own optimum; checked for SMM_e5)
+  anscho_GMM_0    data 2.5e-16  model 1.4e-14  est. 0.0e+00  Q 2.4e-14  s.e. 2.1e-08  J 2.4e-14  OK
+  anscho_SMM_0    data 2.5e-16  model 1.5e-14  est. 0.0e+00  Q 2.2e-14  s.e. 3.5e-09  J 2.2e-14  OK
+  anscho_GMM_4    data 2.5e-16  model 1.1e-14  est. 9.2e-01  Q 1.9e-15  s.e. skip  J 1.9e-15  OK
+  anscho_SMM_4    data 2.5e-16  model 9.6e-15  est. 8.1e-01  Q 1.2e-14  s.e. skip  J 1.2e-14  OK
+  anscho_GMM_d1   data 2.0e-16  model 2.3e-14  est. 7.9e-01  Q 5.2e-14  s.e. skip  J 5.1e-14  OK
+  anscho_SMM_d1   data 2.0e-16  model 2.4e-14  est. 6.5e-01  Q 1.3e-13  s.e. skip  J 1.3e-13  OK
+  anscho_GMM_e5   data 2.0e-16  model 4.3e-14  est. 2.8e-02  Q 2.1e-13  s.e. skip  J 2.1e-13  OK
+  anscho_SMM_e5   data 2.0e-16  model 1.1e-14  est. 2.3e-06  Q 2.3e-14  s.e. 4.9e-05  J 2.3e-14  OK
+```
+
+The model is An and Schorfheide (2007), from Dynare 7.2's `method_of_moments` tests. The cases
+cover GMM and SMM at the starting point and after optimization, two datasets and eight or five
+estimated parameters, including shock standard deviations and a shock correlation. SMM uses the
+same shock series as Dynare. Data and model moments, the objective and J are compared at Dynare's
+estimate, with Dynare's exported final weighting matrix. The estimate column is diagnostic:
+`csminwel` and `scipy.optimize.least_squares` can stop at different local optima. In the
+well-conditioned five-parameter SMM case, the complete estimates agree to `2.3e-6` and the
+standard errors to `4.9e-5`.
+
+For `c = 1 + 1/simulation_multiple`, the SMM covariance has a factor `c` and J a factor `1/c`.
+Dynare 7.2 omits `c` from its standard errors and multiplies J by `c`. The comparison therefore
+multiplies Dynare's standard errors by `sqrt(c)` and divides its J by `c^2`. Standard errors are
+checked in the two starting-point cases and in the complete five-parameter SMM estimation.
+
+### Pruned second-order moments
+
+```bash
+bash run_mom_order2.sh
+python compare_mom_order2.py
+```
+
+`example1` and `example2` compare means, covariances and three autocovariance lags of every
+endogenous variable with Dynare 7.2's `pruned_SS.pruned_state_space_system`. All differences are
+below `1e-14`, and the comparison requires `1e-8`. The models read by `from_mod`, including their
+auxiliary variables, differ by at most `2.93e-8` and `1.59e-6` in means and by `6.08e-9` and
+`2.87e-8` in second moments, with a tolerance of `5e-5`.
+Unit tests also check exact linear-model reductions and the lognormal AR(1), whose moments agree
+to `3.2e-7` with the closed form, within the accuracy of a second-order approximation.
+
+### IRF matching and external targets
+
+```bash
+bash run_irf.sh                  # Dynare's frequentist RBC example, initial point and estimation
+python compare_irf.py
+```
+
+```
+  rbc_irf_0  data 0.0e+00  model 3.4e-14  W 0.0e+00  Q 2.9e-16  H 2.9e-06  s.e. 0.0e+00  est. 0.0e+00  OK
+  rbc_irf_5  data 0.0e+00  model 5.7e-15  W 0.0e+00  Q 1.7e-14  H 2.0e-05  s.e. 6.6e-05  est. 1.3e-05  OK
+```
+
+The example exercises sparse targets, vector expansion, the `varobs`/MATLAB ordering and diagonal
+weights. The comparison checks data and model IRFs, W, Q and the Hessian of Q/2 at the same point;
+the complete estimates differ by `1.3e-5` and the standard errors by `6.6e-5`. At the initial point
+Dynare reports imaginary standard errors from an indefinite Hessian; `dsgelab` reports `NaN` instead.
+The unit tests also cover cross-weights, correlated shocks, a non-diagonal external covariance and
+local projections. On 120,000 simulated AR(1) observations, the local projections recover the
+model's responses through horizon 10 to `0.012` in absolute error, with their joint HAC covariance.
+
 ## Filtered moments
 
 ```bash
@@ -632,6 +831,181 @@ decomposition of `example1`, whose shocks are correlated, differs by 5 percentag
 the two programs attribute the covariance differently: Dynare orthogonalises the shocks by the
 Cholesky factor, in the order of declaration, and `dsgelab` counts each shock with its own
 variance. The numbers come from a run on 24 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+## Calibration restrictions
+
+```bash
+bash fetch.sh
+bash run_restrictions.sh          # Dynare's tests/gsa/ls2003a.mod, at the calibration and over the prior
+python compare_restrictions.py
+```
+
+```
+  ls2003_rel  21 IRF + 17 moment restrictions   calibration: values 8.1e-15, verdicts same   512 draws (486 solved, same draws): values 1.3e-12, verdicts differ in 0   OK
+              shares: 80.5% y(1:4), e_ys, 67.9% the other IRF restrictions together, 2.1% all
+  ls2003_abs  21 IRF + 17 moment restrictions   calibration: values 1.6e-15, verdicts same   512 draws (486 solved, same draws): values 4.1e-14, verdicts differ in 0   OK
+              shares: 11.3% y(1:4), e_ys, 97.1% the other IRF restrictions together, 0.6% all
+```
+
+The model is Lubik and Schorfheide (2003), from Dynare's `tests/gsa/ls2003a.mod`, with its priors
+and its `irf_calibration` and `moment_calibration` blocks. `restrictions/prepare.py` writes two
+cases: `ls2003_rel` keeps the active `irf_calibration(relative_irf)` block, and `ls2003_abs` uses
+the block the file leaves commented, in absolute units. Both restore the two commented lines of the
+moment block, the variance of `y_obs` and its cross-correlations with `pie_obs` at leads and lags
+`-4:4`, so that a variance and a range of lags are covered. The include is inlined and the `@#for`
+loops are expanded, because `from_mod` reads neither, and `dsgelab` reads the same driver as
+Dynare. At the calibration, the reference is `endogenous_prior_restrictions`. Over the prior, it is
+the `map_calibration` step of `sensitivity(prior_range=0, Nsam=512)`, and `dsgelab` evaluates the
+restrictions at the 512 parameter vectors Dynare drew. Both programs solve the same 486 draws. On
+those draws the restriction values agree at every horizon and lag, each restriction's verdict
+agrees on every draw, and the shares are those Dynare prints. A restriction over a range of
+horizons or lags holds when any one of them is inside the bound. This is the logical OR described
+in Dynare's manual, and `dsgelab` applies the same rule. The numbers come from a run on 30 October
+2026, with Dynare 7.2 and Octave 11.3.0.
+
+## Global sensitivity
+
+```bash
+bash fetch.sh
+bash run_gsa.sh                   # Dynare's stability mapping of tests/gsa/ls2003a.mod, three samples
+pip install SALib                 # 1.6.0 for the numbers below
+python compare_gsa.py
+```
+
+```
+Stability mapping against Dynare's sensitivity(stab=1), ls2003a
+  ls2003_prior       94.9% stable   5.1% indeterminate   0.0% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 0; with its rule by modulus: 0
+     filtering on Dynare's groups (2 analyses, 2 the same as dsgelab's): Smirnov d 0.0e+00, p 2.2e-16; correlations 1.1e-16, p 1.8e-14
+  ls2003_range       97.2% stable   2.8% indeterminate   0.0% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 0; with its rule by modulus: 0
+     filtering on Dynare's groups (2 analyses, 2 the same as dsgelab's): Smirnov d 0.0e+00, p 2.2e-16; correlations 1.1e-16, p 3.1e-14
+  ls2003_explosive   79.0% stable   5.1% indeterminate  15.9% explosive
+     classes against Dynare's solver (info): differ in 0; against its GSA lists: 37; with its rule by modulus: 8, all rank failures (info 5)
+     filtering on Dynare's groups (3 analyses, 1 the same as dsgelab's): Smirnov d 0.0e+00, p 3.3e-16; correlations 7.6e-17, p 1.7e-13
+
+Sobol indices against SALib
+  Ishigami                     design 0.0e+00   indices 8.9e-16   (1 outputs, 20480 evaluations)
+  ls2003, IRFs and moments     design 0.0e+00   indices 7.8e-16   (5 outputs, 1280 evaluations)
+```
+
+The model is Lubik and Schorfheide (2003), from Dynare's `tests/gsa/ls2003a.mod`, with its priors
+and without its calibration blocks. `gsa/prepare.py` writes three drivers: 1024 draws from the
+prior (`prior_range=0`), 1024 uniform draws over the prior's range (`prior_range=1`), and 1024
+draws from the prior with the persistence of technology `rho_A` uniform on [0.5, 1.1], so that
+some draws are explosive. `gsa/export_gsa.m` saves Dynare's draws and classes and runs Dynare's
+`smirnov_test` and `corrcoef` on the groups its `stability_mapping.m` forms, and `dsgelab`
+classifies the same draws with `ModFile.stability_map(points=, names=)`.
+
+Every draw has the class that Dynare's solver gives it: `info` 0 is determinate, 3 explosive, 4
+and 5 indeterminate. In the first two samples the toolbox's own lists agree too. In the third
+they differ in 37 draws. The toolbox lists 36 of them as indeterminate while its solver reports
+them explosive (`info` 3), and one as explosive while its solver reports a rank failure (`info`
+5). `stability_mapping.m` labels a draw
+indeterminate when entry `nspred + 1` of `sort(eigval)` is stable. When every eigenvalue of a
+draw is real, `sort` orders them by signed value, so a large negative unstable root, or `-Inf`,
+comes before the stable ones. Applied to the eigenvalues sorted by modulus, the same rule gives
+`dsgelab`'s class at every draw except the eight rank failures (`info` 5), which no eigenvalue
+count can see and which Dynare's solver, like `dsgelab`, calls indeterminate. The Smirnov
+statistics and p-values and the correlations are computed by `dsgelab` on Dynare's own groups, so
+that they are compared on the same draws in all three samples. Dynare runs the filtering only
+on the structural parameters, and the comparison does the same.
+
+The Sobol check follows the one in `cgelab`: SALib's `sample.sobol` with the same seed draws the
+same points as `dsgelab.sobol`, and SALib's `analyze.sobol`, given `dsgelab`'s outputs in SALib's
+row order, gives the same first-order and total indices. On the Ishigami function the indices are
+also within 0.004 of the closed form. The second case varies `psi1`, `rho_R` and `tau` of the
+same model inside the determinacy region and takes impulse responses to the monetary shock and
+two moments. The numbers come from a run on 30 October 2026, with Dynare 7.2, Octave 11.3.0 and
+SALib 1.6.0.
+
+## Mixed-frequency data
+
+```bash
+bash fetch.sh
+bash run_mixed.sh                 # fs2000 with output growth observed as its annual mean
+python compare_mixed.py
+```
+
+```
+fs2000 with output growth observed as its annual mean (48 of 192 quarters) and inflation every quarter
+  likelihood at two points 8.0e-13   smoothed variables 1.3e-14   smoothed annual mean (Dynare's gy_obs_a) 3.4e-16
+  analytic gradient against finite differences 1.0e-07 (relative)
+  posterior kernel at the mode: dsgelab 935.771192   Dynare 935.771188   parameters within 0.003 posterior sd
+```
+
+Dynare has no aggregation option, so `mixed/prepare.py` writes what a Dynare user writes:
+`fs2000.mod` with an auxiliary variable `gy_obs_a = (gy_obs + gy_obs(-1) + gy_obs(-2) +
+gy_obs(-3))/4` and its steady state, observed in place of `gy_obs`, and a data file that runs
+Dynare's `fs2000_data.m` and adds the four-quarter means of `gy_obs` at quarters 4, 8, ..., with
+NaN in between. With `loglinear`, the linearised aggregate is the mean of the log deviations.
+`dsgelab` reads the unchanged `fs2000.mod` and declares `aggregation={"gy_obs": ("mean", 4)}`
+on the same numbers. The likelihood is compared at the prior means and at a point 5% away from
+them in alternating directions, the smoothed variables and the smoothed aggregate at the first,
+and the posterior mode found by each program. The gradient check is internal: the analytic
+gradient through the stacked state against central differences of the likelihood. The numbers
+come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+## Densities of the posterior plots
+
+```bash
+bash fetch.sh
+bash run_plots.sh                 # Dynare's draw_prior_density and posterior_moments
+python compare_plots.py
+```
+
+```
+prior densities of fs2000 (9 priors: beta, inv_gamma, normal): grid 4.3e-15, density 1.9e-12 (relative)
+posterior density, 6037 draws (3037 repeated): 6.5e-16 (grid and density, relative to its peak)
+posterior density, 5000 draws (0 repeated): 8.9e-16 (grid and density, relative to its peak)
+```
+
+The plots draw what the package computes, except for the two densities of `plot_posterior`,
+which are compared here. The prior densities are those of the nine priors of `fs2000.mod`, read
+by `from_mod`, against `draw_prior_density`, grid and values. The posterior density is compared
+with the kernel estimate that `posterior_moments` returns, on draws made in Octave: 3000 normal
+draws each repeated one to three times, as a Metropolis chain repeats a draw when it rejects, so
+that Dynare's bandwidth correction for repeated draws is exercised, and 5000 lognormal draws.
+The numbers come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+## Out-of-sample forecast evaluation
+
+```bash
+bash fetch.sh
+bash run_forecast_eval.sh         # Dynare's recursive estimation of fs2000, and R's dm.test
+python compare_forecast_eval.py   # about 12 minutes, most of it the nine posterior modes
+```
+
+```
+fs2000 — recursive estimation, samples ending at 176 to 184, 8-period forecasts
+  at Dynare's modes: forecast means 2.6e-15, 90% bands 6.3e-09
+  dsgelab's own modes: kernel minus Dynare's, worst +4.98e-06   parameters, worst 0.003 posterior sd   forecasts, worst 0.000 predictive sd
+     gp_obs: RMSE relative to the random walk, h=1..8  2.25 2.04 2.42 3.39 2.60 2.46 2.43 2.99
+     gy_obs: RMSE relative to the random walk, h=1..8  0.62 0.87 0.71 0.58 0.72 0.67 0.64 0.84
+
+Diebold-Mariano against R's forecast::dm.test, 48 cases: statistic 3.1e-15, p-value 1.1e-15, same horizon used True
+```
+
+The recursive estimation is that of `fs2000.mod` from Dynare's examples, with model, priors and
+data as they are, and the estimation line replaced by
+`estimation(nobs=[176:184], mode_compute=4, mh_replic=0, forecast=8)`. Dynare estimates the
+posterior mode on each of the nine samples, starting each sample after the first from the first
+sample's mode, and forecasts the two observables eight quarters ahead with 90% bands.
+`forecast_evaluation` runs twice on the same samples. With `estimate="fixed"` and Dynare's mode
+for each sample, the forecast means and the bands are Dynare's. With `estimate="mode"`, `dsgelab`
+finds its own modes, starting each sample from the previous one. The kernel at each of them is at
+least as high as at Dynare's, the parameters lie within 0.003 posterior standard deviations of
+Dynare's, and the forecasts within a thousandth of their predictive standard deviation. The
+relative RMSEs are printed for reference: over these nine origins the model forecasts output
+growth better than the random walk and inflation worse.
+
+The Diebold–Mariano reference is R's `forecast::dm.test` (forecast 8.24.0 on R 4.5.1). Two error
+series of 60 observations, moving averages of orders 2 and 1, are drawn in R with a fixed seed.
+The 48 cases cross horizons 1 to 4, losses `|e|` and `e^2`, both variance estimators and the
+three alternatives. None of them has a negative variance at the requested horizon, so the
+fallback to horizon 1 that both programs make is checked only in the test suite. The numbers
+come from a run on 30 October 2026, with
+Dynare 7.2 and Octave 11.3.0.
 
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 

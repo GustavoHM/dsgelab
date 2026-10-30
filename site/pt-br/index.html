@@ -329,6 +329,8 @@ k(+1) - i - k*(1 - delta)                                     # constraint 2: k(
 
   <h3>9. Terceira ordem</h3>
 <pre><code>to = dsg.solve_third_order(so, cov={"eps_a": 0.007})
+to_esparso = dsg.solve_third_order(so, cov={"eps_a": 0.007},
+                                   sparse=True, direct_limit=0)
 
 to.g_kkk, to.h_kkk        # os termos cúbicos
 to.accuracy()             # a ordem implícita tem de dar ~4
@@ -360,22 +362,19 @@ to.simulate(periods=5000, seed=1)    # podada em três camadas</code></pre>
 }
 <span class="out-expr">to.simulate(periods=5000, seed=1)</span>
 {
-  'k': [-0.0166 -0.005081 0.01319 ... 0.02347 0.02657 0.04173],
-  'a': [0.0009326 0.01505 0.006865 ... 0.01804 0.03194 0.03259],
-  'c': [-0.005081 0.01319 0.01163 ... 0.02657 0.04173 0.0479]
+  'k': [-0.005672 0.01268 0.01105 ... 0.02659 0.04209 0.04841],
+  'a': [0.0005292 0.01475 0.006478 ... 0.01805 0.03229 0.03296],
+  'c': [-0.005661 0.01267 0.01106 ... 0.02659 0.04208 0.04843]
 }</code></pre>
-  <div class="note"><p><strong>A terceira ordem deste pacote cobre o bloco cúbico e a inclinação
-  do risco.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são verificados pela
-  ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por dezesseis. Os
-  termos <code>sigma²·k</code>, pelos quais o risco entra na <em>inclinação</em> das regras e um
-  prêmio de risco varia com o estado, são <code>g_ssk</code> e <code>h_ssk</code>. No AR(1) em
-  logaritmo, o teste do pacote exige <code>h_ssk[a, a] = ρσ²</code>, com sinal positivo. A inovação
-  continua entrando de forma aditiva, como <code>k' = h(k,σ) + Qε</code>, e por isso as regras não
-  têm monômio em que ε multiplique a si mesma ou o estado. Esses monômios pertencem ao tensor
-  completo de terceira ordem do Dynare, que o pacote ainda não calcula. Esse tensor e o estado
-  estacionário estocástico estão previstos para a versão 0.7, e até lá os termos de risco nesse
-  sentido completo exigem o Dynare, para o qual o exemplo seguinte escreve o
-  <code>.mod</code>.</p></div>
+  <div class="note"><p><strong>A terceira ordem cobre a regra de decisão completa e o estado
+  estacionário estocástico.</strong> Os termos cúbicos (<code>g_kkk</code>, <code>h_kkk</code>) são
+  verificados pela ordem de acurácia, já que dividir o deslocamento pela metade divide o resíduo por
+  dezesseis. O risco entra por <code>g_ssk</code>, <code>h_ssk</code> e pelos blocos de estado e
+  inovação <code>ghxss</code> e <code>ghuss</code>. No AR(1) em logaritmo,
+  <code>h_ssk[a, a] = ρσ²</code>. A simulação usa a regra podada com todos os blocos cúbicos de
+  inovação. <code>stochastic_steady_state(to)</code> calcula o ponto fixo da regra completa sem poda.
+  Com <code>sparse=True, direct_limit=0</code>, o resolvedor guarda triplas simétricas independentes
+  e evita os grandes tensores densos; a composição explícita da regra ainda forma arrays densos.</p></div>
 
   <h3>10. Exportar para o Dynare e para o MacroModelling.jl</h3>
 <pre><code>ss_sim = dsg.steady_state(simbolico, {"k": 0.2, "a": 1.0, "c": 0.36}, P())
@@ -683,6 +682,251 @@ hp["autocorr"][1]["c"]                                                        # 
   densidade espectral da solução. Os mesmos argumentos valem para <code>covariance</code> e
   <code>variance_decomposition</code>. Os dois filtros removem a frequência zero, e por isso uma
   variável com raiz unitária, que não tem variância incondicional, tem momentos filtrados.</p>
+  <h3>21. Derivadas da solução em relação aos parâmetros</h3>
+<pre><code>p_cf = replace(p_rbc, delta=1.0, gamma=1.0)          # depreciação completa e utilidade log
+m_cf, _, g_cf = rbc.build(p_cf)
+jac = dsg.solution_jacobian(dsg.solve(m_cf, p_cf, guess=g_cf), ["alpha", "rho"])
+exata = np.zeros((2, 2, 2))
+exata[0, 0, 0] = exata[1, 1, 1] = 1.0                 # P = [[alpha, 1], [0, rho]]
+np.abs(jac.P - exata).max() &lt; 1e-5
+
+theta = np.array([0.6, 0.12])                         # rho e stderr e, longe da moda
+grad = dsg.log_posterior_gradient(pb, theta).gradient
+fd = np.array([(pb.log_posterior(theta + 1e-6 * e) - pb.log_posterior(theta - 1e-6 * e)) / 2e-6
+               for e in np.eye(2)])
+grad, fd</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">np.abs(jac.P - exata).max() &lt; 1e-5</span>
+True
+<span class="out-expr">grad, fd</span>
+([84.51 -1253], [84.51 -1253])</code></pre>
+  <p><code>solution_jacobian</code> devolve as derivadas de <code>P</code>, <code>F</code>,
+  <code>Q</code> e do estado estacionário, com o parâmetro no último eixo. Com depreciação completa
+  e utilidade logarítmica, o RBC tem a solução em forma fechada
+  <code>P = [[alpha, 1], [0, rho]]</code> em logs. A derivada em relação a <code>alpha</code> vale
+  então um no canto e zero no resto, e a calculada difere dela em menos de 1e-6. A solução QZ é
+  diferenciada pelas condições de ponto de sela, sem nova decomposição em cada ponto perturbado.
+  <code>second_order_jacobian</code> e <code>third_order_jacobian</code> diferenciam as regras de
+  ordem mais alta por diferenças centrais com extrapolação de Richardson.
+  <code>log_posterior_gradient</code> diferencia a verossimilhança de Kalman do problema do exemplo
+  14 pela própria recursão e, num ponto longe da moda, concorda com as diferenças centrais até um
+  erro relativo de 2e-10.</p>
+  <h3>22. Estimação em segunda ordem: filtros de inversão e de partículas</h3>
+<pre><code>theta = [moda.values[n] for n in pb.names]
+inversao = replace(pb, order=2, nonlinear_filter="inversion", presample=1)
+abs(inversao.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9
+
+com_erro = replace(pb, measurement={"y": 0.05})         # o filtro de partículas exige erro de medida
+particulas = replace(com_erro, order=2, particles=10000)
+com_erro.log_likelihood(theta), particulas.log_likelihood(theta)
+
+choques = inversao.smoother(theta).shocks[:, 0]
+np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">abs(inversao.log_likelihood(theta) - replace(pb, presample=1).log_likelihood(theta)) &lt; 1e-9</span>
+True
+<span class="out-expr">com_erro.log_likelihood(theta), particulas.log_likelihood(theta)</span>
+(372.2, 372.1)
+<span class="out-expr">np.abs(choques[1:] - pb.smoother(theta).shocks[1:, 0]).max() &lt; 1e-12</span>
+True</code></pre>
+  <p>Com <code>order=2</code>, a verossimilhança vem da regra podada de segunda ordem, e
+  <code>nonlinear_filter</code> escolhe entre a inversão (<code>"inversion"</code>) e o filtro
+  de partículas bootstrap (<code>"particle"</code>, o padrão). O AR(1) do exemplo 14 é linear, de
+  modo que sua regra de segunda ordem coincide com a de primeira e os dois métodos devem reproduzir
+  o filtro de Kalman. A inversão recupera os choques que reproduzem os dados e parte da
+  média do sistema podado, que aqui é o estado estacionário. Quando a primeira observação serve apenas de pré-amostra
+  (<code>presample=1</code>), o resultado é igual ao de Kalman. As partículas exigem erro de medida
+  e, com 10.000 delas, o valor fica a menos de 0,3 do obtido por Kalman para o mesmo problema. A partir do
+  segundo período, os choques recuperados por inversão coincidem com os do suavizador de Kalman.
+  <code>posterior_mode</code> e <code>metropolis_hastings</code> aceitam esses problemas sem
+  mudança.</p>
+  <h3>23. Amostragem com gradiente: HMC e NUTS</h3>
+<pre><code>curta = replace(pb, data={"y": serie[:100]})         # as 100 primeiras observações do exemplo 14
+moda_curta = dsg.posterior_mode(curta)
+amostra_nuts = dsg.nuts(curta, moda_curta, draws=200, chains=2, seed=1)
+amostra_hmc = dsg.hmc(curta, moda_curta, draws=150, chains=2, leapfrog=5, seed=1)
+
+max(amostra_nuts.rhat().values()) &lt; 1.05, max(amostra_hmc.rhat().values()) &lt; 1.05
+amostra_nuts.divergences
+tol = 0.35 * moda_curta.std["rho"]
+abs(amostra_nuts.mean()["rho"] - moda_curta.values["rho"]) &lt; tol
+abs(amostra_hmc.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">max(amostra_nuts.rhat().values()) &lt; 1.05, max(amostra_hmc.rhat().values()) &lt; 1.05</span>
+(True, True)
+<span class="out-expr">amostra_nuts.divergences</span>
+[0 0]
+<span class="out-expr">abs(amostra_nuts.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</span>
+True
+<span class="out-expr">abs(amostra_hmc.mean()["rho"] - moda_curta.values["rho"]) &lt; tol</span>
+True</code></pre>
+  <p><code>hmc</code> e <code>nuts</code> seguem o gradiente da log-posterior, calculado por
+  <code>log_posterior_gradient</code> como no exemplo 21, e usam a covariância na moda como inversa
+  da matriz de massa. No burn-in, uma heurística escolhe o primeiro passo e a média dual (Hoffman e
+  Gelman, 2014) o leva a uma taxa de aceitação de 0,8. O <code>nuts</code> dobra cada trajetória
+  até que ela volte sobre si mesma e sorteia nela um ponto com pesos multinomiais, de modo que não
+  há número de passos de leapfrog a fixar. O <code>hmc</code> dá <code>leapfrog</code> passos e
+  varia o tamanho do passo em até 20% de um sorteio para o seguinte. Em duas execuções neste
+  problema, o tamanho efetivo da amostra de <code>rho</code> no NUTS ficou entre 70% e 100% do
+  número de sorteios, e em cerca de 6% dele no Metropolis de passeio aleatório. As duas médias a posteriori ficam a menos de um terço
+  de um desvio-padrão de Laplace da moda. O <code>NUTSResult</code> informa também as divergências,
+  as trajetórias que atingem <code>max_depth</code> e a profundidade média da árvore. A suíte de
+  testes confere os dois amostradores com a posterior exata de um coeficiente AR(1), obtida por
+  quadratura, e com uma cadeia longa de Metropolis–Hastings. Eles só funcionam em primeira ordem,
+  porque precisam do gradiente da verossimilhança de Kalman. A recursão que o calcula custa cerca
+  de cinco vezes uma avaliação da verossimilhança, e por isso o exemplo usa 100 observações.</p>
+  <h3>24. Restrições sobre respostas a impulso e momentos</h3>
+<pre><code>from dsgelab.examples import nk as nk_example
+m_nk3, p_nk3, g_nk3 = nk_example.build()
+s_nk3 = dsg.solve(m_nk3, p_nk3, guess=g_nk3)
+cov_nk3 = {"eps_a": 0.01, "eps_v": 0.0025}
+irf_r = [("pi", "eps_v", "1:4", "-"),               # a inflação cai no primeiro ano
+         ("x", "eps_v", 1, (-0.01, -0.002))]        # o hiato cai de 0,2 a 1 ponto no impacto
+mom_r = [("x", "pi", 0, "+"),                       # hiato e inflação andam juntos
+         ("pi", "pi", 1, (0.5, 0.88))]              # primeira autocorrelação da inflação
+dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds
+priors_r = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05)}
+draws_r = dsg.sample_restrictions(m_nk3, p_nk3, priors_r, irf=irf_r, moments=mom_r,
+                                  cov=cov_nk3, guess=g_nk3, draws=500, seed=0)
+print(draws_r.summary())</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds</span>
+True
+Calibration restrictions over 500 draws, 429 solved
+    share  kind   restriction                      bound
+   100.0%  irf    pi(1:4), eps_v                       -
+    98.4%  irf    x(1), eps_v            [-0.01, -0.002]
+   100.0%  moment x, pi                                +
+    51.0%  moment pi, pi(1)                  [0.5, 0.88]
+    49.4%  all together</code></pre>
+  <p><code>check_restrictions</code> e <code>sample_restrictions</code> fazem o que fazem os blocos
+  <code>irf_calibration</code> e <code>moment_calibration</code> do Dynare. Eles conferem um sinal
+  ou um intervalo para uma resposta a impulso em horizontes dados, ou para uma variância, uma
+  correlação ou uma autocorrelação em defasagens dadas, primeiro num ponto do espaço de parâmetros
+  e depois em sorteios da priori. Os valores são desvios absolutos, o impulso é de um desvio-padrão
+  do choque, e uma restrição sobre vários horizontes vale quando um deles está dentro do limite,
+  como no Dynare. As proporções são calculadas sobre os sorteios com solução determinada. Nesta
+  priori, os 71 sorteios deixados de fora têm <code>phi_pi</code> abaixo de 1.
+  <code>ModFile.check_restrictions</code> e <code>ModFile.sample_restrictions</code> leem os dois
+  blocos e as prioris de um <code>.mod</code>.</p>
+
+  <h3>25. Avaliação de previsões fora da amostra</h3>
+<pre><code>ev = dsg.forecast_evaluation(pb, range(320, 400, 10), 4)   # exemplo 14, reestimado 8 vezes
+ev.relative_rmse()["y"].round(2)                   # RMSE sobre o do passeio aleatório, h = 1..4
+ev.coverage_rate()["y"]                            # fração dentro das bandas de 90%
+dm = ev.diebold_mariano("y", 1, alternative="less")
+round(dm.statistic, 2), round(dm.p_value, 2)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ev.relative_rmse()["y"].round(2)</span>
+[1.31 1.35 1.34 1.04]
+<span class="out-expr">ev.coverage_rate()["y"]</span>
+[0.75 1 0.75 0.75]
+<span class="out-expr">round(dm.statistic, 2), round(dm.p_value, 2)</span>
+(1.42, 0.9)</code></pre>
+  <p><code>forecast_evaluation</code> faz o que faz a estimação recursiva do Dynare com
+  <code>nobs=[T1:T2]</code> e <code>forecast</code>. Em cada origem, estima a moda posterior na
+  amostra até aquela data, partindo da moda da origem anterior, filtra e prevê as variáveis
+  observadas. <code>window=</code> faz a janela deslizar, <code>estimate="ml"</code> maximiza a
+  verossimilhança e <code>estimate="fixed"</code> mantém parâmetros dados. As previsões são então
+  comparadas com o que veio depois: o RMSE por horizonte, sozinho e dividido pelo do passeio
+  aleatório, o teste de Diebold–Mariano com a correção de Harvey, Leybourne e Newbold (como o
+  <code>forecast::dm.test</code> do R), e a calibração da densidade preditiva gaussiana, com
+  <code>pit()</code>, <code>coverage_rate()</code> e <code>log_score()</code>. A densidade é
+  condicional à estimativa, como a previsão do Dynare depois da moda. Oito origens dão um quadro
+  grosseiro: nelas o AR(1) não se sai melhor que o passeio aleatório, e o teste não distingue os
+  dois. Uma avaliação de verdade usa todos os trimestres, a cerca de dois segundos por origem
+  neste modelo.</p>
+  <h3>26. Sensibilidade global</h3>
+<pre><code>priors_s = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05),
+            "rho_v": dsg.Uniform(0.0, 0.9)}             # o modelo do exemplo 24
+stab = dsg.stability_map(m_nk3, p_nk3, priors_s, draws=512, guess=g_nk3, cov=cov_nk3)
+print(stab.summary())
+run = dsg.solution_outputs(m_nk3, p_nk3, irf=[("pi", "eps_v", 4)], moments=[("x", "x", 0)],
+                           cov=cov_nk3, guess=g_nk3)
+inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
+          "rho_v": dsg.Uniform(0.0, 0.9)}               # dentro da região de determinação
+print(dsg.sobol(run, inside, n=256, bootstrap=0).summary())</code></pre>
+<pre class="output" data-label="Saída"><code>Stability mapping over 512 draws
+   85.5% unique stable solution
+    0.0% explosive
+   14.5% indeterminate
+Smirnov statistics in driving a unique stable solution: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+Smirnov statistics in driving determinacy: 438 draws with it, 74 without
+  parameter          d-stat    p-value
+  phi_pi              1.000   2.82e-57
+pi(4), eps_v  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.029   0.112
+  kappa       0.015   0.027
+  rho_v       0.843   0.916
+x, x  (256 of 256 base points)
+  parameter      S1      ST
+  phi_pi      0.126   0.452
+  kappa       0.241   0.446
+  rho_v       0.156   0.409</code></pre>
+  <p><code>stability_map</code> é o mapeamento de estabilidade da caixa de ferramentas de
+  sensibilidade do Dynare (<code>dynare_sensitivity(stab=1)</code>). Ele sorteia os parâmetros das
+  prioris ou das distribuições <code>Uniform</code>, <code>Normal</code> e <code>Triangular</code>,
+  numa sequência de Sobol embaralhada, resolve o modelo em cada sorteio e separa os sorteios com
+  solução estável única, os indeterminados, os explosivos e os sem solução. A filtragem de Monte
+  Carlo que vem em seguida pergunta quais parâmetros separam os grupos, com um teste de Smirnov por
+  parâmetro; aqui o princípio de Taylor aparece como <code>phi_pi</code>, que sozinho separa os
+  sorteios determinados dos demais. <code>stab.filtering(kind)</code> dá o teste e as correlações
+  dentro de cada grupo, <code>monte_carlo_filtering</code> o aplica a qualquer comportamento, e
+  <code>RestrictionSample.filtering</code> às restrições do exemplo 24. <code>sobol</code> calcula
+  os índices de Sobol de primeira ordem e totais no desenho de Saltelli, e
+  <code>solution_outputs</code> transforma respostas a impulso e momentos na função que ele avalia.
+  A persistência do choque responde pela maior parte da variância da resposta da inflação um ano
+  depois dele, e a variância do hiato do produto depende dos três parâmetros, em boa parte pelas
+  interações entre eles.</p>
+  <h3>27. Dados de frequência mista</h3>
+<pre><code>anual = dsg.low_frequency(serie.reshape(-1, 4).mean(axis=1), 4)   # exemplo 14, em médias anuais
+pb_a = replace(pb, data={"y": anual}, aggregation={"y": ("mean", 4)})
+moda_a = dsg.posterior_mode(pb_a)
+{n: round(moda_a.values[n], 3) for n in pb.names}, {n: round(moda.values[n], 3) for n in pb.names}
+{n: round(moda_a.std[n], 3) for n in pb.names}, {n: round(moda.std[n], 3) for n in pb.names}
+trimestral = pb_a.smoother(moda_a.x).variables()["y"]
+round(float(np.corrcoef(trimestral, serie)[0, 1]), 2)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">{n: round(moda_a.values[n], 3) for n in pb.names}, {n: round(moda.values[n], 3) for n in pb.names}</span>
+({'rho': 0.814, 'stderr e': 0.078}, {'rho': 0.75, 'stderr e': 0.092})
+<span class="out-expr">{n: round(moda_a.std[n], 3) for n in pb.names}, {n: round(moda.std[n], 3) for n in pb.names}</span>
+({'rho': 0.038, 'stderr e': 0.007}, {'rho': 0.032, 'stderr e': 0.003})
+<span class="out-expr">round(float(np.corrcoef(trimestral, serie)[0, 1]), 2)</span>
+0.89</code></pre>
+  <p>Uma variável observada numa frequência menor que a do modelo entra por
+  <code>aggregation</code>: <code>{"y": ("mean", 4)}</code> diz que os dados são a média de
+  <code>y</code> nos últimos quatro trimestres, observada uma vez por ano, com NaN nos trimestres
+  intermediários (<code>low_frequency</code> os posiciona). O estado passa então a carregar três
+  defasagens, como faz uma variável auxiliar <code>(y + y(-1) + y(-2) + y(-3))/4</code> num
+  <code>.mod</code>, e o filtro, o suavizador, o gradiente da verossimilhança, as previsões e
+  <code>forecast_evaluation</code> funcionam sobre ele; as demais variáveis observadas podem continuar
+  trimestrais. Só com as 100 médias anuais, a moda posterior fica perto da obtida com os 400
+  trimestres, com desvios-padrão maiores, e o suavizador recupera uma trajetória trimestral que
+  acompanha a verdadeira. Um estoque observado no fim de cada ano não precisa de agregação, só dos
+  trimestres faltantes. A validação contra o Dynare usa o <code>fs2000</code> com o crescimento do
+  produto observado como média anual.</p>
+  <h3>28. Gráficos</h3>
+<pre><code>figs = {
+    "irf.png": dsg.plot_irf({"monetary": s_nk3.irf("eps_v"), "technology": s_nk3.irf("eps_a")},
+                            ["x", "pi", "i"]),                           # exemplo 24
+    "decomposition.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(moda.x)), "y"),
+    "forecast.png": dsg.plot_forecast(dsg.forecast(pb.solve(moda.x)[1], pb.Y, 12, variables=["y"]),
+                                      history={"y": serie[-40:]}),
+    "posterior.png": dsg.plot_posterior(cadeia, problem=pb, mode=moda),   # exemplo 14
+}
+for name, fig in figs.items():
+    fig.savefig(name, dpi=80)
+[len([a for a in fig.axes if a.get_visible()]) for fig in figs.values()]</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">[len([a for a in fig.axes if a.get_visible()]) for fig in figs.values()]</span>
+[3, 1, 1, 2]</code></pre>
+  <p>Os gráficos recebem o que o pacote devolve: os dicionários de <code>irf</code> e
+  <code>simulate</code> (<code>plot_irf</code>, <code>plot_paths</code>, um painel por variável, com
+  vários modelos ou choques nos mesmos painéis), uma decomposição de choques
+  (<code>plot_decomposition</code>, barras empilhadas com o total como linha, como o Dynare a
+  desenha), uma previsão com as suas bandas depois do histórico (<code>plot_forecast</code>) e a
+  posteriori contra a priori e a moda (<code>plot_posterior</code>). Cada um devolve uma figura do
+  matplotlib, construída sem <code>pyplot</code>, para salvar ou mostrar num notebook; o matplotlib
+  vem com <code>pip install "dsgelab[plot]"</code>. As densidades do gráfico da posteriori são as do
+  Dynare: <code>prior_density</code> reproduz o seu <code>draw_prior_density</code> e
+  <code>posterior_density</code> a estimativa de núcleo do seu <code>posterior_moments</code>, com a
+  largura de banda corrigida para os sorteios que uma cadeia de Metropolis repete.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -695,9 +939,10 @@ hp["autocorr"][1]["c"]                                                        # 
     Blanchard–Kahn exigida e a margem de determinação relatada.</p></div>
     <div class="card"><h4>Segunda ordem</h4><p>Equação de Sylvester generalizada, correções de risco,
     simulação podada e média ergódica em forma fechada.</p></div>
-    <div class="card"><h4>Terceira ordem</h4><p>Bloco cúbico verificado na ordem 4 e termos de risco
-    na inclinação (<code>g_ssk</code>, <code>h_ssk</code>). O tensor completo do Dynare e o estado
-    estacionário estocástico estão previstos para a versão 0.7, como explica o exemplo 9.</p></div>
+    <div class="card"><h4>Terceira ordem</h4><p>Regra de decisão completa na forma do Dynare, com o
+    bloco cúbico verificado na ordem 4 e todos os blocos de inovação e de risco
+    (<code>ghxss</code>, <code>ghuss</code>). O exemplo 9 resolve com tensores esparsos e descreve o
+    estado estacionário estocástico.</p></div>
     <div class="card"><h4>Das CPOs ao <code>.mod</code></h4><p>Declare o lagrangiano, derive as
     condições, resolva, exporte para Dynare ou MacroModelling.jl.</p></div>
     <div class="card"><h4>Previsão perfeita</h4><p>Método de Newton com os períodos empilhados,
@@ -706,6 +951,11 @@ hp["autocorr"][1]["c"]                                                        # 
     identificação por posto e direções nulas.</p></div>
     <div class="card"><h4>Identificação</h4><p>Os três critérios locais do Dynare (momentos,
     espectro, sistema mínimo) e a sua busca de colinearidade, com os mesmos vereditos.</p></div>
+    <div class="card"><h4>Sensibilidade</h4><p>Mapeamento de estabilidade e filtragem de Monte
+    Carlo como no <code>+gsa</code> do Dynare, índices de Sobol como no SALib, restrições sobre IRFs e
+    momentos.</p></div>
+    <div class="card"><h4>Previsão e dados</h4><p>Avaliação recursiva de previsões com
+    Diebold–Mariano e PIT, variáveis observadas em frequência mista e gráficos dos resultados.</p></div>
     <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
     restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
@@ -899,6 +1149,66 @@ hp["autocorr"][1]["c"]                                                        # 
   ortogonaliza os choques por Cholesky e o dsgelab conta cada choque com a sua própria
   variância.</p>
 
+  <h3>Restrições de calibração comparadas com o Dynare</h3>
+  <p>Lubik e Schorfheide (2003), do <code>tests/gsa/ls2003a.mod</code> do Dynare, com as suas
+  prioris e os seus blocos <code>irf_calibration</code> e <code>moment_calibration</code>: 21
+  restrições sobre IRFs e 17 sobre momentos, com e sem <code>relative_irf</code>.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>valores na calibração, em todos os horizontes e defasagens</td><td class="num">8e-15</td><td class="ok">OK</td></tr>
+      <tr><td>valores nos 512 sorteios da priori feitos pelo Dynare</td><td class="num">1e-12</td><td class="ok">OK</td></tr>
+      <tr><td>sorteios com solução (486 de 512)</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+      <tr><td>veredito de cada restrição em cada sorteio, e as proporções</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Avaliação de previsões comparada com o Dynare e o R</h3>
+  <p>A estimação recursiva do <code>fs2000.mod</code> pelo Dynare nas nove amostras que terminam nas
+  observações 176 a 184, com previsões de 8 trimestres, e o teste de Diebold–Mariano do
+  <code>forecast::dm.test</code> do R.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>médias das previsões nas modas do Dynare</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
+      <tr><td>bandas de 90% nas modas do Dynare</td><td class="num">6e-9</td><td class="ok">OK</td></tr>
+      <tr><td>modas reestimadas pelo dsgelab, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
+      <tr><td>estatística e p-valor de Diebold–Mariano, 48 casos</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Sensibilidade global comparada com o Dynare e o SALib</h3>
+  <p>O mapeamento de estabilidade de Lubik e Schorfheide (2003), do
+  <code>tests/gsa/ls2003a.mod</code> do Dynare, em três amostras de 1024 sorteios, uma delas com
+  sorteios explosivos, e os índices de Sobol do SALib 1.6.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>classe de cada sorteio, contra o solver do Dynare (3 × 1024 sorteios)</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+      <tr><td>estatística e p-valor de Smirnov de cada parâmetro, nos grupos do Dynare</td><td class="num">3e-16</td><td class="ok">OK</td></tr>
+      <tr><td>correlações e seus p-valores dentro de cada grupo</td><td class="num">2e-13</td><td class="ok">OK</td></tr>
+      <tr><td>desenho de Sobol e índices de primeira ordem e totais, contra o SALib</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p>As listas da própria caixa de ferramentas diferem do solver dela em 37 sorteios da amostra
+  explosiva: ela ordena os autovalores pelo valor com sinal quando todos são reais, e a regra dela
+  não enxerga falhas de posto.</p>
+
+  <h3>Frequência mista e densidades dos gráficos comparadas com o Dynare</h3>
+  <p>O <code>fs2000.mod</code> com o crescimento do produto observado só como média anual, que o
+  Dynare lê por uma variável auxiliar; e as duas densidades que os gráficos da posteriori
+  desenham.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>verossimilhança com médias anuais, em dois pontos</td><td class="num">8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>variáveis suavizadas e a média anual suavizada</td><td class="num">1e-14</td><td class="ok">OK</td></tr>
+      <tr><td>moda posterior, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
+      <tr><td>densidades das nove prioris (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
+      <tr><td>densidade de núcleo da posteriori (<code>posterior_moments</code>), sorteios com repetições</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de
   <code>tests/identification</code> do Dynare, e <code>fs2000</code>, dos seus exemplos. Em
@@ -962,11 +1272,11 @@ hp["autocorr"][1]["c"]                                                        # 
       <tr><td>Perturbação de 1ª ordem</td><td>sim</td><td>sim</td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
-      <tr><td>3ª ordem com risco na inclinação</td><td>sim (<code>g_ssk</code>, <code>h_ssk</code>), sem o tensor completo do Dynare</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
+      <tr><td>3ª ordem com risco na inclinação</td><td>sim, com a regra de decisão completa do Dynare (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
       <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, até três estados)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
       <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
       <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
-      <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings e SMC, com o filtro de Kalman sobre a solução de primeira ordem)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings, SMC, HMC e NUTS, com o filtro de Kalman na primeira ordem, o de partículas até a terceira e o de inversão até a segunda)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>Calibração por alvos + identificação</td><td>sim</td><td>parcial</td><td>?</td><td>?</td><td>?</td></tr>
       <tr><td>Exportar para Dynare e MacroModelling.jl</td><td class="ok">sim</td><td>só Dynare</td><td>só Dynare</td><td>—</td><td>—</td></tr>
       <tr><td>Ordem de acurácia autoverificada</td><td>sim (ordens 2, 3, 4)</td><td>?</td><td>?</td><td>?</td><td>?</td></tr>

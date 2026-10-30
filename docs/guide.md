@@ -261,16 +261,22 @@ For an exactly linear model the residuals sit at round-off, and the report says
 
 ```python
 so = dsg.solve_second_order(sol, cov={"eps_a": 0.007})
-so.g_kk, so.h_kk        # quadratic terms
+so.g_kk, so.h_kk        # quadratic state terms
+so.h_uu, so.h_ku        # quadratic innovation and state-innovation terms
 so.g_ss, so.h_ss        # risk coefficients, which first order sets to zero
+rule = so.decision_rule()
+rule.g_u, rule.g_uu, rule.g_ku
 ```
 
-The decision rules are
+The reduced decision rules used in simulation are
 
 ```
 u_t     = F k_t + ½ g_kk[k_t, k_t] + ½ g_ss
 k_{t+1} = P k_t + ½ h_kk[k_t, k_t] + ½ h_ss + Q eps_{t+1}
 ```
+
+`decision_rule()` composes the state and jump rules for `[k'; u']` in Dynare's
+coefficient convention. Its rows follow `model.states + model.jumps`.
 
 A first-order simulation holds the mean of the states at the deterministic
 steady state by construction, so every mean effect it reports comes from the
@@ -569,9 +575,9 @@ The symbolic front end gives exact derivatives. The residual's Jacobian and
 Hessian are differentiated symbolically and used in place of finite differences
 in the first-order system, the second-order Hessian, the inner Hessian of the
 third order, and the Newton steps of `perfect_foresight` and `extended_path`.
-The steady-state root finder, the outer difference of the third-order tensor, and
-`calibrate` and `target_jacobian` (derivatives with respect to the parameters)
-still use finite differences. Exact derivatives matter at second order because a
+With `derivatives="third"`, the third-order tensor is also exact. Otherwise its
+outer difference, the steady-state root finder, `calibrate` and `target_jacobian`
+(derivatives with respect to the parameters) still use finite differences. Exact derivatives matter at second order because a
 second difference divides by the square of the step, so a finite-difference
 Hessian carries roughly half the significant digits of the residual it came from,
 and the risk corrections are among the small terms that lose those digits.
@@ -590,7 +596,16 @@ The parser applies two rules to names and dates.
   keeps its classification. A lagged innovation is refused with an explanation.
 
 `derivatives="jacobian"` skips the Hessian, which costs
-`n_eq * (2n + n_shocks)²` expressions to build, and `"none"` skips both.
+`n_eq * (2n + n_shocks)²` expressions to build, and `"none"` skips it as well.
+`derivatives="third"` adds the exact third derivative, with at most
+`n_eq * (2n + n_shocks)³` expressions. Only nonzero entries are stored. The default
+`"both"` leaves that tensor out. `solve_third_order(sparse=True)` contracts these
+entries directly and stores the cubic state coefficients by independent symmetric
+state triple. Rule evaluation and the risk terms keep that coordinate form;
+explicit `decision_rule()` composition expands it to dense arrays. Above
+`direct_limit`, the cubic Sylvester solve is matrix-free and builds its known
+term and residual in the same independent triples, expanding one equation per
+matvec.
 
 ---
 

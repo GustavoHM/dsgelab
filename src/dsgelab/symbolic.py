@@ -12,7 +12,7 @@ lags ``x(-k)`` and leads ``x(+k)``, carried by auxiliary variables it lists in
 lists.
 
 What this buys beyond convenience: the residual, its Jacobian and its Hessian
-are all differentiated EXACTLY. At second order that is not a nicety. A second
+are differentiated EXACTLY, with an opt-in exact third derivative. At second order that is not a nicety. A second
 difference divides by the square of the step, so a finite-difference Hessian
 carries roughly half the significant digits of the residual it came from, and
 the risk corrections are precisely the small terms that loses.
@@ -21,11 +21,13 @@ the risk corrections are precisely the small terms that loses.
 from __future__ import annotations
 
 import re
+from itertools import combinations_with_replacement, permutations
 from typing import Sequence
 
 import numpy as np
 
 from .model import Model, get_param
+from .tensors import SparseSecondDerivatives, SparseThirdDerivatives
 
 __all__ = ["from_equations", "parse_system", "model_from_expressions", "SymbolicError"]
 
@@ -179,8 +181,8 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                 + [float(get_param(params, p)) for p in parameters])
         return np.asarray(f_res(*vals), dtype=float).ravel()
 
-    jac_fn = hess_fn = None
-    if derivatives in ("jacobian", "both"):
+    jac_fn = hess_fn = third_fn = None
+    if derivatives in ("jacobian", "both", "third"):
         Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms))
         f_jac = sympy.lambdify(all_syms, Jm, modules="numpy")
 
@@ -196,12 +198,59 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
             raw = f_hess(*_args(x_next, x_now, e, params))
             return np.array([np.asarray(b, dtype=float).reshape(m, m) for b in raw])
 
-    elif derivatives not in ("jacobian", "none"):
-        raise SymbolicError(f"derivatives must be 'both', 'jacobian' or 'none', "
+    if derivatives == "third":
+        hessian_equations = []
+        hessian_indices = []
+        hessian_blocks = []
+        for equation, expr in enumerate(exprs):
+            for i, j in combinations_with_replacement(range(m), 2):
+                derivative = expr.diff(w_syms[i], w_syms[j])
+                if derivative == 0:
+                    continue
+                for index in sorted(set(permutations((i, j)))):
+                    hessian_equations.append(equation)
+                    hessian_indices.append(index)
+                    hessian_blocks.append(derivative)
+        hessian_equation_array: np.ndarray = np.asarray(hessian_equations, dtype=np.int64)
+        hessian_index_array: np.ndarray = np.asarray(hessian_indices, dtype=np.int64).reshape(-1, 2)
+        f_hess = sympy.lambdify(all_syms, hessian_blocks, modules="numpy")
+
+        def hess_fn(x_next, x_now, e, params, ctx=None):
+            values = np.asarray(f_hess(*_args(x_next, x_now, e, params)),
+                                dtype=float).reshape(-1)
+            return SparseSecondDerivatives(hessian_equation_array, hessian_index_array,
+                                           values, (n, m, m))
+
+    if derivatives == "third":
+        equation_indices = []
+        derivative_indices = []
+        blocks = []
+        for equation, expr in enumerate(exprs):
+            for i, j, k in combinations_with_replacement(range(m), 3):
+                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k])
+                if derivative == 0:
+                    continue
+                for index in sorted(set(permutations((i, j, k)))):
+                    equation_indices.append(equation)
+                    derivative_indices.append(index)
+                    blocks.append(derivative)
+        equation_index_array: np.ndarray = np.asarray(equation_indices, dtype=np.int64)
+        derivative_index_array: np.ndarray = np.asarray(
+            derivative_indices, dtype=np.int64).reshape(-1, 3)
+        f_third = sympy.lambdify(all_syms, blocks, modules="numpy")
+
+        def third_fn(x_next, x_now, e, params, ctx=None):
+            values = np.asarray(f_third(*_args(x_next, x_now, e, params)),
+                                dtype=float).reshape(-1)
+            return SparseThirdDerivatives(equation_index_array, derivative_index_array, values,
+                                          (n, m, m, m))
+
+    elif derivatives not in ("both", "jacobian", "none"):
+        raise SymbolicError(f"derivatives must be 'third', 'both', 'jacobian' or 'none', "
                             f"got {derivatives!r}")
 
     model = Model(states=states, jumps=jumps, shocks=shocks, equations=residual,
-                  name=name, jacobian_fn=jac_fn, hessian_fn=hess_fn)
+                  name=name, jacobian_fn=jac_fn, hessian_fn=hess_fn, third_fn=third_fn)
     model.symbolic = dict(equations=list(equations), expressions=list(exprs),
                           parameters=parameters, symbols=dict(cur=cur, nxt=nxt, eps=eps))
     return model
@@ -285,11 +334,12 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         The declared names. Anything appearing in an equation and not declared
         raises rather than becoming a free symbol -- a typo must not quietly
         turn into a new variable.
-    derivatives : {"both", "jacobian", "none"}
-        Which exact derivatives to build. The Hessian costs
+    derivatives : {"third", "both", "jacobian", "none"}
+        Which exact derivatives to build. ``"third"`` includes the Jacobian,
+        Hessian and third-derivative tensor. The Hessian costs
         ``n_eq * (2n + n_shocks)^2`` expressions to differentiate and lambdify,
-        so it is worth skipping for a large model that will only be solved to
-        first order.
+        and the third derivative costs ``n_eq * (2n + n_shocks)^3``. The default
+        ``"both"`` does not build that tensor.
     steady_state_model : sequence of str, optional
         The steady state in closed form, as assignments ``"name = expr"``
         evaluated in order -- Dynare's ``steady_state_model`` block. Intermediate

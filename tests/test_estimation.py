@@ -204,3 +204,75 @@ def test_posterior_forecast_bands_widen_with_parameter_uncertainty():
     width_f = full["upper"]["y"] - full["lower"]["y"]
     assert np.all(width_f > width_p)
     assert only_params["mean"]["y"][0] == pytest.approx(mh.mean()["mu"], abs=0.01)
+
+
+def test_estimation_problem_uses_second_order_particle_likelihood():
+    def eqs(nxt, cur, eps, p):
+        return [nxt.y - p["rho"] * cur.y - eps.e]
+    model = dsg.Model(states=["y"], jumps=[], shocks=["e"], equations=eqs, name="ar1")
+    rng = np.random.default_rng(3)
+    y = np.zeros(20)
+    for t in range(1, 20):
+        y[t] = 0.5 * y[t - 1] + 0.2 * rng.standard_normal()
+    y += 0.2 * rng.standard_normal(20)
+    pb = EstimationProblem(model, {"y": y}, params={"rho": 0.5}, observables=["y"],
+                           priors={"rho": ("normal", 0.5, 0.1)}, cov={"e": 0.2},
+                           measurement={"y": 0.2}, guess={"y": 0.0}, order=2,
+                           particles=10_000, particle_seed=4)
+    second = dsg.solve_second_order(dsg.solve(model, {"rho": 0.5}, guess={"y": 0.0}),
+                                    cov={"e": 0.2})
+    direct = dsg.particle_filter(second, {"y": y}, observables=["y"],
+                                 measurement={"y": 0.2}, particles=10_000, seed=4)
+    assert pb.log_likelihood([0.5]) == pytest.approx(direct.loglik, abs=1e-12)
+    assert np.isfinite(pb.log_posterior([0.5]))
+    assert isinstance(pb.filter([0.5]), dsg.ParticleFilterResult)
+    fit = posterior_mode(pb, x0=np.array([0.45]), options={"maxiter": 2})
+    assert fit.success
+    assert np.isfinite(fit.log_likelihood)
+    smoothed = pb.smoother([0.5])
+    assert isinstance(smoothed, dsg.ParticleSmootherResult)
+    assert smoothed.mean.shape == (20, 1)
+    third = dsg.solve_third_order(second)
+    pb3 = EstimationProblem(model, {"y": y}, params={"rho": 0.5}, observables=["y"],
+                            priors={"rho": ("normal", 0.5, 0.1)}, cov={"e": 0.2},
+                            measurement={"y": 0.2}, guess={"y": 0.0}, order=3,
+                            particles=10_000, particle_seed=4)
+    direct3 = dsg.particle_filter(third, {"y": y}, observables=["y"],
+                                  measurement={"y": 0.2}, particles=10_000, seed=4)
+    assert pb3.log_likelihood([0.5]) == pytest.approx(direct3.loglik, abs=1e-12)
+    assert np.isfinite(pb3.log_posterior([0.5]))
+    assert isinstance(pb3.filter([0.5]), dsg.ParticleFilterResult)
+    fit3 = posterior_mode(pb3, x0=np.array([0.45]), options={"maxiter": 2})
+    assert fit3.success
+    smoothed3 = pb3.smoother([0.5])
+    assert isinstance(smoothed3, dsg.ParticleSmootherResult)
+    assert smoothed3.mean.shape == (20, 1)
+    with pytest.raises(ValueError, match="third order requires"):
+        EstimationProblem(model, {"y": y}, params={"rho": 0.5}, observables=["y"],
+                          priors={"rho": ("normal", 0.5, 0.1)}, order=3,
+                          nonlinear_filter="inversion")
+
+
+def test_estimation_problem_uses_second_order_inversion_likelihood():
+    def eqs(nxt, cur, eps, p):
+        return [nxt.y - p["rho"] * cur.y - eps.e]
+    model = dsg.Model(states=["y"], jumps=[], shocks=["e"], equations=eqs, name="ar1")
+    rng = np.random.default_rng(4)
+    y = np.zeros(8)
+    for t in range(1, 8):
+        y[t] = 0.5 * y[t - 1] + 0.2 * rng.standard_normal()
+    pb = EstimationProblem(model, {"y": y}, params={"rho": 0.5}, observables=["y"],
+                           priors={"rho": ("normal", 0.5, 0.1)}, cov={"e": 0.2},
+                           guess={"y": 0.0}, order=2, nonlinear_filter="inversion")
+    second = dsg.solve_second_order(dsg.solve(model, {"rho": 0.5}, guess={"y": 0.0}),
+                                    cov={"e": 0.2})
+    direct = dsg.inversion_filter(second, {"y": y}, observables=["y"])
+    assert pb.log_likelihood([0.5]) == pytest.approx(direct.loglik, abs=1e-12)
+    assert isinstance(pb.filter([0.5]), dsg.InversionFilterResult)
+    smoothed = pb.smoother([0.5])
+    assert isinstance(smoothed, dsg.InversionFilterResult)
+    np.testing.assert_allclose(smoothed.states, direct.states)
+    np.testing.assert_allclose(smoothed.shocks, direct.shocks)
+    with pytest.raises(ValueError, match="particle.*or.*inversion"):
+        EstimationProblem(model, {"y": y}, params={"rho": 0.5}, observables=["y"],
+                          priors={"rho": ("normal", 0.5, 0.1)}, nonlinear_filter="other")

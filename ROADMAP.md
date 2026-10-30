@@ -44,6 +44,18 @@ tests for optimal policy, perfect foresight, estimation, OccBin, the extended pa
 and diagnostics. The calibration equations are validated against MacroModelling.jl. Details are in
 [`validation/`](validation/README.md).
 
+Version 0.7.0 brings milestones 0.6 and 0.7. At third order the decision rule is complete in
+Dynare's form, with every cubic and risk block, the stochastic steady state and sparse tensors for
+large models, and the solution has analytic derivatives with respect to the parameters at all three
+orders. Estimation gains HMC and NUTS on the gradient of the Kalman likelihood, and particle and
+inversion filters at second and third order. For identification and data there are local
+identification, GMM, SMM and IRF matching, local projections, filtered moments, calibration
+restrictions on IRFs and moments, global sensitivity (stability mapping, Monte Carlo filtering and
+Sobol indices), out-of-sample forecast evaluation, mixed-frequency data and plots. Each is
+validated against an independent reference: Dynare for most, SALib for the Sobol indices, R's
+`forecast::dm.test` for the Diebold–Mariano test, and the population result of Plagborg-Møller and
+Wolf (2021) for the local projections. The details are in [`validation/`](validation/README.md).
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard
@@ -238,31 +250,135 @@ warning that lasts at least one minor version. The public API is what is in `__a
   the same verdicts in all three criteria and derivatives within 2e-8 (18 October 2026).
   Dynare's repetition over draws from the prior (`prior_mc`), its identification strength
   from the information matrix and its plots are left out.
-- [ ] **Global sensitivity**, covering the stability and determinacy region in the parameter space
-  and Monte Carlo filtering. The reference is Dynare's `+gsa`.
-- [ ] **Method of moments** (GMM, SMM and IRF matching). Validation against Dynare's `+mom`.
-- [ ] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`).
+- [x] **Global sensitivity**, covering the stability and determinacy region in the parameter space
+  and Monte Carlo filtering. The reference is Dynare's `+gsa`. First-order and total Sobol
+  indices for impulse responses and moments, validated against SALib. The distributions share
+  their interface with `cgelab.sensitivity` (`Uniform`, `Normal`, `Triangular`), without either
+  package importing the other. `stability_map` sorts draws into determinate, indeterminate,
+  explosive and unsolved; `monte_carlo_filtering` (also `StabilityMap.filtering` and
+  `RestrictionSample.filtering`) gives the Smirnov test of each parameter and the correlations
+  inside each group; `sobol` and `solution_outputs` give the indices of IRFs and moments.
+  Validated on Dynare 7.2's `tests/gsa/ls2003a.mod` over three samples of 1024 draws
+  (30 October 2026): every draw has the class Dynare's solver gives it, and on Dynare's groups
+  the Smirnov statistics agree exactly, their p-values within `3.3e-16` and the correlations'
+  within `1.7e-13`. The sensitivity toolbox's own lists differ in 37 draws of the explosive
+  sample: in 36 because it sorts the eigenvalues by signed value when they are all real, and in
+  one rank failure that its eigenvalue rule cannot see. By modulus, its rule gives `dsgelab`'s
+  classes everywhere but at the rank failures. Sobol's design and
+  indices agree with SALib 1.6 within `8.9e-16` on the Ishigami function and on IRFs and moments
+  of the same model. Dynare's reduced-form mapping (`redform`), RMSE filtering (`rmse`) and
+  Morris screening are left out.
+- [x] **Method of moments** (GMM, SMM and IRF matching). GMM and SMM work at first and
+  pruned second order; IRF matching works at first order. Validated against Dynare 7.2's `+mom`
+  in eight first-order GMM/SMM cases and two IRF-matching cases (24 October 2026). Second-order
+  means and autocovariances agree on `example1` and `example2` to `1e-14`. The imported models,
+  including their auxiliary variables, agree to `2.93e-8` and `1.59e-6` in means and to
+  `6.08e-9` and `2.87e-8` in second moments.
+  IRF matching is frequentist and accepts external targets, including local projections or
+  event studies, with their joint covariance. `local_projection` supplies observed-shock IRFs
+  and a joint HAC covariance; on simulated AR(1) data it recovers the model's IRFs in population
+  (Plagborg-Møller and Wolf, 2021). Bayesian IRF matching and MATLAB transformation files are
+  left out; Python transformations are accepted explicitly.
+- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window,
+  RMSE against a random walk, the Diebold–Mariano test, and the probability integral transform
+  and coverage of the predictive density. The references are the forecast comparisons of Smets
+  and Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR waits
+  on the BVAR of 0.9. `forecast_evaluation` re-estimates at each origin over an expanding or a
+  rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random walk's,
+  `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and the
+  log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
+  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands
+  within `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as
+  Dynare's and lies within `0.003` posterior standard deviations of it. The test agrees with R's
+  `forecast::dm.test` within `3.1e-15` in 48 cases. The predictive density is conditional on the
+  point estimate, as Dynare's after the mode; parameter uncertainty at every origin is left out.
+- [x] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`),
+  with `check_restrictions` at one point and `sample_restrictions` over draws from the prior, and
+  the `.mod` blocks read by `from_mod`. Validated against Dynare 7.2 on its
+  `tests/gsa/ls2003a.mod`, with and without `relative_irf` (30 October 2026): at the calibration
+  and on the 512 prior draws of its sensitivity toolbox, the values agree within `1.3e-12`, the
+  same draws solve, and every restriction has the same verdict on every draw. Like Dynare's, the
+  restrictions work at first order. The Monte Carlo filtering of the parameters behind each
+  restriction belongs to the global sensitivity item above.
 - [x] **Filtered theoretical moments** (Hodrick–Prescott and band-pass), with `hp_filter` and
   `bandpass` in `moments`, `covariance` and `variance_decomposition`. Validated against Dynare's
   `stoch_simul` on five models, one with a unit root (24 October 2026).
-- [ ] **Mixed-frequency data**.
-- [ ] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
-  distributions.
+- [x] **Mixed-frequency data**. `aggregation={name: ("mean" | "sum", every)}` in `state_space` and
+  `EstimationProblem` stacks the lags of the state, so that an observable can be the mean or the
+  sum of a variable over the last `every` periods, with `low_frequency` to place the observations.
+  Filter, smoother, likelihood gradient, decompositions and forecasts work on the stacked state.
+  Validated against Dynare 7.2 on `fs2000.mod` with output growth observed only as its annual
+  mean, written in Dynare as the auxiliary variable a user would add (30 October 2026): the
+  likelihood at two points agrees within `8.0e-13`, the smoothed variables within `1.3e-14`, and
+  the posterior mode has a kernel at least as high as Dynare's, within `0.003` posterior standard
+  deviations. Aggregates of growth rates of levels (the annual growth of a quarterly level) and
+  the nonlinear filters are left out.
+- [x] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
+  distributions: `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and
+  `plot_posterior`, returning matplotlib figures, with matplotlib as an optional dependency
+  (`dsgelab[plot]`). The two densities the posterior plot draws are Dynare's:
+  `prior_density` agrees with `draw_prior_density` on the nine priors of `fs2000` within
+  `1.9e-12`, and `posterior_density` with the kernel estimate of `posterior_moments`, bandwidth
+  corrected for repeated draws, within `8.9e-16` (30 October 2026). The test suite checks that
+  each figure draws the numbers it is given. MCMC diagnostic plots and Dynare's identification
+  and sensitivity plots are left out.
 
 ### 0.7 — complete third order and derivatives
 
-- [ ] **Perturbation core in Dynare's decision-rule form**, with the innovation as an
-  argument (`g_u`, `g_uu`, `g_ku`). The risk slope (`g_ssk` and `h_ssk`) is already implemented,
-  and the tensor with the innovation in every monomial is still missing.
-- [ ] **Stochastic steady state** and analytic generalised IRFs. The test is the round trip
-  against Dynare at `order=3`.
-- [ ] **Third order at the size of the applied model**, with sparse tensors. In the author's
-  unpublished applied model, with 71 variables, `m = 2n + n_ε` is close to 150 and the dense tensor
-  does not fit.
-- [ ] **Derivatives of the solution with respect to the parameters**, by automatic differentiation,
-  and **gradient-based estimation** (HMC/NUTS).
-- [ ] **Nonlinear filters** (the inversion filter and the particle filter), for estimation at
-  second and third order. MacroModelling.jl serves as the reference.
+- [x] **Perturbation core in Dynare's decision-rule form**, with the innovation as an
+  argument (`g_u`, `g_uu`, `g_ku`). The risk slope (`g_ssk` and `h_ssk`) is already implemented.
+  The second-order innovation blocks and the composed `DecisionRule` are validated against Dynare
+  7.2 on `example1` and `example2` (24 October 2026). The cubic blocks `h_uuu`, `h_kuu` and
+  `h_kku`, with their compositions, also agree with `ghuuu` and every row of `ghxuu`, `ghxxu` and
+  `ghxxx`. The full second-order risk constant also agrees with `ghs2`. `ghxss` and `ghuss` agree
+  in every row, with errors below `1.5e-16` on both models.
+- [x] **Stochastic steady state** and analytic generalised IRFs. Conditional IRFs of the full
+  pruned rule are implemented at third order, including `ghxss`, `ghuss` and the cubic innovation
+  blocks, with unit tests for the recursion. Generalized IRFs use stochastic paths with `drop=100`
+  and agree with Dynare on `example1` and `example2`. `stochastic_steady_state` solves the fixed
+  point of the full unpruned rule and is distinct from the ergodic mean.
+- [x] **Third order at the size of the applied model**, with sparse tensors. The symbolic frontend
+  supplies exact second and third derivatives with `derivatives="third"`, stored in coordinate form.
+  `solve_third_order(sparse=True)` also stores the cubic state coefficients by independent
+  symmetric triple and contracts them directly in rule evaluation and risk terms. The iterative
+  known term and residual use canonical coordinates, with one equation expanded per matvec and an
+  optimized contraction path. A full nonlinear synthetic pipeline with 71 variables, 35 states and
+  five shocks has a maximum residual of `3.05e-20` and a peak RSS of 321 MB. Explicit decision-rule
+  composition still expands dense arrays. The unpublished applied model itself is not public.
+- [x] **Derivatives of the solution with respect to the parameters**, by implicit and numerical
+  differentiation, and **gradient-based estimation** (HMC/NUTS). `solution_jacobian` computes
+  derivatives of `P`, `F`, `Q` and the steady state. General QZ solutions differentiate the implicit
+  saddle-path conditions without another QZ decomposition at perturbed parameters; purely backward
+  solutions use the inverse-system formulas. `second_order_jacobian` also computes `g_k`, `g_u`,
+  `g_kk`, `g_uu`, `g_ku` and `g_s2`, for model parameters, shock standard deviations and correlations.
+  `third_order_jacobian` adds `g_kkk`, `g_kku`, `g_kuu` and `g_uuu`. All are validated against Dynare's
+  analytical derivatives; second-order relative errors stay below `0.552%`, and third-order errors
+  stay below `0.159%`. Exact model derivatives reduce the cubic decision-rule errors below `3e-13`
+  on `example1` and `2e-14` on `example2`. `log_likelihood_gradient` differentiates the first-order
+  Kalman likelihood through its recursion, checked against finite differences for model parameters,
+  shock standard deviations, correlations, measurement errors, missing data, diffuse starts, log
+  transforms and models with jumps. `hmc` uses the posterior gradient with leapfrog integration,
+  a mode-based mass matrix and dual-averaging step adaptation during burn-in. `nuts` adds
+  multinomial trajectory sampling, the generalised U-turn criterion and divergence diagnostics.
+  Both match the exact posterior of an AR(1) coefficient and a long Metropolis–Hastings run in the
+  test suite. `posterior_mode` and `maximum_likelihood` use these
+  gradients in BFGS.
+- [x] **Nonlinear filters** for estimation at second and third order. The bootstrap particle
+  filter works at first, pruned second and pruned third order, with systematic resampling, and
+  matches Dynare's likelihood on the AR(1) reference within `0.006` (24 October 2026).
+  `EstimationProblem(order=2)` exposes the same likelihood to posterior mode and samplers, with
+  common random draws. The inversion filter also works at first and pruned second order and
+  reproduces Dynare OccBin's shocks, Jacobian and likelihood exactly on the AR(1).
+  `EstimationProblem(nonlinear_filter=)` selects either route. Recovered shocks also agree with
+  MacroModelling.jl within `0.006` on a nonlinear RBC; its likelihood convention differs, so only
+  the shocks are compared. `particle_smoother` works with `store=True` at all three orders.
+  Full-rank first-order transitions use the Gaussian backward recursion; nonlinear and
+  rank-deficient transitions use the stored particle ancestry, whose effective sample size can
+  degenerate over long histories. Inversion smoothing returns the filter's paths without a
+  backward pass: they are exact when the data identify every shock, and filtered otherwise. The
+  pruned third-order particle filter uses the full rule, including `ghxss` and `ghuss`, and
+  reproduces the Kalman likelihood on a linear model.
+  `EstimationProblem(order=3)` exposes the likelihood and smoothing.
 
 ### 0.8 — global methods
 
