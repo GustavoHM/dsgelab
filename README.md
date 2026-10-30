@@ -108,11 +108,17 @@ examples in English and Portuguese.
 | Kalman filter (exact diffuse start) and smoother; measurement error; missing data | `state_space`, `kalman_filter`, `kalman_smoother` |
 | Bootstrap particle filter and smoother up to pruned third order; inversion filter up to pruned second order | `particle_filter`, `particle_smoother`, `inversion_filter`, `EstimationProblem(order=2)` |
 | Bayesian estimation: mode, Laplace, Metropolis-Hastings, SMC, R-hat, ESS, marginal likelihood; maximum likelihood | `EstimationProblem`, `posterior_mode`, `metropolis_hastings`, `smc` |
+| Gradient-based sampling (HMC, NUTS) on the analytic gradient of the Kalman likelihood | `hmc`, `nuts`, `log_likelihood_gradient` |
 | Local identification at a point (Iskrev; Komunjer and Ng; Qu and Tkachenko) and collinearity analysis, validated against Dynare's `identification` | `identification`, `ModFile.identification` |
 | GMM and SMM at first and pruned second order; frequentist IRF matching at first order | `method_of_moments`, `irf_matching`, the `ModFile` methods |
 | Observed-shock local projections with joint HAC covariance across variables and horizons | `local_projection` |
 | Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
+| Out-of-sample forecast evaluation: recursive or rolling re-estimation, RMSE against the random walk, Diebold–Mariano, PIT, coverage | `forecast_evaluation`, `diebold_mariano` |
+| Mixed-frequency observables (means or sums over several periods) | `state_space(aggregation=)`, `EstimationProblem(aggregation=)`, `low_frequency` |
+| Calibration restrictions on IRFs and moments, at a point and over the prior | `check_restrictions`, `sample_restrictions` |
+| Global sensitivity: stability mapping, Monte Carlo filtering, Sobol indices | `stability_map`, `monte_carlo_filtering`, `sobol` |
+| Plots of impulse responses, paths, decompositions, forecasts and posteriors (matplotlib, optional) | `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast`, `plot_posterior` |
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
 | Extended path, deterministic and stochastic (sparse or full tree, hybrid correction) | `extended_path` |

@@ -48,6 +48,19 @@ política ótima, previsão perfeita, estimação, OccBin, trajetória estendida
 e diagnóstico. As equações de calibração são validadas contra o MacroModelling.jl. Os detalhes
 estão em [`validation/`](validation/README.md).
 
+A versão 0.7.0 traz os marcos 0.6 e 0.7. Em terceira ordem, a regra de decisão está completa na
+forma do Dynare, com todos os blocos cúbicos e de risco, o estado estacionário estocástico e tensores
+esparsos para modelos grandes, e a solução tem derivadas analíticas em relação aos parâmetros nas
+três ordens. A estimação ganha HMC e NUTS sobre o gradiente da verossimilhança de Kalman, e filtros
+de partículas e de inversão em segunda e terceira ordem. Para identificação e dados, há
+identificação local, GMM, SMM e ajuste de IRF, projeções locais, momentos filtrados, restrições de
+calibração sobre IRFs e momentos, sensibilidade global (mapeamento de estabilidade, filtragem de
+Monte Carlo e índices de Sobol), avaliação de previsões fora da amostra, dados de frequência mista
+e gráficos. Cada um é validado contra uma referência independente: o Dynare na maioria dos casos, o
+SALib para os índices de Sobol, o `forecast::dm.test` do R para o teste de Diebold–Mariano e o
+resultado populacional de Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes
+estão em [`validation/`](validation/README.md).
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada

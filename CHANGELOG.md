@@ -5,8 +5,10 @@ before 1.0, a minor version may add to the API and a patch version only fixes bu
 
 ## Unreleased
 
-Work toward milestone 0.6 (identification, moments and data) and milestone 0.7 (complete third
-order and derivatives).
+## 0.7.0 — 2026-10-30
+
+The roadmap's milestones 0.6 (identification, moments and data) and 0.7 (complete third order and
+derivatives), released together.
 
 ### Fixed
 

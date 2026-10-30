@@ -44,6 +44,18 @@ tests for optimal policy, perfect foresight, estimation, OccBin, the extended pa
 and diagnostics. The calibration equations are validated against MacroModelling.jl. Details are in
 [`validation/`](validation/README.md).
 
+Version 0.7.0 brings milestones 0.6 and 0.7. At third order the decision rule is complete in
+Dynare's form, with every cubic and risk block, the stochastic steady state and sparse tensors for
+large models, and the solution has analytic derivatives with respect to the parameters at all three
+orders. Estimation gains HMC and NUTS on the gradient of the Kalman likelihood, and particle and
+inversion filters at second and third order. For identification and data there are local
+identification, GMM, SMM and IRF matching, local projections, filtered moments, calibration
+restrictions on IRFs and moments, global sensitivity (stability mapping, Monte Carlo filtering and
+Sobol indices), out-of-sample forecast evaluation, mixed-frequency data and plots. Each is
+validated against an independent reference: Dynare for most, SALib for the Sobol indices, R's
+`forecast::dm.test` for the Diebold–Mariano test, and the population result of Plagborg-Møller and
+Wolf (2021) for the local projections. The details are in [`validation/`](validation/README.md).
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard
