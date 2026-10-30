@@ -93,6 +93,8 @@ step "Dynare: IRF matching" bash run_irf.sh
 step "compare_irf.py"       "$PYTHON" compare_irf.py
 step "Dynare: filtered moments" bash run_filtered.sh
 step "compare_filtered.py"  "$PYTHON" compare_filtered.py
+step "Dynare: calibration restrictions" bash run_restrictions.sh
+step "compare_restrictions.py" "$PYTHON" compare_restrictions.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

@@ -272,7 +272,14 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   probabilidade e a cobertura da densidade preditiva. As referências são as comparações de
   previsão de Smets e Wouters (2007) e de Del Negro e Schorfheide (2013). A comparação com um
   BVAR espera o BVAR da 0.9.
-- [ ] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`).
+- [x] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`),
+  com `check_restrictions` num ponto e `sample_restrictions` em sorteios da priori, e os blocos do
+  `.mod` lidos por `from_mod`. Validação contra o Dynare 7.2 no seu `tests/gsa/ls2003a.mod`, com e
+  sem `relative_irf` (30 de outubro de 2026): na calibração e nos 512 sorteios da priori da sua
+  caixa de ferramentas de sensibilidade, os valores concordam até `1.3e-12`, os mesmos sorteios
+  têm solução, e cada restrição tem o mesmo veredito em cada sorteio. Como as do Dynare, as
+  restrições funcionam em primeira ordem. A filtragem de Monte Carlo dos parâmetros por trás de
+  cada restrição pertence ao item de sensibilidade global, acima.
 - [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
   `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
   `stoch_simul` do Dynare em cinco modelos, um deles com raiz unitária (24 de outubro de 2026).

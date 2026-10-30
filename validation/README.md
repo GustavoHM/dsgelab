@@ -832,6 +832,37 @@ the two programs attribute the covariance differently: Dynare orthogonalises the
 Cholesky factor, in the order of declaration, and `dsgelab` counts each shock with its own
 variance. The numbers come from a run on 24 October 2026, with Dynare 7.2 and Octave 11.3.0.
 
+## Calibration restrictions
+
+```bash
+bash fetch.sh
+bash run_restrictions.sh          # Dynare's tests/gsa/ls2003a.mod, at the calibration and over the prior
+python compare_restrictions.py
+```
+
+```
+  ls2003_rel  21 IRF + 17 moment restrictions   calibration: values 8.1e-15, verdicts same   512 draws (486 solved, same draws): values 1.3e-12, verdicts differ in 0   OK
+              shares: 80.5% y(1:4), e_ys, 67.9% the other IRF restrictions together, 2.1% all
+  ls2003_abs  21 IRF + 17 moment restrictions   calibration: values 1.6e-15, verdicts same   512 draws (486 solved, same draws): values 4.1e-14, verdicts differ in 0   OK
+              shares: 11.3% y(1:4), e_ys, 97.1% the other IRF restrictions together, 0.6% all
+```
+
+The model is Lubik and Schorfheide (2003), from Dynare's `tests/gsa/ls2003a.mod`, with its priors
+and its `irf_calibration` and `moment_calibration` blocks. `restrictions/prepare.py` writes two
+cases: `ls2003_rel` keeps the active `irf_calibration(relative_irf)` block, and `ls2003_abs` uses
+the block the file leaves commented, in absolute units. Both restore the two commented lines of the
+moment block, the variance of `y_obs` and its cross-correlations with `pie_obs` at leads and lags
+`-4:4`, so that a variance and a range of lags are covered. The include is inlined and the `@#for`
+loops are expanded, because `from_mod` reads neither, and `dsgelab` reads the same driver as
+Dynare. At the calibration, the reference is `endogenous_prior_restrictions`. Over the prior, it is
+the `map_calibration` step of `sensitivity(prior_range=0, Nsam=512)`, and `dsgelab` evaluates the
+restrictions at the 512 parameter vectors Dynare drew. Both programs solve the same 486 draws. On
+those draws the restriction values agree at every horizon and lag, each restriction's verdict
+agrees on every draw, and the shares are those Dynare prints. A restriction over a range of
+horizons or lags holds when any one of them is inside the bound. This is the logical OR described
+in Dynare's manual, and `dsgelab` applies the same rule. The numbers come from a run on 30 October
+2026, with Dynare 7.2 and Octave 11.3.0.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

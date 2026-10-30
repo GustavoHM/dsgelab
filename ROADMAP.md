@@ -259,7 +259,14 @@ warning that lasts at least one minor version. The public API is what is in `__a
   and coverage of the predictive density. The references are the forecast comparisons of Smets
   and Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR waits
   on the BVAR of 0.9.
-- [ ] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`).
+- [x] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`),
+  with `check_restrictions` at one point and `sample_restrictions` over draws from the prior, and
+  the `.mod` blocks read by `from_mod`. Validated against Dynare 7.2 on its
+  `tests/gsa/ls2003a.mod`, with and without `relative_irf` (30 October 2026): at the calibration
+  and on the 512 prior draws of its sensitivity toolbox, the values agree within `1.3e-12`, the
+  same draws solve, and every restriction has the same verdict on every draw. Like Dynare's, the
+  restrictions work at first order. The Monte Carlo filtering of the parameters behind each
+  restriction belongs to the global sensitivity item above.
 - [x] **Filtered theoretical moments** (Hodrick–Prescott and band-pass), with `hp_filter` and
   `bandpass` in `moments`, `covariance` and `variance_decomposition`. Validated against Dynare's
   `stoch_simul` on five models, one with a unit root (24 October 2026).

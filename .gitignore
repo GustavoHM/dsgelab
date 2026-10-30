@@ -53,6 +53,8 @@ validation/out_inversion/
 validation/work_inversion/
 validation/out_filtered/
 validation/work_filtered/
+validation/out_restrictions/
+validation/work_restrictions/
 validation/mmb/mods/
 validation/mmb/out/
 validation/mmb/work/

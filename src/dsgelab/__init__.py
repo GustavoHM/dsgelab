@@ -69,6 +69,8 @@ from .inversion import InversionFilterResult, inversion_filter, inversion_smooth
 from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
+                           sample_restrictions)
 from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
@@ -104,6 +106,8 @@ __all__ = [
     "identification", "Identification", "IdentificationCheck",
     "method_of_moments", "MomentsResult", "irf_matching", "IRFMatchingResult",
     "local_projection", "LocalProjectionResult",
+    "check_restrictions", "sample_restrictions", "Restriction", "RestrictionCheck",
+    "RestrictionSample",
     "check_identity", "check_slack", "blanchard_kahn_report", "compare_irfs",
     "steady_state_invariance", "diagnose",
     "ramsey_model", "ramsey_steady_state", "ramsey_multipliers", "RamseyError",

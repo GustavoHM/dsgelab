@@ -772,6 +772,39 @@ True</code></pre>
   quadratura, e com uma cadeia longa de Metropolis–Hastings. Eles só funcionam em primeira ordem,
   porque precisam do gradiente da verossimilhança de Kalman. A recursão que o calcula custa cerca
   de cinco vezes uma avaliação da verossimilhança, e por isso o exemplo usa 100 observações.</p>
+  <h3>24. Restrições sobre respostas a impulso e momentos</h3>
+<pre><code>from dsgelab.examples import nk as nk_example
+m_nk3, p_nk3, g_nk3 = nk_example.build()
+s_nk3 = dsg.solve(m_nk3, p_nk3, guess=g_nk3)
+cov_nk3 = {"eps_a": 0.01, "eps_v": 0.0025}
+irf_r = [("pi", "eps_v", "1:4", "-"),               # a inflação cai no primeiro ano
+         ("x", "eps_v", 1, (-0.01, -0.002))]        # o hiato cai de 0,2 a 1 ponto no impacto
+mom_r = [("x", "pi", 0, "+"),                       # hiato e inflação andam juntos
+         ("pi", "pi", 1, (0.5, 0.88))]              # primeira autocorrelação da inflação
+dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds
+priors_r = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05)}
+draws_r = dsg.sample_restrictions(m_nk3, p_nk3, priors_r, irf=irf_r, moments=mom_r,
+                                  cov=cov_nk3, guess=g_nk3, draws=500, seed=0)
+print(draws_r.summary())</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds</span>
+True
+Calibration restrictions over 500 draws, 429 solved
+    share  kind   restriction                      bound
+   100.0%  irf    pi(1:4), eps_v                       -
+    98.4%  irf    x(1), eps_v            [-0.01, -0.002]
+   100.0%  moment x, pi                                +
+    51.0%  moment pi, pi(1)                  [0.5, 0.88]
+    49.4%  all together</code></pre>
+  <p><code>check_restrictions</code> e <code>sample_restrictions</code> fazem o que fazem os blocos
+  <code>irf_calibration</code> e <code>moment_calibration</code> do Dynare. Eles conferem um sinal
+  ou um intervalo para uma resposta a impulso em horizontes dados, ou para uma variância, uma
+  correlação ou uma autocorrelação em defasagens dadas, primeiro num ponto do espaço de parâmetros
+  e depois em sorteios da priori. Os valores são desvios absolutos, o impulso é de um desvio-padrão
+  do choque, e uma restrição sobre vários horizontes vale quando um deles está dentro do limite,
+  como no Dynare. As proporções são calculadas sobre os sorteios com solução determinada. Nesta
+  priori, os 71 sorteios deixados de fora têm <code>phi_pi</code> abaixo de 1.
+  <code>ModFile.check_restrictions</code> e <code>ModFile.sample_restrictions</code> leem os dois
+  blocos e as prioris de um <code>.mod</code>.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -988,6 +1021,20 @@ True</code></pre>
   <code>example1</code>, a decomposição difere em 5 pontos percentuais, porque o Dynare
   ortogonaliza os choques por Cholesky e o dsgelab conta cada choque com a sua própria
   variância.</p>
+
+  <h3>Restrições de calibração comparadas com o Dynare</h3>
+  <p>Lubik e Schorfheide (2003), do <code>tests/gsa/ls2003a.mod</code> do Dynare, com as suas
+  prioris e os seus blocos <code>irf_calibration</code> e <code>moment_calibration</code>: 21
+  restrições sobre IRFs e 17 sobre momentos, com e sem <code>relative_irf</code>.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>valores na calibração, em todos os horizontes e defasagens</td><td class="num">8e-15</td><td class="ok">OK</td></tr>
+      <tr><td>valores nos 512 sorteios da priori feitos pelo Dynare</td><td class="num">1e-12</td><td class="ok">OK</td></tr>
+      <tr><td>sorteios com solução (486 de 512)</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+      <tr><td>veredito de cada restrição em cada sorteio, e as proporções</td><td class="num">iguais</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
 
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de

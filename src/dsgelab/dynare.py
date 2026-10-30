@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from .identification import Identification
     from .irf_matching import IRFMatchingResult
     from .moment_estimation import MomentsResult
+    from .restrictions import RestrictionCheck, RestrictionSample
     from .kalman import Data
     from .occbin import OccbinModel, OccbinResult
 
@@ -469,6 +470,57 @@ def _read_irf_blocks(body, weight_body, sympy, env, funcs):
     return entries, crosses
 
 
+_CALIB_LINE = re.compile(r"^(?P<head>.*?),\s*(?P<bound>[+-]|\[(?P<interval>.*)\])\s*$", re.S)
+_CALIB_NAME = re.compile(r"^([A-Za-z_]\w*)\s*(?:\(\s*([+-]?\d+)\s*(?::\s*([+-]?\d+)\s*)?\))?$")
+
+
+def _read_calibration_blocks(irf_body, moment_body, sympy, env, funcs, endo, exo):
+    """Translate irf_calibration and moment_calibration into restriction tuples."""
+    def dated(text, block):
+        m = _CALIB_NAME.match(text.strip())
+        if not m:
+            raise DynareImportError(f"{block}: cannot read {text!r}")
+        if m.group(2) is None:
+            return m.group(1), None
+        a = int(m.group(2))
+        b = int(m.group(3)) if m.group(3) is not None else a
+        return m.group(1), list(range(a, b + 1))
+
+    def line(st, block):
+        m = _CALIB_LINE.match(st)
+        if not m:
+            raise DynareImportError(f"{block}: cannot read {st!r}")
+        head = [x.strip() for x in m.group("head").split(",")]
+        if m.group("interval") is not None:
+            parts = [x.strip() for x in m.group("interval").split(",")]
+            if len(parts) != 2:
+                raise DynareImportError(f"{block}: an interval is [lower, upper] in {st!r}")
+            bound = tuple(_numeric(sympy, x, env, funcs) for x in parts)
+        else:
+            bound = m.group("bound")
+        if len(head) != 2:
+            raise DynareImportError(f"{block}: cannot read {st!r}")
+        return head, bound
+
+    irf, moments = [], []
+    for st in irf_body:
+        (first, shock), bound = line(st, "irf_calibration")
+        v, periods = dated(first, "irf_calibration")
+        if periods is None or v not in endo or shock not in exo:
+            raise DynareImportError(f"irf_calibration: write 'variable(horizons), shock, "
+                                    f"bound' with declared names, not {st!r}")
+        irf.append((v, shock, periods, bound))
+    for st in moment_body:
+        (first, second), bound = line(st, "moment_calibration")
+        v1, lead = dated(first, "moment_calibration")
+        v2, lags = dated(second, "moment_calibration")
+        if lead is not None or v1 not in endo or v2 not in endo:
+            raise DynareImportError(f"moment_calibration: write 'variable, variable(lags), "
+                                    f"bound' with declared names, not {st!r}")
+        moments.append((v1, v2, lags or [0], bound))
+    return irf, moments
+
+
 # -------------------------------------------------------------------- result
 @dataclass
 class ModFile:
@@ -523,6 +575,9 @@ class ModFile:
     matched_irfs: list = field(default_factory=list)
     matched_irfs_weights: list = field(default_factory=list)
     mom_options: dict = field(default_factory=dict)
+    irf_calibration: list = field(default_factory=list)
+    moment_calibration: list = field(default_factory=list)
+    relative_irf: bool = False
     program: dict = field(default_factory=dict, repr=False)
 
     def full_guess(self, values: Mapping[str, float] | None = None) -> dict:
@@ -873,6 +928,73 @@ class ModFile:
         kw.update(kwargs)
         return irf_matching(self.model, targets, **kw)
 
+    def _shock_cov(self) -> np.ndarray:
+        """The file's shock covariance, in ``model.shocks`` order."""
+        cov = np.zeros((len(self.model.shocks),) * 2)
+        order = [self.model.shocks.index(e) for e in self.exogenous]
+        cov[np.ix_(order, order)] = np.asarray(self.cov, dtype=float)
+        return cov
+
+    def _restriction_kwargs(self, kwargs: Mapping[str, Any]) -> dict:
+        kw: dict[str, Any] = dict(irf=list(self.irf_calibration),
+                                  moments=list(self.moment_calibration),
+                                  relative_irf=self.relative_irf)
+        kw.update(kwargs)
+        if not kw["irf"] and not kw["moments"]:
+            raise DynareImportError("no irf_calibration or moment_calibration block: "
+                                    "pass irf= or moments=")
+        return kw
+
+    def check_restrictions(self, point: str | Mapping[str, float] = "calibration", *,
+                           qz_criterium: float | None = None,
+                           **kwargs: Any) -> RestrictionCheck:
+        """:func:`dsgelab.check_restrictions` of this file's calibration blocks.
+
+        The restrictions come from ``irf_calibration`` and ``moment_calibration``,
+        with ``relative_irf`` if the block sets it. ``point`` is ``"calibration"``
+        (the values the file assigns, the default), ``"prior_mean"``, or a mapping
+        from the ``estimated_params`` names to values, which may leave some out.
+        ``kwargs`` go to :func:`~dsgelab.check_restrictions` and override anything.
+        """
+        from .estimation import unpack_point
+        from .restrictions import check_restrictions
+        from .solve import solve
+
+        kw = self._restriction_kwargs(kwargs)
+        values: dict[str, float] = {}
+        if point == "prior_mean":
+            values = {e["name"]: e["prior"].mean for e in self.estimated
+                      if e["prior"] is not None}
+        elif isinstance(point, Mapping):
+            values = {k: float(v) for k, v in point.items()}
+        elif point != "calibration":
+            raise ValueError(f"point must be 'calibration', 'prior_mean' or a mapping, "
+                             f"not {point!r}")
+        p, S, _ = unpack_point(self.model, dict(self.params), self._shock_cov(), {},
+                               list(values), list(values.values()))
+        sol = solve(self.model, p, steady=self.steady_state(params=p),
+                    qz_criterium=qz_criterium)
+        kw.setdefault("cov", S)
+        return check_restrictions(sol, **kw)
+
+    def sample_restrictions(self, draws: int = 1000, **kwargs: Any) -> RestrictionSample:
+        """:func:`dsgelab.sample_restrictions` of this file's calibration blocks.
+
+        The draws come from the priors of ``estimated_params``, and the parameters
+        it leaves out keep the file's values, as in Dynare's sensitivity analysis.
+        ``kwargs`` go to :func:`~dsgelab.sample_restrictions` and override
+        anything; ``points=`` with ``names=`` evaluates given draws instead.
+        """
+        from .restrictions import sample_restrictions
+
+        kw = self._restriction_kwargs(kwargs)
+        priors = {e["name"]: e["prior"] for e in self.estimated if e["prior"] is not None}
+        if not priors and kw.get("points") is None:
+            raise DynareImportError("no priors in estimated_params: pass points= and names=")
+        kw.setdefault("cov", self._shock_cov())
+        kw.setdefault("steady_fn", lambda p: self.steady_state(params=p))
+        return sample_restrictions(self.model, dict(self.params), priors, draws=draws, **kw)
+
     def steady_state(self, guess: Mapping[str, float] | None = None,
                      params: dict[str, float] | None = None, *,
                      analytic: bool = False, **kwargs: Any) -> SteadyState:
@@ -1049,6 +1171,9 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
     matched_body: list[str] = []
     irf_body: list[str] = []
     irf_weights_body: list[str] = []
+    irf_calib_body: list[str] = []
+    moment_calib_body: list[str] = []
+    relative_irf = False
     homotopy_body = []
     deflators: dict = {}
     trend_vars: dict = {}
@@ -1096,6 +1221,13 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
             elif head == "matched_irfs_weights":
                 irf_weights_body = [] if "overwrite" in _csv(opts) else irf_weights_body
                 irf_weights_body += [" ".join(b.split()) for b in body]
+            elif head == "irf_calibration":
+                irf_calib_body = [] if "overwrite" in _csv(opts) else irf_calib_body
+                irf_calib_body += [" ".join(b.split()) for b in body]
+                relative_irf = relative_irf or "relative_irf" in _csv(opts)
+            elif head == "moment_calibration":
+                moment_calib_body = [] if "overwrite" in _csv(opts) else moment_calib_body
+                moment_calib_body += [" ".join(b.split()) for b in body]
             elif head == "homotopy_setup":
                 homotopy_body = body
             elif head == "occbin_constraints":
@@ -1449,11 +1581,15 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
 
     matched_irfs, matched_irfs_weights = _read_irf_blocks(
         irf_body, irf_weights_body, sympy, env_all, funcs)
+    irf_calibration, moment_calibration = _read_calibration_blocks(
+        irf_calib_body, moment_calib_body, sympy, env_all, funcs, endo, exo)
     return ModFile(model=model, block=block, planner=planner, osr_params=osr_params_list,
                    histval=histval, histval_unread=histval_unread, det_shocks=det_shocks,
                    estimated=estimated, varobs=varobs, estimation_options=estim_opts,
                    matched_moments=matched_body, matched_irfs=matched_irfs,
                    matched_irfs_weights=matched_irfs_weights, mom_options=mom_opts,
+                   irf_calibration=irf_calibration, moment_calibration=moment_calibration,
+                   relative_irf=relative_irf,
                    homotopy=homotopy, occbin=occbin, surprise=surprise,
                    trends=dict(deflators=dict(deflators), trend_vars=dict(trend_vars)),
                    program=program,

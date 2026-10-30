@@ -765,6 +765,39 @@ True</code></pre>
   against a long Metropolis–Hastings run. They run at first order only, because they need the
   gradient of the Kalman likelihood. Its recursion costs about five times one evaluation of the
   likelihood, and for that reason the example uses 100 observations.</p>
+  <h3>24. Restrictions on impulse responses and moments</h3>
+<pre><code>from dsgelab.examples import nk as nk_example
+m_nk3, p_nk3, g_nk3 = nk_example.build()
+s_nk3 = dsg.solve(m_nk3, p_nk3, guess=g_nk3)
+cov_nk3 = {"eps_a": 0.01, "eps_v": 0.0025}
+irf_r = [("pi", "eps_v", "1:4", "-"),               # inflation falls in the first year
+         ("x", "eps_v", 1, (-0.01, -0.002))]        # the gap falls by 0.2 to 1 point on impact
+mom_r = [("x", "pi", 0, "+"),                       # the gap and inflation move together
+         ("pi", "pi", 1, (0.5, 0.88))]              # first autocorrelation of inflation
+dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds
+priors_r = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05)}
+draws_r = dsg.sample_restrictions(m_nk3, p_nk3, priors_r, irf=irf_r, moments=mom_r,
+                                  cov=cov_nk3, guess=g_nk3, draws=500, seed=0)
+print(draws_r.summary())</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">dsg.check_restrictions(s_nk3, irf=irf_r, moments=mom_r, cov=cov_nk3).holds</span>
+True
+Calibration restrictions over 500 draws, 429 solved
+    share  kind   restriction                      bound
+   100.0%  irf    pi(1:4), eps_v                       -
+    98.4%  irf    x(1), eps_v            [-0.01, -0.002]
+   100.0%  moment x, pi                                +
+    51.0%  moment pi, pi(1)                  [0.5, 0.88]
+    49.4%  all together</code></pre>
+  <p><code>check_restrictions</code> and <code>sample_restrictions</code> do what Dynare's
+  <code>irf_calibration</code> and <code>moment_calibration</code> blocks do. They check a sign or
+  an interval for an impulse response at given horizons, or for a variance, a correlation or an
+  autocorrelation at given lags, first at one parameter point and then over draws from the prior.
+  The values are absolute deviations, the impulse is one standard deviation of the shock, and a
+  restriction over several horizons holds when one of them is inside the bound, as in Dynare. The
+  shares are taken over the draws with a determinate solution. In this prior, the 71 draws left out
+  have <code>phi_pi</code> below 1. <code>ModFile.check_restrictions</code> and
+  <code>ModFile.sample_restrictions</code> read both blocks and the priors from a
+  <code>.mod</code>.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -976,6 +1009,20 @@ True</code></pre>
   where they are 5e-6 for the reason given above. With the correlated shocks of
   <code>example1</code> the decomposition differs by 5 percentage points, because Dynare
   orthogonalises the shocks by Cholesky and dsgelab counts each shock with its own variance.</p>
+
+  <h3>Calibration restrictions against Dynare</h3>
+  <p>Lubik and Schorfheide (2003), from Dynare's <code>tests/gsa/ls2003a.mod</code>, with its
+  priors and its <code>irf_calibration</code> and <code>moment_calibration</code> blocks: 21 IRF
+  and 17 moment restrictions, with and without <code>relative_irf</code>.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>values at the calibration, every horizon and lag</td><td class="num">8e-15</td><td class="ok">OK</td></tr>
+      <tr><td>values on Dynare's 512 prior draws</td><td class="num">1e-12</td><td class="ok">OK</td></tr>
+      <tr><td>draws that solve (486 of 512)</td><td class="num">same</td><td class="ok">OK</td></tr>
+      <tr><td>verdict of each restriction on each draw, and the shares</td><td class="num">same</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
 
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's

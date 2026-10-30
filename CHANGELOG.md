@@ -163,6 +163,22 @@ order and derivatives).
   one with correlated shocks and one with a unit root, with both filters. Covariances and
   autocorrelations agree within 1e-13, except in example2, where Dynare's steady state
   leaves a residual of 1e-6 and the difference is 5e-6.
+- `check_restrictions` and `sample_restrictions`: sign and interval restrictions on impulse
+  responses at given horizons and on theoretical moments at given lags, as Dynare's
+  `irf_calibration` and `moment_calibration` blocks state them. They are checked at one
+  first-order solution and over draws from the prior, with the share of the solved draws that
+  meets each restriction. The conventions follow Dynare: absolute deviations, a
+  one-standard-deviation impulse (100 times a unit innovation with `relative_irf`), the variance
+  at lag 0 for a variable with itself, correlations otherwise, and a logical OR over the horizons
+  of one restriction. `RestrictionCheck` and `RestrictionSample` hold the values and verdicts.
+- `ModFile.check_restrictions` and `ModFile.sample_restrictions`: the importer reads the
+  `irf_calibration` and `moment_calibration` blocks, including `relative_irf` and `overwrite`, into
+  `ModFile.irf_calibration` and `ModFile.moment_calibration`, and samples the priors of
+  `estimated_params`.
+- `validation/compare_restrictions.py`: both blocks of Dynare's `tests/gsa/ls2003a.mod` against
+  Dynare 7.2, at the calibration and on the 512 prior draws of its sensitivity toolbox. The values
+  agree within 1.3e-12, the same 486 draws solve, and each restriction's verdict agrees on every
+  draw.
 - `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
   `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
   They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions

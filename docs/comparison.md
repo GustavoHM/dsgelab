@@ -229,7 +229,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Several agents in one equilibrium | 📄 gEconpy (blocks) | **done**: `assemble`, within the limits of `Problem` | 0.4 |
 | Local identification | ✅ Dynare (`+identification`) | **done**: `identification`, the moments, spectrum and minimal-system criteria and the collinearity search, with the same verdicts as Dynare on three models and derivatives within 2e-8 | 0.6 |
 | Global sensitivity | ✅ Dynare (`+gsa`) | missing | 0.6 |
-| Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`) | **done**: GMM and SMM at first and pruned second order, and frequentist IRF matching at first order; calibration restrictions missing | 0.6, 0.7 |
+| Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`, `moment_calibration`) | **done**: GMM and SMM at first and pruned second order, frequentist IRF matching at first order, and calibration restrictions on IRFs and moments at first order, at a point and over the prior, with the same values and verdicts as Dynare on `ls2003a` | 0.6, 0.7 |
 | Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
 | Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |

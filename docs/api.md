@@ -585,6 +585,7 @@ A construct that is not read raises `DynareImportError`, with the offending text
 | `homotopy` | `homotopy_setup`, `{parameter: (start, end)}` |
 | `trends` | the declared `deflators` and `trend_vars` |
 | `shock_states` | the state that carries each shock, for `shock_decomposition` |
+| `irf_calibration`, `moment_calibration`, `relative_irf` | the calibration blocks, as restriction tuples for `check_restrictions` |
 
 A Dynare exogenous variable is a level with a steady state of its own. The state
 `SHK_e` follows `SHK_e(+1) = EXO_SS_e + e`, and `EXO_SS_e` (from `initval`, zero by
@@ -603,6 +604,8 @@ default) is a parameter, so a permanent change in the level is a change in it.
 | `balanced_growth(params=None, **kwargs)` | `balanced_growth` with the exogenous variables held at their level |
 | `estimation_problem(data, **kwargs)` | an `EstimationProblem` from `estimated_params`, `varobs` and the `estimation(...)` options; `kwargs` override them |
 | `identification(point="prior_mean", **kwargs)` | `identification` of the `estimated_params`, observing `varobs`, at the prior mean (Dynare's default), the calibration or a given point |
+| `check_restrictions(point="calibration", *, qz_criterium=None, **kwargs)` | `check_restrictions` of the `irf_calibration` and `moment_calibration` blocks at the calibration, the prior mean or a given point |
+| `sample_restrictions(draws=1000, **kwargs)` | `sample_restrictions` of the same blocks over the priors of `estimated_params`; `points=` and `names=` evaluate given draws |
 
 The example reads `fs2000.mod` from Dynare 6.4's examples, which
 `validation/fetch.sh` downloads into `validation/mods/examples/`; it runs from the
@@ -1112,6 +1115,90 @@ default. The importer reads `order` from the `.mod` options.
 `MomentsResult` contains estimates, standard errors, the objective, matched moments,
 weighting stages and Hansen's J test. `ModFile.method_of_moments` takes parameters
 from `estimated_params`, moments from `matched_moments` and observables from `varobs`.
+
+## Calibration restrictions
+
+### `check_restrictions(solution, *, irf=(), moments=(), cov=None, relative_irf=False) -> RestrictionCheck`
+
+Checks sign and interval restrictions on impulse responses and theoretical moments,
+as Dynare's `irf_calibration` and `moment_calibration` blocks state them. An IRF
+restriction is `(variable, shock, horizons, bound)`, with the impact period numbered
+1. A moment restriction is `(variable1, variable2, lags, bound)`. At lag 0 it is the
+variance when the two variables are the same and their correlation otherwise. At lag
+`l` it is the correlation of `variable1` at `t` with `variable2` at `t + l`. Horizons
+and lags are an integer, a sequence or a `"first:last"` string. A bound is `"+"`,
+`"-"` or `(lower, upper)`, with strict inequalities.
+
+The conventions are Dynare's. Values are absolute deviations from the steady state.
+The impulse is one standard deviation of the shock, taken from the diagonal of its
+covariance without a Cholesky factor, or 100 times a unit innovation with
+`relative_irf=True`. A restriction over several horizons or lags holds when any one
+of them is inside the bound, the logical OR of Dynare's manual. The list holds when
+every restriction holds. To require every horizon, write one restriction per horizon.
+
+`RestrictionCheck` has `restrictions` (each a `Restriction`, with `label`, `bound`
+and `periods`), `values` (one array per restriction, over its periods), `inside`
+(the same shape, booleans), `holds_each`, `holds`, `failed` (the labels of the
+restrictions that fail) and `summary()`.
+
+### `sample_restrictions(model, params, priors=None, *, irf=(), moments=(), cov=None, draws=1000, seed=0, points=None, names=None, relative_irf=False, guess=None, steady_fn=None, qz_criterium=None) -> RestrictionSample`
+
+Evaluates the same restrictions over draws from the prior. This is the
+`map_calibration` step of Dynare's sensitivity toolbox. `priors` takes the form used
+by `EstimationProblem`: a parameter name or `"stderr e"` mapped to a `Prior` or to
+`(shape, mean, sd[, p3, p4])`. `points` evaluates given rows instead of drawing,
+with one column per name in `names`. Draws without a determinate solution keep
+their status (`"blanchard_kahn"`, `"no_steady_state"` or `"other"`) and `nan`
+values, and they are left out of the shares, as in Dynare. `RestrictionSample` has
+`draws`, `status`, `solved`, `values` (an array of draws by periods per restriction),
+`inside`, `holds_each` (draws by restrictions), `holds`, `shares`, `share(which=None)`
+for the share of solved draws where the restrictions `which` all hold, and
+`summary()`.
+
+Validated against Dynare 7.2 on `tests/gsa/ls2003a.mod`. The comparison covers the
+values at every horizon and lag, at the calibration and on Dynare's 512 prior draws,
+the draws that solve, each restriction's verdict per draw and the shares (see
+`validation/README.md`). The functions work at first order, as Dynare's do.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+sol = dsg.solve(model, params, guess=guess)
+cov = {"eps_a": 0.01, "eps_v": 0.0025}
+
+irf = [("pi", "eps_v", "1:4", "-"),           # inflation falls in the first year after a monetary shock
+       ("x", "eps_v", 1, (-0.01, -0.002))]    # the output gap falls by 0.2 to 1 point on impact
+moments = [("x", "pi", 0, "+"),               # output gap and inflation move together
+           ("pi", "pi", 1, (0.5, 0.88))]      # inflation is persistent, but not too much
+
+check = dsg.check_restrictions(sol, irf=irf, moments=moments, cov=cov)
+print(check.summary())
+
+priors = {"phi_pi": ("gamma", 1.5, 0.5), "kappa": ("gamma", 0.1, 0.05)}
+sample = dsg.sample_restrictions(model, params, priors, irf=irf, moments=moments, cov=cov,
+                                 guess=guess, draws=500, seed=0)
+print(sample.summary())
+```
+
+```
+Calibration restrictions: 4 of 4 hold
+  ok   irf    pi(1:4), eps_v                       -   -0.0006015, -0.0003008, -0.0001504, -7.519e-05
+  ok   irf    x(1), eps_v            [-0.01, -0.002]   -0.003038
+  ok   moment x, pi                                +   0.8141
+  ok   moment pi, pi(1)                  [0.5, 0.88]   0.8754
+Calibration restrictions over 500 draws, 429 solved
+    share  kind   restriction                      bound
+   100.0%  irf    pi(1:4), eps_v                       -
+    98.4%  irf    x(1), eps_v            [-0.01, -0.002]
+   100.0%  moment x, pi                                +
+    51.0%  moment pi, pi(1)                  [0.5, 0.88]
+    49.4%  all together
+```
+
+The 71 draws left out have no determinate equilibrium. Each of them has `phi_pi`
+below 1, where the Taylor principle fails.
 
 ---
 
