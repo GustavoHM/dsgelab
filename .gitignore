@@ -59,6 +59,10 @@ validation/out_forecast_eval/
 validation/work_forecast_eval/
 validation/out_gsa/
 validation/work_gsa/
+validation/out_mixed/
+validation/work_mixed/
+validation/out_plots/
+validation/work_plots/
 validation/mmb/mods/
 validation/mmb/out/
 validation/mmb/work/

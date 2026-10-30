@@ -291,9 +291,25 @@ warning that lasts at least one minor version. The public API is what is in `__a
 - [x] **Filtered theoretical moments** (Hodrick–Prescott and band-pass), with `hp_filter` and
   `bandpass` in `moments`, `covariance` and `variance_decomposition`. Validated against Dynare's
   `stoch_simul` on five models, one with a unit root (24 October 2026).
-- [ ] **Mixed-frequency data**.
-- [ ] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
-  distributions.
+- [x] **Mixed-frequency data**. `aggregation={name: ("mean" | "sum", every)}` in `state_space` and
+  `EstimationProblem` stacks the lags of the state, so that an observable can be the mean or the
+  sum of a variable over the last `every` periods, with `low_frequency` to place the observations.
+  Filter, smoother, likelihood gradient, decompositions and forecasts work on the stacked state.
+  Validated against Dynare 7.2 on `fs2000.mod` with output growth observed only as its annual
+  mean, written in Dynare as the auxiliary variable a user would add (30 October 2026): the
+  likelihood at two points agrees within `8.0e-13`, the smoothed variables within `1.3e-14`, and
+  the posterior mode has a kernel at least as high as Dynare's, within `0.003` posterior standard
+  deviations. Aggregates of growth rates of levels (the annual growth of a quarterly level) and
+  the nonlinear filters are left out.
+- [x] **Plots** of impulse responses, simulations, decompositions, forecasts and posterior
+  distributions: `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and
+  `plot_posterior`, returning matplotlib figures, with matplotlib as an optional dependency
+  (`dsgelab[plot]`). The two densities the posterior plot draws are Dynare's:
+  `prior_density` agrees with `draw_prior_density` on the nine priors of `fs2000` within
+  `1.9e-12`, and `posterior_density` with the kernel estimate of `posterior_moments`, bandwidth
+  corrected for repeated draws, within `8.9e-16` (30 October 2026). The test suite checks that
+  each figure draws the numbers it is given. MCMC diagnostic plots and Dynare's identification
+  and sensitivity plots are left out.
 
 ### 0.7 — complete third order and derivatives
 

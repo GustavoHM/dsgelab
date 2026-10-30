@@ -919,6 +919,55 @@ same model inside the determinacy region and takes impulse responses to the mone
 two moments. The numbers come from a run on 30 October 2026, with Dynare 7.2, Octave 11.3.0 and
 SALib 1.6.0.
 
+## Mixed-frequency data
+
+```bash
+bash fetch.sh
+bash run_mixed.sh                 # fs2000 with output growth observed as its annual mean
+python compare_mixed.py
+```
+
+```
+fs2000 with output growth observed as its annual mean (48 of 192 quarters) and inflation every quarter
+  likelihood at two points 8.0e-13   smoothed variables 1.3e-14   smoothed annual mean (Dynare's gy_obs_a) 3.4e-16
+  analytic gradient against finite differences 1.0e-07 (relative)
+  posterior kernel at the mode: dsgelab 935.771192   Dynare 935.771188   parameters within 0.003 posterior sd
+```
+
+Dynare has no aggregation option, so `mixed/prepare.py` writes what a Dynare user writes:
+`fs2000.mod` with an auxiliary variable `gy_obs_a = (gy_obs + gy_obs(-1) + gy_obs(-2) +
+gy_obs(-3))/4` and its steady state, observed in place of `gy_obs`, and a data file that runs
+Dynare's `fs2000_data.m` and adds the four-quarter means of `gy_obs` at quarters 4, 8, ..., with
+NaN in between. With `loglinear`, the linearised aggregate is the mean of the log deviations.
+`dsgelab` reads the unchanged `fs2000.mod` and declares `aggregation={"gy_obs": ("mean", 4)}`
+on the same numbers. The likelihood is compared at the prior means and at a point 5% away from
+them in alternating directions, the smoothed variables and the smoothed aggregate at the first,
+and the posterior mode found by each program. The gradient check is internal: the analytic
+gradient through the stacked state against central differences of the likelihood. The numbers
+come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
+## Densities of the posterior plots
+
+```bash
+bash fetch.sh
+bash run_plots.sh                 # Dynare's draw_prior_density and posterior_moments
+python compare_plots.py
+```
+
+```
+prior densities of fs2000 (9 priors: beta, inv_gamma, normal): grid 4.3e-15, density 1.9e-12 (relative)
+posterior density, 6037 draws (3037 repeated): 6.5e-16 (grid and density, relative to its peak)
+posterior density, 5000 draws (0 repeated): 8.9e-16 (grid and density, relative to its peak)
+```
+
+The plots draw what the package computes, except for the two densities of `plot_posterior`,
+which are compared here. The prior densities are those of the nine priors of `fs2000.mod`, read
+by `from_mod`, against `draw_prior_density`, grid and values. The posterior density is compared
+with the kernel estimate that `posterior_moments` returns, on draws made in Octave: 3000 normal
+draws each repeated one to three times, as a Metropolis chain repeats a draw when it rejects, so
+that Dynare's bandwidth correction for repeated draws is exercised, and 5000 lognormal draws.
+The numbers come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+
 ## Out-of-sample forecast evaluation
 
 ```bash

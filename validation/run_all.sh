@@ -99,6 +99,10 @@ step "Dynare and R: forecast evaluation" bash run_forecast_eval.sh
 step "compare_forecast_eval.py" "$PYTHON" compare_forecast_eval.py
 step "Dynare: stability mapping" bash run_gsa.sh
 step "compare_gsa.py"       "$PYTHON" compare_gsa.py
+step "Dynare: mixed frequency" bash run_mixed.sh
+step "compare_mixed.py"     "$PYTHON" compare_mixed.py
+step "Dynare: plot densities" bash run_plots.sh
+step "compare_plots.py"     "$PYTHON" compare_plots.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

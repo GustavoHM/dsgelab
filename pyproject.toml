@@ -39,6 +39,7 @@ Issues = "https://github.com/GustavoHM/dsgelab/issues"
 
 [project.optional-dependencies]
 symbolic = ["sympy>=1.12"]
+plot = ["matplotlib>=3.7"]
 test = ["pytest>=7"]
 
 [project.scripts]

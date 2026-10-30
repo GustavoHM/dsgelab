@@ -763,7 +763,7 @@ utility and no variable called consumption is assumed. `kwargs` go to `welfare`.
 
 ## State space and Kalman filter
 
-### `state_space(sol, observables, *, transforms=None, measurement=None, cov=None) -> StateSpace`
+### `state_space(sol, observables, *, transforms=None, measurement=None, cov=None, aggregation=None) -> StateSpace`
 
 `k_{t+1} = T k_t + R eps_{t+1}`, `y_t = d + Z k_t + e_t` from a first-order
 solution. Each observable is a `"level"` (default) or a `"log"`. A log observable
@@ -774,8 +774,46 @@ measurement errors (`{name: sd}`, a scalar, or a covariance). An observed growth
 rate or a measured inflation rate is a variable of the model, defined by a model
 equation, as in a `.mod`. Missing data are `nan`.
 
+`aggregation` declares observables seen at a lower frequency than the model's,
+`{name: (how, every)}`: the data are the `"mean"` or the `"sum"` of the variable
+over the last `every` periods, in the units of its transform (a mean of logs for a
+log observable; a sum of logs is refused), with `nan` in the periods between
+observations. The state then stacks `every - 1` lags of the model's states, named
+`"k(-1)"` and so on, as an auxiliary variable `(y + y(-1) + y(-2) + y(-3))/4` does in
+a `.mod`. The filter, the smoother, the likelihood and its gradient, the shock
+decompositions and the forecasts work on the stacked state, and the smoothed
+variables are the model's. A stock observed at the end of each low-frequency
+period needs no aggregation, only the missing values. `EstimationProblem` takes the
+same `aggregation=`, at first order. Validated against Dynare on `fs2000.mod` with
+output growth observed only as its annual mean, through the auxiliary variable a
+Dynare user writes: the likelihood at two points within 8e-13, the smoothed
+variables within 1.3e-14, and a posterior mode with a kernel at least Dynare's.
+
 `StateSpace`: `T`, `R`, `Sigma`, `Z`, `d`, `H` (the measurement covariance),
-`observables`, `states`, `shocks`, `transforms`, `solution`.
+`observables`, `states`, `shocks`, `transforms`, `solution`, `aggregation` and
+`n_model_states` (the model's states, before the lags).
+
+### `low_frequency(values, every, *, periods=None, offset=None) -> ndarray`
+
+Places low-frequency observations on the model's grid, with `nan` in between:
+`values[j]` lands in period `offset + j * every`, by default at the last period of
+each low-frequency period (`offset = every - 1`), where an aggregate over the last
+`every` periods is complete.
+
+```python
+import numpy as np
+import dsgelab as dsg
+
+ar = dsg.from_equations(["a(+1) = rho*a + e", "y = 1 + a"], states=["a"], jumps=["y"],
+                        shocks=["e"], parameters=["rho"])
+sol = dsg.solve(ar, dict(rho=0.8), guess=dict(a=0, y=1))
+y = sol.to_levels(sol.simulate(periods=400, cov={"e": 0.1}, seed=1))["y"]
+annual = dsg.low_frequency(y.reshape(-1, 4).mean(axis=1), 4)
+pb = dsg.EstimationProblem(model=ar, data={"y": annual}, params=dict(rho=0.5), observables=["y"],
+                           priors={"rho": ("beta", 0.5, 0.2), "stderr e": ("inv_gamma", 0.1, float("inf"))},
+                           guess=dict(a=0, y=1), aggregation={"y": ("mean", 4)})
+print(dsg.posterior_mode(pb).values)
+```
 
 ### `kalman_filter(ss, data, *, init="auto", univariate=None, tol=1e-12) -> FilterResult`
 
@@ -1362,6 +1400,48 @@ run = dsg.solution_outputs(model, params, irf=[("pi", "eps_v", 4)],
 inside = {"phi_pi": dsg.Uniform(1.2, 2.5), "kappa": dsg.Uniform(0.05, 0.3),
           "rho_v": dsg.Uniform(0.0, 0.9)}
 print(dsg.sobol(run, inside, n=256).summary())
+```
+
+## Plots
+
+matplotlib is optional: `pip install "dsgelab[plot]"`. Each function returns a
+matplotlib `Figure`, built without `pyplot`, so nothing global changes; save it
+with `fig.savefig(...)` or let a notebook show it.
+
+| Function | Draws |
+|---|---|
+| `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values |
+| `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}` |
+| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line |
+| `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given |
+| `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed |
+
+### `prior_density(prior, *, steps=200, truncation=1e-3) -> (x, f)`
+
+A prior's density on a grid between the quantiles `truncation` and
+`1 - truncation` (`10 truncation` for the inverse gammas), with the values above 10
+dropped where the density peaks at the edge: Dynare's `draw_prior_density`.
+
+### `posterior_density(draws, *, grid_points=512) -> (x, f)`
+
+The kernel density of `posterior_moments` in Dynare: a Gaussian kernel with
+Silverman's bandwidth, corrected for the draws a Metropolis chain repeats when it
+rejects, by linear binning and a fast Fourier transform on `grid_points` points.
+
+Both densities are validated against Dynare: `draw_prior_density` on the nine
+priors of `fs2000.mod` within 2e-12, and `posterior_moments` on two sets of draws,
+one with repeated values, within 9e-16 (see `validation/README.md`). The plots draw
+what they are given; the test suite checks the numbers on each figure.
+
+```python
+import dsgelab as dsg
+from dsgelab.examples import nk
+
+model, params, guess = nk.build()
+sol = dsg.solve(model, params, guess=guess)
+fig = dsg.plot_irf({"monetary": sol.irf("eps_v"), "technology": sol.irf("eps_a")},
+                   ["x", "pi", "i"])
+fig.savefig("irf.png")
 ```
 
 ## Diagnostics

@@ -120,6 +120,8 @@ class EstimationProblem:
     first_obs, presample : observations dropped before, and observations used but
         not counted in, the likelihood -- Dynare's options of the same names
         (``first_obs`` counted from 1).
+    aggregation : observables seen at a lower frequency, ``{name: (how, every)}``,
+        as for :func:`dsgelab.state_space`; first order only.
     """
 
     model: Model
@@ -143,6 +145,7 @@ class EstimationProblem:
     particles: int = 1000
     particle_seed: int | None = 0
     resample: float | None = 0.5
+    aggregation: Mapping[str, tuple[str, int]] | None = None
     _last_ss: SteadyState | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -164,6 +167,8 @@ class EstimationProblem:
             raise ValueError("third order requires nonlinear_filter='particle'")
         if self.particles < 1:
             raise ValueError("particles must be positive")
+        if self.order >= 2 and self.aggregation:
+            raise ValueError("temporal aggregation needs order=1 (the Kalman filter)")
         if self.order >= 2 and self.init == "diffuse":
             raise ValueError("the particle filter starts at the stationary distribution")
         Y = self._data_matrix()
@@ -244,7 +249,7 @@ class EstimationProblem:
         sol = solve(self.model, p, steady=ss, qz_criterium=self.qz_criterium)
         self._last_ss = ss
         space = state_space(sol, self.observables, transforms=self.transforms,
-                            measurement=meas or None, cov=S)
+                            measurement=meas or None, cov=S, aggregation=self.aggregation)
         return sol, space
 
     def log_likelihood(self, theta: ArrayLike) -> float:
@@ -829,7 +834,7 @@ def posterior_forecast(problem: EstimationProblem, draws: MCMCResult | SMCResult
         for h in range(horizon):
             e = L @ rng.standard_normal(len(space.shocks)) if shocks else 0.0
             a = space.T @ a + (space.R @ e if shocks else 0.0)
-            xs = J @ a
+            xs = J @ a[:space.n_model_states]
             for i, v in enumerate(names):
                 j = sol.model.position(v)
                 c, s = sol.coords.center[j], sol.coords.scale[j]

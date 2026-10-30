@@ -876,6 +876,57 @@ x, x  (256 of 256 base points)
   A persistência do choque responde pela maior parte da variância da resposta da inflação um ano
   depois dele, e a variância do hiato do produto depende dos três parâmetros, em boa parte pelas
   interações entre eles.</p>
+  <h3>27. Dados de frequência mista</h3>
+<pre><code>anual = dsg.low_frequency(serie.reshape(-1, 4).mean(axis=1), 4)   # exemplo 14, em médias anuais
+pb_a = replace(pb, data={"y": anual}, aggregation={"y": ("mean", 4)})
+moda_a = dsg.posterior_mode(pb_a)
+{n: round(moda_a.values[n], 3) for n in pb.names}, {n: round(moda.values[n], 3) for n in pb.names}
+{n: round(moda_a.std[n], 3) for n in pb.names}, {n: round(moda.std[n], 3) for n in pb.names}
+trimestral = pb_a.smoother(moda_a.x).variables()["y"]
+round(float(np.corrcoef(trimestral, serie)[0, 1]), 2)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">{n: round(moda_a.values[n], 3) for n in pb.names}, {n: round(moda.values[n], 3) for n in pb.names}</span>
+({'rho': 0.814, 'stderr e': 0.078}, {'rho': 0.75, 'stderr e': 0.092})
+<span class="out-expr">{n: round(moda_a.std[n], 3) for n in pb.names}, {n: round(moda.std[n], 3) for n in pb.names}</span>
+({'rho': 0.038, 'stderr e': 0.007}, {'rho': 0.032, 'stderr e': 0.003})
+<span class="out-expr">round(float(np.corrcoef(trimestral, serie)[0, 1]), 2)</span>
+0.89</code></pre>
+  <p>Uma variável observada numa frequência menor que a do modelo entra por
+  <code>aggregation</code>: <code>{"y": ("mean", 4)}</code> diz que os dados são a média de
+  <code>y</code> nos últimos quatro trimestres, observada uma vez por ano, com NaN nos trimestres
+  intermediários (<code>low_frequency</code> os posiciona). O estado passa então a carregar três
+  defasagens, como faz uma variável auxiliar <code>(y + y(-1) + y(-2) + y(-3))/4</code> num
+  <code>.mod</code>, e o filtro, o suavizador, o gradiente da verossimilhança, as previsões e
+  <code>forecast_evaluation</code> funcionam sobre ele; as demais variáveis observadas podem continuar
+  trimestrais. Só com as 100 médias anuais, a moda posterior fica perto da obtida com os 400
+  trimestres, com desvios-padrão maiores, e o suavizador recupera uma trajetória trimestral que
+  acompanha a verdadeira. Um estoque observado no fim de cada ano não precisa de agregação, só dos
+  trimestres faltantes. A validação contra o Dynare usa o <code>fs2000</code> com o crescimento do
+  produto observado como média anual.</p>
+  <h3>28. Gráficos</h3>
+<pre><code>figs = {
+    "irf.png": dsg.plot_irf({"monetary": s_nk3.irf("eps_v"), "technology": s_nk3.irf("eps_a")},
+                            ["x", "pi", "i"]),                           # exemplo 24
+    "decomposition.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(moda.x)), "y"),
+    "forecast.png": dsg.plot_forecast(dsg.forecast(pb.solve(moda.x)[1], pb.Y, 12, variables=["y"]),
+                                      history={"y": serie[-40:]}),
+    "posterior.png": dsg.plot_posterior(cadeia, problem=pb, mode=moda),   # exemplo 14
+}
+for name, fig in figs.items():
+    fig.savefig(name, dpi=80)
+[len([a for a in fig.axes if a.get_visible()]) for fig in figs.values()]</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">[len([a for a in fig.axes if a.get_visible()]) for fig in figs.values()]</span>
+[3, 1, 1, 2]</code></pre>
+  <p>Os gráficos recebem o que o pacote devolve: os dicionários de <code>irf</code> e
+  <code>simulate</code> (<code>plot_irf</code>, <code>plot_paths</code>, um painel por variável, com
+  vários modelos ou choques nos mesmos painéis), uma decomposição de choques
+  (<code>plot_decomposition</code>, barras empilhadas com o total como linha, como o Dynare a
+  desenha), uma previsão com as suas bandas depois do histórico (<code>plot_forecast</code>) e a
+  posteriori contra a priori e a moda (<code>plot_posterior</code>). Cada um devolve uma figura do
+  matplotlib, construída sem <code>pyplot</code>, para salvar ou mostrar num notebook; o matplotlib
+  vem com <code>pip install "dsgelab[plot]"</code>. As densidades do gráfico da posteriori são as do
+  Dynare: <code>prior_density</code> reproduz o seu <code>draw_prior_density</code> e
+  <code>posterior_density</code> a estimativa de núcleo do seu <code>posterior_moments</code>, com a
+  largura de banda corrigida para os sorteios que uma cadeia de Metropolis repete.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1137,6 +1188,21 @@ x, x  (256 of 256 base points)
   <p>As listas da própria caixa de ferramentas diferem do solver dela em 37 sorteios da amostra
   explosiva: ela ordena os autovalores pelo valor com sinal quando todos são reais, e a regra dela
   não enxerga falhas de posto.</p>
+
+  <h3>Frequência mista e densidades dos gráficos comparadas com o Dynare</h3>
+  <p>O <code>fs2000.mod</code> com o crescimento do produto observado só como média anual, que o
+  Dynare lê por uma variável auxiliar; e as duas densidades que os gráficos da posteriori
+  desenham.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>verossimilhança com médias anuais, em dois pontos</td><td class="num">8e-13</td><td class="ok">OK</td></tr>
+      <tr><td>variáveis suavizadas e a média anual suavizada</td><td class="num">1e-14</td><td class="ok">OK</td></tr>
+      <tr><td>moda posterior, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
+      <tr><td>densidades das nove prioris (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
+      <tr><td>densidade de núcleo da posteriori (<code>posterior_moments</code>), sorteios com repetições</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
 
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de

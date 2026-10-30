@@ -20,6 +20,7 @@ behind them cannot differ.
 ```
 pip install dsgelab
 pip install "dsgelab[symbolic]"     # adds text equations with exact derivatives (sympy)
+pip install "dsgelab[plot]"         # adds the plots (matplotlib)
 ```
 
 Requires Python 3.11 or later, numpy and scipy. Pandas is not needed.
@@ -235,7 +236,7 @@ The suite runs from a clone of the repository.
 
 ```
 git clone https://github.com/GustavoHM/dsgelab && cd dsgelab
-pip install -e ".[symbolic,test]" && pytest
+pip install -e ".[symbolic,test,plot]" && pytest
 ```
 
 The second layer, in [`validation/`](https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md),
@@ -278,7 +279,9 @@ planned.
 - **Global methods are limited** to Chebyshev collocation with up to three states. There is no
   value or time iteration, endogenous grid, sparse grid, or Tauchen/Rouwenhorst discretisation.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
-- **No plotting.** Results are arrays and dictionaries, and plotting is left to the user.
+- **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
+  densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
+  identification and sensitivity plots are not reproduced.
 - **The extended path's hybrid correction stops at second order.**
 - **Trends can be declared only in a `.mod` file.** `from_equations` does not accept them yet.
 - **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul` and

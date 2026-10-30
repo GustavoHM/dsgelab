@@ -8,6 +8,7 @@ import numpy as np
 
 from .estimation import unpack_point
 from .gradient import LikelihoodGradient, kalman_likelihood_gradient
+from .kalman import _aggregate
 from .identification import _richardson
 from .linearize import first_order_system
 from .klein import _implicit_derivative
@@ -379,8 +380,8 @@ def log_likelihood_gradient(problem, theta) -> LikelihoodGradient:
             j = jac.names.index(name)
             dT, dR, dF, ds = jac.P[..., j], jac.Q[..., j], jac.F[..., j], jac.steady[..., j]
         else:
-            dT = np.zeros_like(space.T)
-            dR = np.zeros_like(space.R)
+            dT = np.zeros((sol.model.n_states, sol.model.n_states))
+            dR = np.zeros((sol.model.n_states, space.R.shape[1]))
             dF = np.zeros_like(sol.F)
             ds = np.zeros_like(sol.steady.x)
         dSigma = np.zeros_like(Sigma)
@@ -401,14 +402,18 @@ def log_likelihood_gradient(problem, theta) -> LikelihoodGradient:
             i = problem.observables.index(name[7:].strip())
             sd = float(meas.get(name[7:].strip(), 0.0))
             dH[i, i] = 2 * sd
-        dZ = np.zeros_like(space.Z)
-        dd = np.zeros_like(space.d)
+        nk = sol.model.n_states
+        dZ = np.zeros((len(problem.observables), nk))
+        dd = np.zeros(len(problem.observables))
         for i, observable in enumerate(problem.observables):
             position = sol.model.position(observable)
             if observable in sol.model.jumps:
+                row = np.asarray(sol.F[sol.model.jumps.index(observable)], dtype=float)
                 drow = dF[sol.model.jumps.index(observable)]
             else:
-                drow = np.zeros(sol.model.n_states)
+                row = np.zeros(nk)
+                row[sol.model.states.index(observable)] = 1.0
+                drow = np.zeros(nk)
             if space.transforms[i] == "log":
                 dZ[i] = drow
                 dd[i] = ds[position] / sol.coords.center[position]
@@ -416,9 +421,10 @@ def log_likelihood_gradient(problem, theta) -> LikelihoodGradient:
                 scale = sol.coords.scale[position]
                 dscale = (np.sign(sol.coords.center[position]) * ds[position]
                           if abs(sol.coords.center[position]) > 1e-8 else 0.0)
-                row = space.Z[i] / scale
                 dZ[i] = dscale * row + scale * drow
                 dd[i] = ds[position]
+        if space.aggregation is not None:
+            dT, dR, dZ, dd = _aggregate(dT, dR, dZ, dd, space.aggregation, derivative=True)
         derivatives[name] = {"T": dT, "R": dR, "Sigma": dSigma,
                              "Z": dZ, "d": dd, "H": dH}
     result = kalman_likelihood_gradient(space, problem.Y, derivatives)

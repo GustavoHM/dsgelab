@@ -150,9 +150,9 @@ Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, o
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
-restrictions, out-of-sample forecast evaluation and global sensitivity. Still absent are global
-methods beyond Chebyshev collocation, regime switching, heterogeneous
-agents, BVAR, DSGE-VAR, plots and the declaration of trends in `from_equations`. The README lists
+restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
+plots. Still absent are global methods beyond Chebyshev collocation, regime switching,
+heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
@@ -235,7 +235,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Global sensitivity | ✅ Dynare (`+gsa`), SALib | **done**: `stability_map`, `monte_carlo_filtering` and `sobol`, with the classes of Dynare's solver on 3 × 1024 draws of `ls2003a`, its Smirnov tests and correlations within 2e-13, and SALib's Sobol design and indices within 1e-15; reduced-form mapping and RMSE filtering missing | 0.6 |
 | Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`, `moment_calibration`) | **done**: GMM and SMM at first and pruned second order, frequentist IRF matching at first order, and calibration restrictions on IRFs and moments at first order, at a point and over the prior, with the same values and verdicts as Dynare on `ls2003a` | 0.6, 0.7 |
 | Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
-| Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | missing | 0.6 |
+| Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | **done**: `aggregation=` in the state space and `EstimationProblem`, against Dynare's auxiliary-variable formulation on `fs2000` (likelihood within 8e-13); `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`, with Dynare's prior and posterior densities within 2e-12 | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.8 |

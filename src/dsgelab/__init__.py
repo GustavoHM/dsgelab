@@ -66,9 +66,11 @@ from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_ma
                                   forecast_evaluation)
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
-                     shock_decomposition, state_space)
+                     low_frequency, shock_decomposition, state_space)
 from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
 from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
+from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plot_posterior,
+                    posterior_density, prior_density)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
@@ -104,6 +106,9 @@ __all__ = [
     "particle_filter", "ParticleFilterResult", "particle_smoother", "ParticleSmootherResult",
     "inversion_filter", "InversionFilterResult", "inversion_smoother",
     "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
+    "low_frequency",
+    "plot_irf", "plot_paths", "plot_decomposition", "plot_forecast", "plot_posterior",
+    "prior_density", "posterior_density",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "prior", "Prior",
     "solve_projection", "Projection",

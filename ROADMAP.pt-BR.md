@@ -305,9 +305,26 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
 - [x] **Momentos teóricos filtrados** (Hodrick–Prescott e passa-banda), com `hp_filter` e
   `bandpass` em `moments`, `covariance` e `variance_decomposition`. Validados contra o
   `stoch_simul` do Dynare em cinco modelos, um deles com raiz unitária (24 de outubro de 2026).
-- [ ] **Dados de frequência mista**.
-- [ ] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
-  posteriori.
+- [x] **Dados de frequência mista**. `aggregation={nome: ("mean" | "sum", every)}` em `state_space` e
+  em `EstimationProblem` empilha as defasagens do estado, de modo que uma variável observada pode
+  ser a média ou a soma de uma variável nos últimos `every` períodos, e `low_frequency` posiciona as
+  observações. Filtro, suavizador, gradiente da verossimilhança, decomposições e previsões
+  funcionam sobre o estado empilhado. Validação contra o Dynare 7.2 no `fs2000.mod` com o
+  crescimento do produto observado só como média anual, escrito no Dynare como a variável auxiliar
+  que um usuário acrescentaria (30 de outubro de 2026): a verossimilhança em dois pontos concorda
+  até `8.0e-13`, as variáveis suavizadas até `1.3e-14`, e a moda posterior tem kernel pelo menos
+  tão alto quanto o do Dynare, a menos de `0.003` desvio-padrão posterior. Ficam de fora os
+  agregados de taxas de crescimento de níveis (o crescimento anual de um nível trimestral) e os
+  filtros não lineares.
+- [x] **Gráficos** de respostas a impulso, simulações, decomposições, previsões e distribuições a
+  posteriori: `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` e `plot_posterior`,
+  que devolvem figuras do matplotlib, com o matplotlib como dependência opcional
+  (`dsgelab[plot]`). As duas densidades que o gráfico da posteriori desenha são as do Dynare:
+  `prior_density` concorda com `draw_prior_density` nas nove prioris do `fs2000` até `1.9e-12`, e
+  `posterior_density` com a estimativa de núcleo de `posterior_moments`, com a largura de banda
+  corrigida para sorteios repetidos, até `8.9e-16` (30 de outubro de 2026). A suíte de testes
+  confere que cada figura desenha os números que recebe. Ficam de fora os gráficos de diagnóstico
+  do MCMC e os gráficos de identificação e de sensibilidade do Dynare.
 
 ### 0.7 — terceira ordem completa e derivadas
 

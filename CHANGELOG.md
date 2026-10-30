@@ -215,6 +215,22 @@ order and derivatives).
   SALib 1.6. Every draw has the class Dynare's solver gives it; the Smirnov tests and
   correlations on Dynare's groups agree within 1.7e-13, and SALib's design and indices within
   8.9e-16.
+- `aggregation=` in `state_space` and `EstimationProblem`: observables seen at a lower frequency
+  than the model's, as the mean or the sum of a variable over the last `every` periods, with the
+  lags of the state stacked so that the filter, the smoother, the likelihood gradient, the shock
+  decompositions and the forecasts work unchanged. `low_frequency` places the observations on the
+  model's grid. `StateSpace` gains `aggregation` and `n_model_states`.
+- `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`: matplotlib
+  figures of impulse responses, paths, shock decompositions, forecasts with bands and posterior
+  densities against the priors and the mode, with matplotlib as the optional `plot` extra.
+  `prior_density` and `posterior_density` compute the two densities as Dynare's
+  `draw_prior_density` and `posterior_moments` do.
+- `validation/compare_mixed.py`: `fs2000.mod` with output growth observed only as its annual mean,
+  against Dynare 7.2 with the equivalent auxiliary variable. Likelihood within 8.0e-13, smoothed
+  variables within 1.3e-14, and a posterior mode with a kernel at least Dynare's.
+- `validation/compare_plots.py`: the prior densities of `fs2000` against `draw_prior_density`
+  within 1.9e-12, and the posterior kernel density against `posterior_moments` within 8.9e-16, on
+  draws with and without repeats.
 - `validation/mmb/`: thirteen models of the Macroeconomic Model Data Base, read by
   `from_mod` and compared with Dynare 7.2 at first order (steady state, IRFs and moments).
   They include SAMBA (Banco Central do Brasil), the ECB's NAWM, FRB/US in two versions
