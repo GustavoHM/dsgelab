@@ -58,10 +58,11 @@ SALib for the Sobol indices, R's `forecast::dm.test` for the Diebold–Mariano t
 population result of Plagborg-Møller and Wolf (2021) for the local projections. The details are in
 [`validation/`](validation/README.md).
 
-Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026, brings the first:
-the discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods,
-validated against QuantEcon, against the same probabilities in 40-digit arithmetic and against
-Rouwenhorst's closed form.
+Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026 on PyPI and on Zenodo
+(DOI [10.5281/zenodo.23827669](https://doi.org/10.5281/zenodo.23827669)), brings the first: the
+discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods, validated
+against QuantEcon, against the same probabilities in 40-digit arithmetic and against Rouwenhorst's
+closed form.
 
 ## What counts as done
 
@@ -232,13 +233,14 @@ No new features. The items below are conditions for publishing.
 - [x] `python -m build`, `twine check`, publication by trusted publishing, TestPyPI first
   (`release.yml`, triggered by a `v*` tag). The workflow checks the tag against the version,
   publishes to TestPyPI, runs the suite against what TestPyPI serves, and publishes to PyPI only
-  after the required reviewer approves. Versions 0.5.0 and 0.7.0 went out this way, on 18 and 30
-  October 2026.
+  after the required reviewer approves. Versions 0.5.0, 0.7.0 and 0.7.1 went out this way, the first
+  on 18 October 2026 and the other two on 30 October.
 - [x] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
   change, with the links to `docs/` pointed at GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.7.0 is
-  10.5281/zenodo.23825088 (0.5.0 is 10.5281/zenodo.23456475), and the concept DOI
-  10.5281/zenodo.23456474, which resolves to the latest release, is in `CITATION.cff`.
+- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.7.1 is
+  10.5281/zenodo.23827669 (0.7.0 is 10.5281/zenodo.23825088, 0.5.0 is 10.5281/zenodo.23456475), and
+  the concept DOI 10.5281/zenodo.23456474, which resolves to the latest release, is in
+  `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, code of conduct, issue and pull-request templates.
 - [x] `py.typed` and type annotations on the public API, with no public function or method left
   unannotated and no new error reported by `mypy`. The lazy-import wrappers in `__init__.py`
