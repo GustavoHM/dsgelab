@@ -400,6 +400,38 @@ row-stacked array of them and returns the jumps in levels. Fields
 `coefficients` `(n_u, n_basis)`, `nodes` (in levels), `bounds`, `order`,
 `residual` (the largest absolute residual at the nodes) and `success`.
 
+### `tauchen(rho, sigma, n, *, mean=0.0, n_std=3.0) -> MarkovChain`
+
+Tauchen's (1986) chain for the AR(1) `y' = (1 - rho) mean + rho y + sigma e`, `e ~ N(0, 1)`.
+The `n` nodes are evenly spaced over `n_std` unconditional standard deviations
+(`sigma / sqrt(1 - rho^2)`) on each side of `mean`, and each transition probability is the
+normal probability of the interval between the midpoints around the next node, with the tails
+going to the end nodes. Each interval is computed from the side of the conditional mean it lies
+on, so that small probabilities in either tail keep their relative accuracy. The nodes and the
+matrix are those of QuantEcon's `tauchen(n, rho, sigma, mu=(1 - rho) * mean, n_std=n_std)`.
+With `rho` close to one and few nodes, the chain approximates the process poorly, and its
+probabilities of leaving the end nodes can underflow to zero; `rouwenhorst` is the method for
+that case. `rho` must lie strictly between -1 and 1, `sigma` must be positive, and `n` must be an
+integer of at least 2.
+
+### `rouwenhorst(rho, sigma, n, *, mean=0.0) -> MarkovChain`
+
+Rouwenhorst's chain for the same AR(1), built by the recursion of Kopecky and Suen (2010) with
+`p = q = (1 + rho) / 2`. The `n` nodes are evenly spaced over `sqrt(n - 1)` unconditional
+standard deviations on each side of `mean`. The stationary distribution is binomial with `n - 1`
+trials of probability one half, and the chain has the mean, the variance and the
+autocorrelations of the AR(1) exactly, for every `n` and every `rho`.
+
+### `MarkovChain(nodes, transition)`
+
+A chain on the values `nodes` `(n,)`, with `transition[i, j]` `(n, n)` the probability of moving
+from node `i` to node `j`; the rows must be nonnegative and sum to one. `stationary` is the
+stationary distribution, computed by GTH elimination (Grassmann, Taksar and Heyman, 1985); a
+reducible chain raises `ValueError`. `mean` and `variance` are the moments of the node values under
+it, and `autocorrelation(lag=1)` their autocorrelation. `simulate(periods, *, start=None,
+seed=None, indices=False)` draws a path of `periods` values, from node `start` or from the
+stationary distribution, and returns node indices instead of values with `indices=True`.
+
 ---
 
 ## Transitions

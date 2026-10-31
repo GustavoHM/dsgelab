@@ -927,6 +927,35 @@ for name, fig in figs.items():
   Dynare: <code>prior_density</code> reproduz o seu <code>draw_prior_density</code> e
   <code>posterior_density</code> a estimativa de núcleo do seu <code>posterior_moments</code>, com a
   largura de banda corrigida para os sorteios que uma cadeia de Metropolis repete.</p>
+  <h3>29. Um processo como cadeia de Markov</h3>
+<pre><code>rho, sigma = 0.99, 0.007                     # log da produtividade, trimestral
+var = sigma ** 2 / (1 - rho ** 2)
+cadeias = {"rouwenhorst": dsg.rouwenhorst(rho, sigma, 7), "tauchen": dsg.tauchen(rho, sigma, 7)}
+{k: round(c.variance / var, 3) for k, c in cadeias.items()}
+{k: round(c.autocorrelation(), 4) for k, c in cadeias.items()}
+cadeias["rouwenhorst"].stationary.round(3)
+visitas = cadeias["rouwenhorst"].simulate(10_000, seed=1, indices=True)
+(np.bincount(visitas, minlength=7) / visitas.size).round(3)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">{k: round(c.variance / var, 3) for k, c in cadeias.items()}</span>
+{'rouwenhorst': 1, 'tauchen': 1.74}
+<span class="out-expr">{k: round(c.autocorrelation(), 4) for k, c in cadeias.items()}</span>
+{'rouwenhorst': 0.99, 'tauchen': 0.9999}
+<span class="out-expr">cadeias["rouwenhorst"].stationary.round(3)</span>
+[0.016 0.094 0.234 0.312 0.234 0.094 0.016]
+<span class="out-expr">(np.bincount(visitas, minlength=7) / visitas.size).round(3)</span>
+[0.008 0.093 0.251 0.308 0.204 0.119 0.018]</code></pre>
+  <p><code>rouwenhorst</code> e <code>tauchen</code> transformam um AR(1) numa
+  <code>MarkovChain</code>: nós, matriz de transição, distribuição estacionária, seus momentos e
+  trajetórias simuladas. Com persistência 0,99 e sete nós, a cadeia de Rouwenhorst tem exatamente a
+  variância e a autocorrelação do processo, como tem para qualquer persistência e qualquer número de
+  nós. Os nós de Tauchen distam um desvio-padrão incondicional entre si, sete desvios-padrão da
+  inovação aqui, e por isso a sua cadeia raramente deixa um nó e, quando deixa, salta longe:
+  superestima tanto a persistência quanto a variância. A distribuição estacionária de Rouwenhorst é
+  binomial, e uma trajetória simulada longa visita os nós em proporções próximas dessas. As
+  cadeias são os processos exógenos dos métodos globais que vêm a seguir no
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/ROADMAP.pt-BR.md">roteiro</a>; a
+  validação as compara com o QuantEcon e, para as probabilidades pequenas de Tauchen, com um
+  cálculo de 40 dígitos.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1206,6 +1235,20 @@ for name, fig in figs.items():
       <tr><td>moda posterior, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
       <tr><td>densidades das nove prioris (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
       <tr><td>densidade de núcleo da posteriori (<code>posterior_moments</code>), sorteios com repetições</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Discretização de processos comparada com o QuantEcon e com aritmética de 40 dígitos</h3>
+  <p>120 processos AR(1), com persistência de -0,5 a 0,999 e cadeias de 2 a 101 nós. O QuantEcon
+  calcula a cauda superior de Tauchen como <code>1 - cdf</code>, e por isso as suas probabilidades
+  pequenas não servem de referência; essas são calculadas de novo com 40 dígitos.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nós e matrizes de transição, Tauchen e Rouwenhorst, contra o QuantEcon</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>probabilidades de transição de Tauchen contra 40 dígitos, relativas</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>distribuições estacionárias de Tauchen contra 40 dígitos (as do QuantEcon: 3e-8)</td><td class="num">1e-14</td><td class="ok">OK</td></tr>
+      <tr><td>Rouwenhorst contra a forma fechada: distribuição binomial, média, variância, autocorrelações</td><td class="num">3e-14</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

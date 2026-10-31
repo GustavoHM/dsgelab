@@ -58,6 +58,11 @@ SALib for the Sobol indices, R's `forecast::dm.test` for the Diebold–Mariano t
 population result of Plagborg-Møller and Wolf (2021) for the local projections. The details are in
 [`validation/`](validation/README.md).
 
+Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026, brings the first:
+the discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods,
+validated against QuantEcon, against the same probabilities in 40-digit arithmetic and against
+Rouwenhorst's closed form.
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard
@@ -385,10 +390,52 @@ warning that lasts at least one minor version. The public API is what is in `__a
 
 ### 0.8 — global methods
 
-- [ ] **Time iteration, value function iteration, the endogenous grid method, sparse grids.**
-  Chebyshev collocation with up to three states already exists and reproduces the closed-form
-  solution of stochastic growth. The comparison will be with dolo.
-- [ ] **Process discretisation** (Tauchen, Rouwenhorst).
+Chebyshev collocation with up to three states already exists and reproduces the closed-form
+solution of stochastic growth. Its shocks are i.i.d. and integrated by Gauss–Hermite, and its
+policy has no bounds. The milestone is released in parts, one feature per patch version from
+0.7.1 to 0.7.5, each published only after it meets the six conditions above. No release changes the
+API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own.
+
+- [x] **0.7.1 — process discretisation.** `tauchen` and `rouwenhorst` turn an AR(1) into a
+  `MarkovChain` with nodes, transition matrix, stationary distribution, moments and simulation.
+  Against QuantEcon's `tauchen` and `rouwenhorst` on 120 processes, nodes and matrices agree to
+  rounding. Rouwenhorst's chain has the binomial stationary distribution and the mean, variance and
+  autocorrelations of the AR(1) (Kopecky and Suen, 2010). Tauchen's probabilities and stationary
+  distributions agree with a 40-digit computation within 1.1e-11 and 1.1e-14; QuantEcon, which
+  computes the upper tail as `1 - cdf`, is off by 3e-8 on the coarsest chains. The release also
+  lengthens the wait in `release.yml` for TestPyPI to serve a new upload, which ran out on 0.7.0,
+  and stops pip from reusing the index page it cached.
+- [ ] **0.7.2 — time iteration.** The groundwork of every global method enters here: the split of
+  the model's states into endogenous and exogenous, with the exogenous ones given by a
+  `MarkovChain` or by quadrature; a Cartesian grid with linear and cubic interpolation; bounds on
+  the controls, imposed by complementarity (Fischer–Burmeister), for borrowing limits and the zero
+  lower bound; a solution object that evaluates and simulates the policy and reports Euler-equation
+  errors. Time iteration solves the model's own residual, the same one the perturbation uses.
+  Reference: dolo's `time_iteration` on its RBC and on a consumption–savings model with a
+  borrowing limit, and the closed form of stochastic growth.
+- [ ] **0.7.3 — value function iteration**, with Howard's improvement steps. It needs a
+  declaration the model does not yet have: a reward, a discount factor and the transition of the
+  endogenous states. Reference: the closed-form value function of stochastic growth with log
+  utility and full depreciation, QuantEcon's `DiscreteDP` on the same discretised problem, and
+  dolo's `value_iteration`.
+- [ ] **0.7.4 — the endogenous grid method** (Carroll, 2006), for problems whose Euler equation
+  inverts in closed form given the next period's policy, with the inverse supplied by the user.
+  Reference: dolo's `egm` on the consumption–savings model, and the time-iteration solution of
+  0.7.2 on the same grid.
+- [ ] **0.7.5 — sparse grids.** Smolyak collocation (Judd, Maliar, Maliar and Valero, 2014),
+  isotropic and anisotropic, so that projection and time iteration run with more than three
+  states. Reference: Tasmanian's Smolyak nodes and interpolation weights, and the closed form of
+  stochastic growth with several capital stocks, a planner's problem with log utility and full
+  depreciation, whose policy is known in any dimension.
+- [ ] **0.8.0** — the milestone complete: the comparison row and the README updated, and the
+  release made in the same way as 0.7.0.
+
+dolo 0.4.9.20 only installs on Python 3.11, with pandas below 2.0. On 30 October 2026, in such an
+environment, its `time_iteration` solved stochastic growth with log utility and full depreciation
+within 1.7e-6 of the closed form. The validation therefore runs dolo in an environment of its own,
+created by a setup script with the versions pinned, as is done for Octave's packages. If dolo
+stops installing, the fallback is Dolo.jl, through the Julia project already used for
+MacroModelling.jl.
 
 ### 0.9 — the frontier
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsgelab"
-version = "0.7.0"
+version = "0.7.1"
 description = "Solve, simulate and estimate DSGE models in Python: perturbation to third order, perfect foresight, OccBin, optimal policy, Bayesian estimation, identification, method of moments, global sensitivity and Dynare .mod import, validated against Dynare."
 readme = "README.md"
 requires-python = ">=3.11"

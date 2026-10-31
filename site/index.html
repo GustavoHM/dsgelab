@@ -919,6 +919,35 @@ for name, fig in figs.items():
   <code>prior_density</code> reproduces its <code>draw_prior_density</code> and
   <code>posterior_density</code> the kernel estimate of its <code>posterior_moments</code>, with the
   bandwidth corrected for the draws a Metropolis chain repeats.</p>
+  <h3>29. A process as a Markov chain</h3>
+<pre><code>rho, sigma = 0.99, 0.007                     # log productivity, quarterly
+var = sigma ** 2 / (1 - rho ** 2)
+chains = {"rouwenhorst": dsg.rouwenhorst(rho, sigma, 7), "tauchen": dsg.tauchen(rho, sigma, 7)}
+{k: round(c.variance / var, 3) for k, c in chains.items()}
+{k: round(c.autocorrelation(), 4) for k, c in chains.items()}
+chains["rouwenhorst"].stationary.round(3)
+visits = chains["rouwenhorst"].simulate(10_000, seed=1, indices=True)
+(np.bincount(visits, minlength=7) / visits.size).round(3)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">{k: round(c.variance / var, 3) for k, c in chains.items()}</span>
+{'rouwenhorst': 1, 'tauchen': 1.74}
+<span class="out-expr">{k: round(c.autocorrelation(), 4) for k, c in chains.items()}</span>
+{'rouwenhorst': 0.99, 'tauchen': 0.9999}
+<span class="out-expr">chains["rouwenhorst"].stationary.round(3)</span>
+[0.016 0.094 0.234 0.312 0.234 0.094 0.016]
+<span class="out-expr">(np.bincount(visits, minlength=7) / visits.size).round(3)</span>
+[0.008 0.093 0.251 0.308 0.204 0.119 0.018]</code></pre>
+  <p><code>rouwenhorst</code> and <code>tauchen</code> turn an AR(1) into a
+  <code>MarkovChain</code>: nodes, a transition matrix, the stationary distribution, its moments
+  and simulated paths. With persistence 0.99 and seven nodes, Rouwenhorst's chain has the variance
+  and the autocorrelation of the process exactly, as it does for any persistence and any number of
+  nodes. Tauchen's nodes are an unconditional standard deviation apart, seven innovation standard
+  deviations here, so its chain seldom leaves a node, and when it does it jumps far: it overstates
+  both the persistence and the variance. Rouwenhorst's stationary distribution is binomial, and a
+  long simulated path visits the nodes in about those proportions. The
+  chains are the exogenous processes of the global methods that come next in the
+  <a href="https://github.com/GustavoHM/dsgelab/blob/main/ROADMAP.md">roadmap</a>; the validation
+  compares them with QuantEcon and, for Tauchen's small probabilities, with a 40-digit
+  computation.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1191,6 +1220,20 @@ for name, fig in figs.items():
       <tr><td>posterior mode, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
       <tr><td>prior densities of the nine priors (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
       <tr><td>posterior kernel density (<code>posterior_moments</code>), draws with repeats</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Process discretisation against QuantEcon and 40-digit arithmetic</h3>
+  <p>120 AR(1) processes, with persistence from -0.5 to 0.999 and chains of 2 to 101 nodes. QuantEcon
+  computes Tauchen's upper tail as <code>1 - cdf</code>, so its small probabilities are not a
+  reference; those are computed again with 40 digits.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nodes and transition matrices, Tauchen and Rouwenhorst, against QuantEcon</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>Tauchen's transition probabilities against 40 digits, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>Tauchen's stationary distributions against 40 digits (QuantEcon's: 3e-8)</td><td class="num">1e-14</td><td class="ok">OK</td></tr>
+      <tr><td>Rouwenhorst against its closed form: binomial distribution, mean, variance, autocorrelations</td><td class="num">3e-14</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

@@ -50,6 +50,7 @@ Markov regime switching requires **RISE**.
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
 | 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
 | Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
+| Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
 | Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
 | Unit root accepted (`qz_criterium`) | ✅ ‡ optional; strict by default | ? | ? | ? | ? | ? | ✅ by default |
@@ -238,7 +239,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | **done**: `aggregation=` in the state space and `EstimationProblem`, against Dynare's auxiliary-variable formulation on `fs2000` (likelihood within 8e-13); `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`, with Dynare's prior and posterior densities within 2e-12 | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
-| Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.8 |
+| Discretisation of processes (Tauchen, Rouwenhorst) | ✅ dolo, QuantEcon | **done**: `tauchen`, `rouwenhorst` and `MarkovChain`, against QuantEcon on 120 processes, with Tauchen's small probabilities and stationary distributions against a 40-digit computation (QuantEcon loses them in `1 - cdf`) | 0.7.1 |
+| Global methods | 📄 dolo | Chebyshev collocation up to three states; time iteration, value function iteration, the endogenous grid method and sparse grids missing | 0.7.2–0.8 |
 | Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
 
 ---

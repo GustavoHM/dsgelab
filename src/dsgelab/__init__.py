@@ -64,6 +64,7 @@ from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          prior_predictive, rhat, smc)
 from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
                                   forecast_evaluation)
+from .markov import MarkovChain, rouwenhorst, tauchen
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
                      low_frequency, shock_decomposition, state_space)
@@ -82,7 +83,7 @@ from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -112,6 +113,7 @@ __all__ = [
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "prior", "Prior",
     "solve_projection", "Projection",
+    "tauchen", "rouwenhorst", "MarkovChain",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",

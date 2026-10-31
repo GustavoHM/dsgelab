@@ -1007,6 +1007,53 @@ fallback to horizon 1 that both programs make is checked only in the test suite.
 come from a run on 30 October 2026, with
 Dynare 7.2 and Octave 11.3.0.
 
+## Process discretisation: Tauchen and Rouwenhorst
+
+```bash
+pip install quantecon==0.13.1
+python compare_markov.py          # about two minutes, most of it the 40-digit references
+```
+
+```
+QuantEcon 0.13.1, 120 processes
+
+tauchen against QuantEcon
+  nodes 0.0e+00   transition 2.2e-16 (absolute)
+tauchen against 40 digits: 29 distinct chains (the probabilities depend on rho and n only); 1 reducible in double precision for both packages, left out
+  transition probabilities, relative:  dsgelab 1.1e-11   QuantEcon 1.8e+00, with probabilities rounded to zero in 13 chains
+  stationary distribution:             dsgelab 1.1e-14   QuantEcon 2.9e-08, and 4 chains it finds reducible
+rouwenhorst against QuantEcon
+  nodes 0.0e+00   transition 0.0e+00   stationary 1.2e-16
+rouwenhorst against the closed form
+  binomial stationary distribution 2.5e-16   mean, variance and autocorrelations of the AR(1) 3.0e-14
+invariance pi P = pi, every chain 1.1e-16
+```
+
+`tauchen` and `rouwenhorst` are compared with QuantEcon's functions of the same names on 120 AR(1)
+processes: persistence -0.5, 0, 0.5, 0.9, 0.99 and 0.999, innovation standard deviations 0.007 and
+1, chains of 2, 3, 7, 25 and 101 nodes, and means 0 and -1.3 (QuantEcon's `mu` is `(1 - rho)`
+times the mean). The nodes and the transition matrices agree to rounding in every case, and so do
+Rouwenhorst's stationary distributions.
+
+QuantEcon is not the reference for Tauchen's small probabilities. It computes the upper tail as
+`1 - cdf`, which keeps an absolute accuracy of 1e-16 but no relative accuracy below that, so
+probabilities under 1e-16 are lost or rounded to zero. In the chains with two nodes this moves the
+stationary distribution by 3e-8, and in four chains it leaves a probability at zero and makes the
+chain reducible. `dsgelab` computes every interval from the side of the conditional mean it lies
+on, with the normal survival function above it. The reference for those numbers is the same
+construction in 40-digit arithmetic (mpmath), with the stationary distribution found by GTH
+elimination and accepted only if it satisfies `pi P = pi` to 1e-30. Against it, the probabilities
+agree to 1.1e-11 in relative terms and the stationary distributions to 1.1e-14. The largest
+relative errors are in probabilities below 1e-200, where an interval ends some 35 standard
+deviations from the conditional mean and the rounding of that end point alone moves the
+probability by about `a^2 eps`. With persistence 0.999 and two nodes, the probability of leaving
+an end node is below the smallest double, and both packages find the chain reducible.
+
+For Rouwenhorst the closed form is the reference as well: the stationary distribution is binomial
+with `n - 1` trials of probability one half, and the chain has the mean, the variance and the
+autocorrelations of the AR(1) at every lag, which are checked at lags 1 and 4. The numbers come
+from a run on 30 October 2026, with QuantEcon 0.13.1 on Python 3.14.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

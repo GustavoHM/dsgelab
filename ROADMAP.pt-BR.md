@@ -63,6 +63,11 @@ referência independente: o Dynare na maioria dos casos, o SALib para os índice
 Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes estão em
 [`validation/`](validation/README.md).
 
+O marco 0.8 sai em partes. A versão 0.7.1, lançada em 30 de outubro de 2026, traz a primeira: a
+discretização de um AR(1) numa cadeia de Markov pelos métodos de Tauchen e de Rouwenhorst,
+validada contra o QuantEcon, contra as mesmas probabilidades em aritmética de 40 dígitos e contra
+a forma fechada de Rouwenhorst.
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada
@@ -402,10 +407,53 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
 
 ### 0.8 — métodos globais
 
-- [ ] **Iteração temporal, iteração da função valor, método da grade endógena, grades esparsas.**
-  A colocação de Chebyshev com até três estados já existe e reproduz a solução fechada do
-  crescimento estocástico. A comparação será com o dolo.
-- [ ] **Discretização de processos** (Tauchen, Rouwenhorst).
+A colocação de Chebyshev com até três estados já existe e reproduz a solução fechada do crescimento
+estocástico. Seus choques são i.i.d. e integrados por Gauss–Hermite, e a política não tem limites.
+O marco sai em partes, um recurso por versão de correção, da 0.7.1 à 0.7.5, cada uma publicada só
+depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma anterior. A versão
+0.8.0 fecha o marco, sem recurso novo próprio.
+
+- [x] **0.7.1 — discretização de processos.** `tauchen` e `rouwenhorst` transformam um AR(1) em
+  uma `MarkovChain` com nós, matriz de transição, distribuição estacionária, momentos e simulação.
+  Contra `tauchen` e `rouwenhorst` do QuantEcon, em 120 processos, os nós e as matrizes coincidem
+  até o arredondamento. A cadeia de Rouwenhorst tem a distribuição estacionária binomial e a
+  média, a variância e as autocorrelações do AR(1) (Kopecky e Suen, 2010). As probabilidades e as
+  distribuições estacionárias de Tauchen coincidem com um cálculo de 40 dígitos a menos de 1,1e-11
+  e 1,1e-14; o QuantEcon, que calcula a cauda superior como `1 - cdf`, erra por 3e-8 nas cadeias
+  mais grossas. A versão também alonga, no `release.yml`, a espera para que o TestPyPI sirva um
+  envio novo, que se esgotou na 0.7.0, e impede o pip de reaproveitar a página do índice guardada
+  em cache.
+- [ ] **0.7.2 — iteração temporal.** Aqui entra a base de todos os métodos globais: a divisão dos
+  estados do modelo em endógenos e exógenos, com os exógenos dados por uma `MarkovChain` ou por
+  quadratura; uma grade cartesiana com interpolação linear e cúbica; limites nos controles,
+  impostos por complementaridade (Fischer–Burmeister), para limites de endividamento e o limite
+  inferior zero dos juros; um objeto de solução que avalia e simula a política e informa os erros
+  da equação de Euler. A iteração temporal resolve o próprio resíduo do modelo, o mesmo que a
+  perturbação usa. Referência: o `time_iteration` do dolo no seu RBC e num modelo de consumo e
+  poupança com limite de endividamento, e a forma fechada do crescimento estocástico.
+- [ ] **0.7.3 — iteração da função valor**, com os passos de melhoria de Howard. Ela precisa de
+  uma declaração que o modelo ainda não tem: a recompensa, o fator de desconto e a transição dos
+  estados endógenos. Referência: a função valor em forma fechada do crescimento estocástico com
+  utilidade logarítmica e depreciação total, o `DiscreteDP` do QuantEcon no mesmo problema
+  discretizado e o `value_iteration` do dolo.
+- [ ] **0.7.4 — método da grade endógena** (Carroll, 2006), para problemas cuja equação de Euler
+  se inverte em forma fechada dada a política do período seguinte, com a inversa fornecida pelo
+  usuário. Referência: o `egm` do dolo no modelo de consumo e poupança, e a solução por iteração
+  temporal da 0.7.2 na mesma grade.
+- [ ] **0.7.5 — grades esparsas.** Colocação de Smolyak (Judd, Maliar, Maliar e Valero, 2014),
+  isotrópica e anisotrópica, para que a projeção e a iteração temporal rodem com mais de três
+  estados. Referência: os nós e os pesos de interpolação de Smolyak do Tasmanian, e a forma
+  fechada do crescimento estocástico com vários estoques de capital, um problema do planejador com
+  utilidade logarítmica e depreciação total, cuja política é conhecida em qualquer dimensão.
+- [ ] **0.8.0** — o marco completo: a linha da comparação e o README atualizados, e o lançamento
+  feito da mesma forma que o da 0.7.0.
+
+O dolo 0.4.9.20 só se instala no Python 3.11, com pandas abaixo de 2.0. Em 30 de outubro de 2026,
+num ambiente assim, o seu `time_iteration` resolveu o crescimento estocástico com utilidade
+logarítmica e depreciação total a menos de 1,7e-6 da forma fechada. Por isso a validação roda o
+dolo num ambiente próprio, criado por um script de instalação com as versões fixadas, como já se
+faz com os pacotes do Octave. Se o dolo deixar de se instalar, a alternativa é o Dolo.jl, pelo
+projeto Julia já usado para o MacroModelling.jl.
 
 ### 0.9 — a fronteira
 
