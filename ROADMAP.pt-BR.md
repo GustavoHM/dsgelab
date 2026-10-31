@@ -67,7 +67,10 @@ O marco 0.8 sai em partes. A versão 0.7.1, lançada em 30 de outubro de 2026 no
 [10.5281/zenodo.23827669](https://doi.org/10.5281/zenodo.23827669)), traz a primeira: a
 discretização de um AR(1) numa cadeia de Markov pelos métodos de Tauchen e de Rouwenhorst, validada
 contra o QuantEcon, contra as mesmas probabilidades em aritmética de 40 dígitos e contra a forma
-fechada de Rouwenhorst.
+fechada de Rouwenhorst. A versão 0.7.2, lançada em 31 de outubro de 2026, acrescenta a iteração no
+tempo numa grade cartesiana, com limites sobre os controles impostos por complementaridade. Ela
+concorda com o `time_iteration` do dolo em três modelos publicados com ele e com a forma fechada do
+crescimento estocástico.
 
 ## O que conta como pronto
 

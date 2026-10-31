@@ -84,7 +84,7 @@ from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",

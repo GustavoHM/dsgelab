@@ -62,7 +62,9 @@ Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026 on 
 (DOI [10.5281/zenodo.23827669](https://doi.org/10.5281/zenodo.23827669)), brings the first: the
 discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods, validated
 against QuantEcon, against the same probabilities in 40-digit arithmetic and against Rouwenhorst's
-closed form.
+closed form. Version 0.7.2, released on 31 October 2026, adds time iteration on a Cartesian grid,
+with bounds on the controls imposed by complementarity. It agrees with dolo's `time_iteration` on
+three models from the dolo repository and with the closed form of stochastic growth.
 
 ## What counts as done
 

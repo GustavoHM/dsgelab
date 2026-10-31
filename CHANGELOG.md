@@ -7,6 +7,11 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ## Unreleased
 
+## 0.7.2 — 2026-10-31
+
+The second part of the roadmap's milestone 0.8 (global methods): time iteration on a Cartesian
+grid.
+
 ### Added
 
 - `time_iteration`: a global solution by time iteration (Coleman, 1990) on the model's own
