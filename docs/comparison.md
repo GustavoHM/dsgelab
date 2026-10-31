@@ -238,7 +238,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | **done**: `aggregation=` in the state space and `EstimationProblem`, against Dynare's auxiliary-variable formulation on `fs2000` (likelihood within 8e-13); `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`, with Dynare's prior and posterior densities within 2e-12 | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
-| Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.8 |
+| Global methods | 📄 dolo | Chebyshev collocation up to three states, the rest missing | 0.7.1–0.8 |
 | Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
 
 ---
