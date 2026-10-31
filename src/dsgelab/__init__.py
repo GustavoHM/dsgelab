@@ -75,6 +75,7 @@ from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plo
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
+from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
                            sample_restrictions)
 from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
@@ -116,6 +117,7 @@ __all__ = [
     "solve_projection", "Projection",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
+    "value_iteration", "ValueIterationSolution", "DynamicProgram",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",

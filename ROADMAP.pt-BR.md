@@ -445,11 +445,21 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   do ponto fixo, e por isso a comparação aperta essa tolerância. No crescimento estocástico com
   utilidade logarítmica e depreciação total, o erro contra a forma fechada cai com o quadrado do
   espaçamento, até 7e-6 com 80 pontos de capital e interpolação cúbica.
-- [ ] **0.7.3 — iteração da função valor**, com os passos de melhoria de Howard. Ela precisa de
-  uma declaração que o modelo ainda não tem: a recompensa, o fator de desconto e a transição dos
-  estados endógenos. Referência: a função valor em forma fechada do crescimento estocástico com
-  utilidade logarítmica e depreciação total, o `DiscreteDP` do QuantEcon no mesmo problema
-  discretizado e o `value_iteration` do dolo.
+- [x] **0.7.3 — iteração da função valor.** `value_iteration` resolve um `DynamicProgram`, uma
+  declaração nova com a recompensa, a transição, o fator de desconto e os limites dos controles,
+  por iteração da função valor com os passos de melhoria de Howard. O valor fica numa
+  `CartesianGrid` com estados exógenos markovianos ou por quadratura, como na iteração temporal. A
+  maximização é uma busca pela seção áurea com um controle, um método de Newton projetado com
+  vários e uma busca exaustiva em conjuntos finitos de escolhas. No modelo de crescimento
+  discretizado, o `DiscreteDP` do QuantEcon 0.13.1 e o `value_iteration` concordam dentro de 6e-12
+  no valor e dão a mesma política. No RBC markoviano do dolo, com dois controles e interpolação
+  cúbica, o `value_iteration` do dolo 0.4.9.20 e o do `dsgelab` concordam dentro de 1,3e-11 no
+  valor e de 6e-7 nos controles, e o gradiente do objetivo maximizado é 1e-5 nos controles do dolo
+  e 7e-9 nos do `dsgelab`. Tal como publicado, o `value_iteration` do dolo termina em NaN nesse
+  modelo, e a comparação faz quatro alterações para rodá-lo, sem editar o dolo. No crescimento
+  estocástico com utilidade logarítmica e depreciação total, o erro do valor contra a forma fechada
+  cai pelo menos 3,4 vezes quando o espaçamento cai à metade, até 1e-4 com 80 pontos de capital e
+  interpolação linear e 3e-9 com a cúbica.
 - [ ] **0.7.4 — método da grade endógena** (Carroll, 2006), para problemas cuja equação de Euler
   se inverte em forma fechada dada a política do período seguinte, com a inversa fornecida pelo
   usuário. Referência: o `egm` do dolo no modelo de consumo e poupança, e a solução por iteração
