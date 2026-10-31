@@ -169,11 +169,15 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         Yn[1:] = z[nu:].reshape(T, n)
         return Yn
 
-    def residual(Yn):
+    def residual(Yn, it):
         r = np.empty(T * n + nu)
         for t in range(T):
-            r[t * n:(t + 1) * n] = model.residuals(Yn[t + 1], Yn[t], shock_path[t],
-                                                   params_path[t], ctx_path[t])
+            try:
+                r[t * n:(t + 1) * n] = model.residuals(Yn[t + 1], Yn[t], shock_path[t],
+                                                       params_path[t], ctx_path[t])
+            except Exception as exc:
+                _locate(exc, model, "residuals", t, it, Yn)
+                raise
         r[T * n:] = Yn[T, nk:] - yT[nk:]
         return r
 
@@ -182,13 +186,13 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
     it = 0
     for it in range(maxiter):
         Yn = unpack(z)
-        r = residual(Yn)
+        r = residual(Yn, it)
         nrm = float(np.max(np.abs(r)))
         if nrm < tol:
             return TransitionPath(levels=Yn, model=model, converged=True, iterations=it,
                                   residual=nrm, params_path=params_path, ctx_path=ctx_path)
         J = _stacked_jacobian(model, Yn, T, nk, nu, z.size, shock_path, params_path,
-                              ctx_path, jacobian, h)
+                              ctx_path, jacobian, h, it)
         dz = spsolve(J, -r)
         if not np.all(np.isfinite(dz)):
             raise RuntimeError("perfect_foresight: the Newton step is not finite; the "
@@ -233,15 +237,38 @@ def _period_jacobian(model, ytp, yt, et, pt, ct, jacobian, h):
     return d_next, d_now
 
 
+def _locate(exc: Exception, model: Model, stage: str, t: int, it: int, Yn: np.ndarray,
+            shown: int = 12) -> None:
+    """Note on ``exc`` where on the path the model's own code raised.
+
+    A model whose residuals solve an inner problem -- a period equilibrium, a
+    root, an optimisation -- fails at one date and one iterate, and the
+    exception it raises knows neither; the stacked solver does.
+    """
+    names = model.names[:shown]
+    more = "" if model.n_vars <= shown else f", ... ({model.n_vars - shown} more)"
+
+    def at(row):
+        return ", ".join(f"{name}={row[i]:.6g}" for i, name in enumerate(names)) + more
+
+    exc.add_note(f"perfect_foresight: the model's {stage} raised in the equations linking "
+                 f"date {t} to date {t + 1}, at Newton iteration {it}.\n"
+                 f"  date {t}: {at(Yn[t])}\n  date {t + 1}: {at(Yn[t + 1])}")
+
+
 def _stacked_jacobian(model, Yn, T, nk, nu, n_unknowns, shock_path, params_path, ctx_path,
-                      jacobian, h):
+                      jacobian, h, it=0):
     """The sparse Jacobian of the stacked residuals in the unknowns ``[u_0, y_1, ..., y_T]``."""
     n = model.n_vars
     rows, cols, vals = [], [], []
     ii, jj = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
     for t in range(T):
-        d_next, d_now = _period_jacobian(model, Yn[t + 1], Yn[t], shock_path[t],
-                                         params_path[t], ctx_path[t], jacobian, h)
+        try:
+            d_next, d_now = _period_jacobian(model, Yn[t + 1], Yn[t], shock_path[t],
+                                             params_path[t], ctx_path[t], jacobian, h)
+        except Exception as exc:
+            _locate(exc, model, "derivatives", t, it, Yn)
+            raise
         rows.append((t * n + ii).ravel()); cols.append((nu + t * n + jj).ravel())
         vals.append(d_next.ravel())
         if t == 0:                           # only the jumps are unknown at t=0

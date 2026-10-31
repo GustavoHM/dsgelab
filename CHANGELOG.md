@@ -27,6 +27,10 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ### Changed
 
+- `perfect_foresight`: when the model's residuals or derivatives raise, the exception keeps its
+  type and message and carries a note with the dates whose equations failed, the Newton
+  iteration, and the variables at both dates. A residual that solves an inner problem, such as
+  cgelab's period equilibrium, used to fail without saying where on the path.
 - `time_iteration` and `value_iteration` share the construction of the product Markov chain and of
   the shocks' quadrature. `time_iteration`'s results are unchanged.
 
