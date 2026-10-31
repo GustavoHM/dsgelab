@@ -7,6 +7,29 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ## Unreleased
 
+### Added
+
+- `value_iteration`: value function iteration with Howard's (1960) improvement steps, on a
+  `DynamicProgram`, a new declaration of the states, the controls, the reward, the transition, the
+  discount factor and the bounds, which a `Model` does not hold. The value is kept on a
+  `CartesianGrid`, one copy per node of a Markov chain, and interpolated linearly or by natural
+  cubic splines. The shocks are integrated as in `time_iteration`, and the transition sees the next
+  values of the Markov states, so that cash on hand can depend on next period's income. The
+  maximization is a golden-section search with one control, a projected Newton method with
+  finite-difference derivatives with several, and an exhaustive search with `choices=`, finite sets
+  of values. `ValueIterationSolution` evaluates the value and the policy, simulates, and gives
+  `bellman_errors`. `validation/compare_value_iteration.py` checks it against QuantEcon's
+  `DiscreteDP` on the discretised growth model, within 6e-12 and with the same policy, against
+  dolo 0.4.9.20's `value_iteration` on its Markov RBC, within 1.3e-11 of the value and 6e-7 of
+  the controls, and against the closed-form value of stochastic growth. As published, dolo's
+  `value_iteration` ends in NaN on that model, and `validation/dolo/run_dolo_vfi.py` makes four
+  changes, listed there, without editing dolo.
+
+### Changed
+
+- `time_iteration` and `value_iteration` share the construction of the product Markov chain and of
+  the shocks' quadrature. `time_iteration`'s results are unchanged.
+
 ## 0.7.2 — 2026-10-31
 
 The second part of the roadmap's milestone 0.8 (global methods): time iteration on a Cartesian

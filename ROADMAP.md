@@ -425,11 +425,20 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   from the fixed point, so the comparison tightens that tolerance. On stochastic growth with log
   utility and full depreciation the error against the closed form falls as the square of the
   spacing, to 7e-6 with 80 capital points and cubic interpolation.
-- [ ] **0.7.3 — value function iteration**, with Howard's improvement steps. It needs a
-  declaration the model does not yet have: a reward, a discount factor and the transition of the
-  endogenous states. Reference: the closed-form value function of stochastic growth with log
-  utility and full depreciation, QuantEcon's `DiscreteDP` on the same discretised problem, and
-  dolo's `value_iteration`.
+- [x] **0.7.3 — value function iteration.** `value_iteration` solves a `DynamicProgram`, a new
+  declaration with the reward, the transition, the discount factor and the bounds on the controls,
+  by value function iteration with Howard's improvement steps. The value is kept on a
+  `CartesianGrid` with Markov or quadrature exogenous states, as in time iteration. The
+  maximization is a golden-section search with one control, a projected Newton method with
+  several, and an exhaustive search over finite sets of choices. On the discretised growth model,
+  QuantEcon 0.13.1's `DiscreteDP` and `value_iteration` agree within 6e-12 in the value and give
+  the same policy. On dolo's Markov RBC, with two controls and cubic interpolation, dolo 0.4.9.20's
+  `value_iteration` and `dsgelab`'s agree within 1.3e-11 of the value and 6e-7 of the controls, and
+  the gradient of the maximized objective is 1e-5 at dolo's controls and 7e-9 at `dsgelab`'s. As
+  published, dolo's `value_iteration` ends in NaN on that model, and the comparison makes four
+  changes to run it, without editing dolo. On stochastic growth with log utility and full
+  depreciation, the value's error against the closed form falls by at least 3.4 when the spacing
+  halves, to 1e-4 with 80 capital points and linear interpolation and 3e-9 with cubic.
 - [ ] **0.7.4 — the endogenous grid method** (Carroll, 2006), for problems whose Euler equation
   inverts in closed form given the next period's policy, with the inverse supplied by the user.
   Reference: dolo's `egm` on the consumption–savings model, and the time-iteration solution of

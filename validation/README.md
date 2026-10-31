@@ -1141,6 +1141,83 @@ product of two Markov chains, and the cubic interpolant against SciPy's natural 
 numbers come from a run on 30 October 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on
 Python 3.12.
 
+## Value function iteration against QuantEcon and dolo
+
+```bash
+bash dolo/setup.sh                            # if not run already
+dolo/.venv/bin/python dolo/run_dolo_vfi.py    # about 10 seconds
+python compare_value_iteration.py             # about 25 seconds; needs quantecon 0.13.1
+```
+
+```
+1. QuantEcon 0.13.1 DiscreteDP, policy iteration
+ 3 productivity nodes, 150 capital points: dsgelab 9 iterations, 0.26 s; QuantEcon 7 iterations, 0.05 s
+  ok   3 x 150: largest difference in the value                    5.82e-12  (limit 2e-11)
+       the policies are the same at every point
+ 7 productivity nodes, 200 capital points: dsgelab 11 iterations, 1.34 s; QuantEcon 8 iterations, 0.95 s
+  ok   7 x 200: largest difference in the value                    2.24e-13  (limit 2e-11)
+       the policies are the same at every point
+2. dolo 0.4.9.20 (interpolation 2.2.7), value_iteration
+ rbc_mc (cubic): dsgelab 16 iterations from zero, 7.89 s; dolo 3 iterations from its time-iteration policy, 4.14 s
+  ok   rbc_mc: value, relative difference at the grid points       1.27e-11  (limit 1e-09)
+  ok   rbc_mc: value, relative difference between them             1.27e-11  (limit 1e-09)
+  ok   rbc_mc: controls, largest difference at the grid points     5.69e-07  (limit 1e-05)
+  ok   rbc_mc: controls, largest difference between them           5.90e-07  (limit 1e-05)
+       gradient of the objective at dsgelab's controls, interior points: max 7.0e-09
+       gradient of the objective at dolo's controls, interior points: max 1.1e-05
+3. stochastic growth with log utility and full depreciation, against the closed form
+  linear: largest error of V at the grid points with 10, 20, 40, 80 capital points: 7.10e-03, 1.53e-03, 4.51e-04, 1.03e-04
+  ok   linear, 80 points: largest error of V                       1.03e-04  (limit 2e-04)
+  ok   linear: smallest error ratio when the spacing halves            3.40  (at least 3)
+  cubic: largest error of V at the grid points with 10, 20, 40, 80 capital points: 1.55e-04, 1.12e-06, 6.11e-08, 3.19e-09
+  ok   cubic, 80 points: largest error of V                        3.19e-09  (limit 1e-08)
+  ok   cubic: smallest error ratio when the spacing halves            18.32  (at least 3)
+
+all checks passed
+```
+
+QuantEcon's `DiscreteDP` takes a problem with finitely many states and actions. The comparison
+builds it from the stochastic growth model with capital on a grid, next period's capital chosen
+on the same grid and productivity a Rouwenhorst chain, and solves it by policy iteration, which is
+exact. `dsgelab` solves the same problem with `choices=`: since next period's capital is always a
+grid point, the linear interpolation of the value is exact there, and the two problems coincide.
+The values then differ by less than `beta tol / (1 - beta)`, the bound that the stopping rule
+gives, and the policies are the same at every point. QuantEcon 0.13.1 is installed in the
+environment that runs the comparison, as for `compare_markov.py`.
+
+dolo's `value_iteration` needs a model with a felicity, and among the three models `setup.sh`
+downloads only `rbc_mc.yaml` declares one. As published, dolo 0.4.9.20 does not solve it.
+`value_iteration` reads the bounds under names this version of dolo no longer uses, and once those
+are aliased it starts from the calibrated controls, the same at every grid point. At low capital
+they leave consumption negative, the evaluation of that policy diverges, and the run ends in NaN
+after eight iterations. `run_dolo_vfi.py` aliases the bounds and starts from dolo's own
+time-iteration policy for the same model. It also tightens the tolerances of the L-BFGS-B
+maximization and of the policy evaluation, for which dolo exposes no option. The evaluation stops
+when the value moves by less than 1e-8, which keeps the iteration from meeting a tighter
+tolerance. With those changes dolo converges in three iterations. `dsgelab` starts from a zero value and needs 16,
+each a maximization followed by 200 of Howard's steps.
+
+The felicity in `rbc_mc.yaml` is `c^(1-sigma)/(1-sigma)` with `sigma = 5`, whose value for negative
+consumption is also finite. dolo's maximizer starts near the solution and never reaches that
+region. `dsgelab`'s searches the whole box of bounds and finds it, so the program in the comparison
+sets the reward to `-inf` where consumption is not positive, which is the problem `rbc_mc.yaml`
+describes. Both interpolate the value by cubic splines with a zero second derivative at the ends
+and linear extrapolation. The values agree within 1.3e-11, relative to their size, at the grid
+points and at the centres of the cells. The controls agree within 6e-7. The gradient of the
+maximized objective, computed by central differences of the same objective at both policies, is
+7e-9 at `dsgelab`'s and 1e-5 at dolo's. dolo's L-BFGS-B estimates the gradient by forward
+differences, whose error is of that size, so the difference in the controls comes from dolo's
+side.
+
+The closed form is the third reference. With log utility and full depreciation the value is
+`E + alpha/(1 - alpha beta) log k + H(z)`, with `H` the solution of a linear system in the chain's
+transition matrix. At the grid points the linear interpolant's error falls by 3.4 to 4.6 each time
+the spacing halves, and the cubic one's by 18 to 140. The test suite also checks the closed form
+with a shock integrated by Gauss–Hermite on a two-dimensional grid, a closed form with labour and
+two controls, which exercises the projected Newton method, and the discrete-choice problem against
+an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
+with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash
