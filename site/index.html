@@ -948,6 +948,49 @@ visits = chains["rouwenhorst"].simulate(10_000, seed=1, indices=True)
   <a href="https://github.com/GustavoHM/dsgelab/blob/main/ROADMAP.md">roadmap</a>; the validation
   compares them with QuantEcon and, for Tauchen's small probabilities, with a 40-digit
   computation.</p>
+  <h3>30. Saving with a borrowing limit, by time iteration</h3>
+<pre><code>log_y = dsg.rouwenhorst(0.9, 0.2, 5)                  # log income
+income = dsg.MarkovChain(np.exp(log_y.nodes), log_y.transition)
+
+def saver(nxt, cur, eps, p):
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),                # cash on hand
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,                # income: the chain replaces it
+        p["beta"] * p["R"] * (nxt.c / cur.c) ** -p["gamma"] - 1,   # Euler, paired with c &lt;= w
+    ]
+
+saving = dsg.Model(states=["w", "y"], jumps=["c"], shocks=["e"], equations=saver)
+ti = dsg.time_iteration(saving, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                        grid={"w": (0.2, 12.0, 80)}, markov={"y": income},
+                        bounds={"c": (0.0, lambda s, p: s.w)},
+                        initial={"c": lambda s, p: 0.5 * s.w})
+ti.converged, ti.iterations
+w = ti.grid.points[:, 0]
+[int(np.isclose(ti.values[m, :, 0], w).sum()) for m in range(5)]
+ti.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)
+errors = np.abs(ti.euler_errors())
+f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ti.converged, ti.iterations</span>
+(True, 179)
+<span class="out-expr">[int(np.isclose(ti.values[m, :, 0], w).sum()) for m in range(5)]</span>
+[2, 3, 5, 7, 9]
+<span class="out-expr">ti.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)</span>
+[[0.5737]
+ [1]
+ [1.046]]
+<span class="out-expr">f"{errors.mean():.1e}, {np.median(errors):.1e}"</span>
+'4.9e-04, 1.0e-05'</code></pre>
+  <p><code>time_iteration</code> solves the model's own residual on a grid of cash on hand, with
+  income a five-state Markov chain. The row with income at <code>t+1</code> and no endogenous state
+  there is income's law of motion, which the chain replaces. Consumption is bounded by cash on
+  hand, and the Euler equation, the equilibrium condition in the same position, is its complement.
+  The equation is zero where the bound is slack and negative where it binds, because the household
+  would borrow if it could. The limit binds on more grid points the higher income is, because income is persistent and
+  a household with high income expects it to stay high. At cash on hand 1 the poorest household
+  saves, and the richest consumes everything. The Euler errors are unit-free here, because the
+  equation is written as a ratio, and they are largest in the cell where the bound starts to bind.
+  The validation solves three of the example models in dolo's repository, among them consumption
+  and saving with this limit, and agrees with dolo's <code>time_iteration</code> to 1e-9 or better.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1237,6 +1280,21 @@ visits = chains["rouwenhorst"].simulate(10_000, seed=1, indices=True)
     </tbody>
   </table>
 
+  <h3>Time iteration against dolo</h3>
+  <p>Three of dolo's own models, solved by dolo 0.4.9.20 and by <code>dsgelab</code> on the same
+  grid, with the same quadrature or Markov chain and the same bounds, with linear and cubic
+  interpolation. The deviation is the largest difference of a control, relative to the largest
+  control, at the grid points and at the centres of the cells.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>RBC with an iid shock, two states, labour bounded below</td><td class="num">1e-9</td><td class="ok">OK</td></tr>
+      <tr><td>consumption and saving with a borrowing limit (binding at the same 24 of 100 points)</td><td class="num">6e-11</td><td class="ok">OK</td></tr>
+      <tr><td>RBC with Markov productivity, labour and investment bounded on both sides</td><td class="num">6e-14</td><td class="ok">OK</td></tr>
+      <tr><td>stochastic growth against its closed form, 80 capital points, cubic</td><td class="num">7e-6</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
   <code>tests/identification</code> and <code>fs2000</code> from its examples. In
@@ -1319,8 +1377,8 @@ visits = chains["rouwenhorst"].simulate(10_000, seed=1, indices=True)
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation, such as time iteration and value
-  iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
+  second-order solution. For global methods beyond Chebyshev collocation and time
+  iteration, such as value iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
   agents are outside dsgelab, and
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> and
   <a href="https://github.com/gboehl/econpizza">econpizza</a> solve those models.</p></div>

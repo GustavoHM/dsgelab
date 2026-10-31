@@ -7,6 +7,26 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ## Unreleased
 
+### Added
+
+- `time_iteration`: a global solution by time iteration (Coleman, 1990) on the model's own
+  residual, the one the perturbation solves. The rows are sorted into transitions and equilibrium
+  conditions by what they contain at `t+1`. Exogenous states are given by a `MarkovChain`, whose
+  nodes replace the state's law of motion, or are kept on the grid with the shocks integrated by
+  Gauss–Hermite or by nodes and weights the user supplies. Bounds on the jumps, numbers or
+  functions of today's states, are imposed by complementarity with the equilibrium condition in the
+  same position, through the Fischer–Burmeister function, for borrowing limits and the zero lower
+  bound. `TimeIterationSolution` evaluates and simulates the policy and gives the Euler-equation
+  errors, as the natural residual of the complementarity. `CartesianGrid` holds the grid, with
+  linear or natural cubic interpolation and linear extrapolation in both. The equations are called
+  with every grid point at once when they accept arrays, and point by point otherwise.
+  `validation/compare_time_iteration.py` solves three of dolo's own models (its RBC, its RBC with
+  Markov productivity, and consumption and saving with a borrowing limit) on the same grids as dolo
+  0.4.9.20 and agrees with its `time_iteration` within 1e-9, with linear and cubic interpolation.
+  It also checks stochastic growth against its closed form, with errors that fall as the square of
+  the spacing. dolo runs in an environment of its own, created by `validation/dolo/setup.sh` with
+  the versions pinned.
+
 ## 0.7.1 — 2026-10-30
 
 The first part of the roadmap's milestone 0.8 (global methods): the discretisation of a process

@@ -4,13 +4,15 @@
 #
 # Usage:  bash run_all.sh            (everything)
 #         SKIP_JULIA=1 bash run_all.sh
+#         SKIP_DOLO=1 bash run_all.sh
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
 # override the search in the usual places) and, for the calibration equations, Julia. The project
 # in macromodelling/ pins the versions of MacroModelling.jl. The Python that runs the compare_*.py
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
-# for compare_gsa.py and compare_markov.py.
+# for compare_gsa.py and compare_markov.py. dolo, the reference of compare_time_iteration.py, runs in
+# a Python 3.11 environment of its own that dolo/setup.sh creates with uv.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -105,6 +107,15 @@ step "compare_mixed.py"     "$PYTHON" compare_mixed.py
 step "Dynare: plot densities" bash run_plots.sh
 step "compare_plots.py"     "$PYTHON" compare_plots.py
 step "compare_markov.py"    "$PYTHON" compare_markov.py
+if [ -n "${SKIP_DOLO:-}" ]; then
+  results+=("skipped  dolo (SKIP_DOLO)")
+else
+  # without deleting it, a failed dolo run would let the comparison read an earlier result
+  rm -f out_time_iteration/dolo.json
+  step "dolo: environment"  bash dolo/setup.sh
+  step "dolo: time iteration" dolo/.venv/bin/python dolo/run_dolo.py
+  step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
+fi
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

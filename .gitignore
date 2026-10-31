@@ -87,3 +87,5 @@ GEMINI.md
 .claude/
 .github/copilot-instructions.md
 docs/ai-memory.md
+validation/dolo/models/
+validation/out_time_iteration/

@@ -1054,6 +1054,93 @@ with `n - 1` trials of probability one half, and the chain has the mean, the var
 autocorrelations of the AR(1) at every lag, which are checked at lags 1 and 4. The numbers come
 from a run on 30 October 2026, with QuantEcon 0.13.1 on Python 3.14.
 
+## Time iteration against dolo
+
+```bash
+bash dolo/setup.sh                            # Python 3.11 with dolo 0.4.9.20, and its models
+dolo/.venv/bin/python dolo/run_dolo.py        # about 30 seconds
+python compare_time_iteration.py              # about 25 seconds
+```
+
+```
+1. dolo 0.4.9.20 (interpolation 2.2.7), tolerance 1e-11
+ rbc (linear): dsgelab 362 iterations, 5.66 s; dolo 352 iterations, 7.49 s
+  ok   rbc, linear: largest difference at the grid points          1.03e-11  (limit 1e-08)
+  ok   rbc, linear: largest difference between them                1.00e-11  (limit 1e-08)
+       Euler-equation errors at the cells' centres: max 5.98e-03, mean 1.60e-03
+ rbc (cubic): dsgelab 329 iterations, 6.96 s; dolo 361 iterations, 9.30 s
+  ok   rbc, cubic: largest difference at the grid points           9.52e-10  (limit 1e-08)
+  ok   rbc, cubic: largest difference between them                 9.30e-10  (limit 1e-08)
+       Euler-equation errors at the cells' centres: max 2.34e-03, mean 1.59e-04
+ consumption_savings (linear): dsgelab 108 iterations, 0.34 s; dolo 135 iterations, 2.13 s
+  ok   consumption_savings, linear: largest difference at the grid points  5.55e-11  (limit 1e-08)
+  ok   consumption_savings, linear: largest difference between them  5.39e-11  (limit 1e-08)
+       the borrowing limit binds at 24 of 100 grid points in dsgelab, 24 in dolo
+       Euler-equation errors at the cells' centres: max 5.39e-03, mean 1.36e-04
+ consumption_savings (cubic): dsgelab 107 iterations, 0.52 s; dolo 134 iterations, 3.05 s
+  ok   consumption_savings, cubic: largest difference at the grid points  5.51e-11  (limit 1e-08)
+  ok   consumption_savings, cubic: largest difference between them  5.36e-11  (limit 1e-08)
+       the borrowing limit binds at 24 of 100 grid points in dsgelab, 24 in dolo
+       Euler-equation errors at the cells' centres: max 6.13e-03, mean 1.27e-04
+ rbc_mc (linear): dsgelab 351 iterations, 1.40 s; dolo 351 iterations, 4.46 s
+  ok   rbc_mc, linear: largest difference at the grid points       5.73e-14  (limit 1e-08)
+  ok   rbc_mc, linear: largest difference between them             5.57e-14  (limit 1e-08)
+       Euler-equation errors at the cells' centres: max 1.11e-02, mean 1.53e-03
+ rbc_mc (cubic): dsgelab 343 iterations, 1.39 s; dolo 343 iterations, 4.19 s
+  ok   rbc_mc, cubic: largest difference at the grid points        5.51e-14  (limit 1e-08)
+  ok   rbc_mc, cubic: largest difference between them              5.54e-14  (limit 1e-08)
+       Euler-equation errors at the cells' centres: max 5.10e-03, mean 1.40e-04
+2. stochastic growth with log utility and full depreciation, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+
+all checks passed
+```
+
+dolo 0.4.9.20 installs only on Python 3.11, with pandas below 2.0, so `dolo/setup.sh` creates an
+environment of its own with uv, with every version pinned in `dolo/requirements.txt`, and downloads
+three of dolo's example models from its `v0.4.9.20` tag, checking their sha256 sums. `run_dolo.py`
+solves them with dolo's `time_iteration` and writes the policies to
+`out_time_iteration/dolo.json`, and `compare_time_iteration.py` solves the same models with
+`dsgelab`, written as residual functions, on the same grids:
+
+- `rbc.yaml`: states z and k, labour and investment as controls, labour bounded below by zero, the
+  iid shock integrated by Gauss–Hermite with 5 nodes. The file asks for a 100 x 100 grid, and the
+  comparison uses 20 x 20.
+- `consumption_savings_iid.yaml`, as published: cash on hand on 100 points, the income shock on
+  dolo's 5 equiprobable nodes, which `dsgelab` receives through `quadrature=`, and consumption
+  between zero and cash on hand.
+- `rbc_mc.yaml`, as published: capital on 50 points, productivity a two-state Markov chain, labour
+  between 0.01 and 1 and investment between 0 and 1.
+
+Both programs solve the same equations with the same interpolant, since dolo's cubic splines (from
+the `interpolation` package) also have a zero second derivative at the ends and extrapolate
+linearly. The complementarity convention is the same as well. dolo solves each step with at most
+10 Newton steps to a residual of 1e-8 and offers no option to change either, and at that
+tolerance its policy stops some 1e-7 from the fixed point (4e-7 on `rbc`, 3e-7 on `rbc_mc`).
+`run_dolo.py` replaces the two solvers, for its own run only, with versions at a tolerance of
+1e-12 and 50 steps. With that, the policies agree within 1e-9 at the grid points and at the
+centres of the cells, relative to the largest control, and the iteration counts are close (the
+same on `rbc_mc`). What remains on `rbc` is the stopping rule: both stop when the policy moves by
+less than 1e-11, and with persistence 0.8 and a discount factor of 0.99 the iteration contracts
+slowly, so a step of 1e-11 leaves the policy some 1e-9 from the fixed point. The Euler-equation
+errors printed for each model are `dsgelab`'s, at the centres of the cells, where the
+interpolation is least accurate, and they are largest where a bound starts to bind.
+
+The closed form is the second reference: with log utility and full depreciation,
+`c = (1 - alpha beta) a k^alpha`, whatever the process of productivity. The error at the centres
+of the cells falls by a factor of four each time the spacing halves, with linear and with cubic
+interpolation. A natural spline has a zero second derivative at the ends of the grid where the
+policy's is not zero, so near the ends the cubic interpolant is also second order, with a constant
+about three times smaller than the linear one's. The test suite checks the same closed form with a
+product of two Markov chains, and the cubic interpolant against SciPy's natural `CubicSpline`. The
+numbers come from a run on 30 October 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on
+Python 3.12.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

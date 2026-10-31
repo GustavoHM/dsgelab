@@ -50,6 +50,7 @@ Markov regime switching requires **RISE**.
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
 | 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
 | Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
+| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth | — | ✅ `time_iteration` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
 | Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
@@ -100,8 +101,9 @@ the table, it is the only one that states it has no estimation. It and `dolo` di
 Python 3.14, and in its case the reason is that the 0.95.9 package on PyPI comes without a build
 file, either `setup.py` or `pyproject.toml`.
 
-**`dolo` documents methods absent from `dsgelab`,** such as time iteration and value iteration, as
-well as perturbation up to third order. Installation failed because the package pins a version of
+**`dolo` documents methods absent from `dsgelab`,** such as value iteration and the endogenous grid
+method, as well as perturbation up to third order, and its time iteration is the reference for
+`dsgelab`'s. Installation failed because the package pins a version of
 pandas that no longer builds, and I did not test Python versions earlier than 3.14.
 
 **`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject,** which the
@@ -240,7 +242,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
 | Discretisation of processes (Tauchen, Rouwenhorst) | ✅ dolo, QuantEcon | **done**: `tauchen`, `rouwenhorst` and `MarkovChain`, against QuantEcon on 120 processes, with Tauchen's small probabilities and stationary distributions against a 40-digit computation (QuantEcon loses them in `1 - cdf`) | 0.7.1 |
-| Global methods | 📄 dolo | Chebyshev collocation up to three states; time iteration, value function iteration, the endogenous grid method and sparse grids missing | 0.7.2–0.8 |
+| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
+| Global methods | 📄 dolo | Chebyshev collocation up to three states and time iteration; value function iteration, the endogenous grid method and sparse grids missing | 0.7.3–0.8 |
 | Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
 
 ---

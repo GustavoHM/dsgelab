@@ -956,6 +956,50 @@ visitas = cadeias["rouwenhorst"].simulate(10_000, seed=1, indices=True)
   <a href="https://github.com/GustavoHM/dsgelab/blob/main/ROADMAP.pt-BR.md">roteiro</a>; a
   validação as compara com o QuantEcon e, para as probabilidades pequenas de Tauchen, com um
   cálculo de 40 dígitos.</p>
+  <h3>30. Poupança com limite de endividamento, por iteração temporal</h3>
+<pre><code>log_y = dsg.rouwenhorst(0.9, 0.2, 5)                  # log da renda
+renda = dsg.MarkovChain(np.exp(log_y.nodes), log_y.transition)
+
+def poupador(nxt, cur, eps, p):
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),                # recursos disponíveis
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,                # renda: a cadeia a substitui
+        p["beta"] * p["R"] * (nxt.c / cur.c) ** -p["gamma"] - 1,   # Euler, par de c &lt;= w
+    ]
+
+poupanca = dsg.Model(states=["w", "y"], jumps=["c"], shocks=["e"], equations=poupador)
+ti = dsg.time_iteration(poupanca, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                        grid={"w": (0.2, 12.0, 80)}, markov={"y": renda},
+                        bounds={"c": (0.0, lambda s, p: s.w)},
+                        initial={"c": lambda s, p: 0.5 * s.w})
+ti.converged, ti.iterations
+w = ti.grid.points[:, 0]
+[int(np.isclose(ti.values[m, :, 0], w).sum()) for m in range(5)]
+ti.controls([[1.0, renda.nodes[0]], [1.0, renda.nodes[-1]], [6.0, renda.nodes[0]]]).round(4)
+erros = np.abs(ti.euler_errors())
+f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ti.converged, ti.iterations</span>
+(True, 179)
+<span class="out-expr">[int(np.isclose(ti.values[m, :, 0], w).sum()) for m in range(5)]</span>
+[2, 3, 5, 7, 9]
+<span class="out-expr">ti.controls([[1.0, renda.nodes[0]], [1.0, renda.nodes[-1]], [6.0, renda.nodes[0]]]).round(4)</span>
+[[0.5737]
+ [1]
+ [1.046]]
+<span class="out-expr">f"{erros.mean():.1e}, {np.median(erros):.1e}"</span>
+'4.9e-04, 1.0e-05'</code></pre>
+  <p><code>time_iteration</code> resolve o próprio resíduo do modelo numa grade dos recursos
+  disponíveis, com a renda numa cadeia de Markov de cinco estados. A linha com a renda em
+  <code>t+1</code> e nenhum estado endógeno ali é a lei de movimento da renda, que a cadeia
+  substitui. O consumo é limitado pelos recursos disponíveis, e a equação de Euler, a condição de
+  equilíbrio na mesma posição, é o seu complemento. A equação é zero onde o limite folga e negativa
+  onde ele se impõe, porque a família tomaria emprestado se pudesse. O limite se impõe em mais pontos da grade
+  quanto maior a renda, porque a renda é persistente e uma família de renda alta espera que ela
+  continue alta. Com recursos iguais a 1, a família mais pobre poupa e a mais rica consome tudo. Os
+  erros da equação de Euler não têm unidade aqui, porque a equação está escrita como razão, e são
+  maiores na célula onde o limite passa a se impor. A validação resolve três dos modelos de exemplo
+  do repositório do dolo, entre eles o de consumo e poupança com esse limite, e concorda com o
+  <code>time_iteration</code> do dolo a 1e-9 ou menos.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1252,6 +1296,21 @@ visitas = cadeias["rouwenhorst"].simulate(10_000, seed=1, indices=True)
     </tbody>
   </table>
 
+  <h3>Iteração temporal comparada com o dolo</h3>
+  <p>Três modelos do próprio dolo, resolvidos pelo dolo 0.4.9.20 e pelo <code>dsgelab</code> na
+  mesma grade, com a mesma quadratura ou cadeia de Markov e os mesmos limites, com interpolação
+  linear e cúbica. O desvio é a maior diferença de um controle, relativa ao maior controle, nos
+  pontos da grade e nos centros das células.</p>
+  <table>
+    <thead><tr><th>O que é comparado</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>RBC com choque iid, dois estados, trabalho limitado por baixo</td><td class="num">1e-9</td><td class="ok">OK</td></tr>
+      <tr><td>consumo e poupança com limite de endividamento (ativo nos mesmos 24 de 100 pontos)</td><td class="num">6e-11</td><td class="ok">OK</td></tr>
+      <tr><td>RBC com produtividade de Markov, trabalho e investimento limitados dos dois lados</td><td class="num">6e-14</td><td class="ok">OK</td></tr>
+      <tr><td>crescimento estocástico contra a forma fechada, 80 pontos de capital, cúbica</td><td class="num">7e-6</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de
   <code>tests/identification</code> do Dynare, e <code>fs2000</code>, dos seus exemplos. Em
@@ -1337,7 +1396,7 @@ visitas = cadeias["rouwenhorst"].simulate(10_000, seed=1, indices=True)
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
   Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev, como a iteração temporal e a iteração da função valor, o
+  colocação de Chebyshev e da iteração temporal, como a iteração da função valor, o
   <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Agentes
   heterogêneos ficam fora do dsgelab, e o
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> e o

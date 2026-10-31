@@ -426,14 +426,21 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   mais grossas. A versão também alonga, no `release.yml`, a espera para que o TestPyPI sirva um
   envio novo, que se esgotou na 0.7.0, e impede o pip de reaproveitar a página do índice guardada
   em cache.
-- [ ] **0.7.2 — iteração temporal.** Aqui entra a base de todos os métodos globais: a divisão dos
-  estados do modelo em endógenos e exógenos, com os exógenos dados por uma `MarkovChain` ou por
-  quadratura; uma grade cartesiana com interpolação linear e cúbica; limites nos controles,
-  impostos por complementaridade (Fischer–Burmeister), para limites de endividamento e o limite
-  inferior zero dos juros; um objeto de solução que avalia e simula a política e informa os erros
-  da equação de Euler. A iteração temporal resolve o próprio resíduo do modelo, o mesmo que a
-  perturbação usa. Referência: o `time_iteration` do dolo no seu RBC e num modelo de consumo e
-  poupança com limite de endividamento, e a forma fechada do crescimento estocástico.
+- [x] **0.7.2 — iteração temporal.** `time_iteration` resolve o próprio resíduo do modelo, o
+  mesmo que a perturbação usa, com as linhas separadas em transições e condições de equilíbrio
+  pelo que contêm em `t+1`. Os estados exógenos são dados por uma `MarkovChain` ou ficam na grade,
+  com os choques integrados por quadratura. `CartesianGrid` interpola linearmente ou por spline
+  cúbica natural. Os limites nos controles são impostos por complementaridade
+  (Fischer–Burmeister), para limites de endividamento e o limite inferior zero dos juros, e
+  `TimeIterationSolution` avalia e simula a política e informa os erros da equação de Euler.
+  Comparadas com o `time_iteration` do dolo 0.4.9.20 em três modelos do próprio dolo (o RBC com
+  choque iid, o RBC com produtividade de Markov e limites nos dois controles, e o de consumo e
+  poupança com limite de endividamento), nas mesmas grades, as políticas concordam a 1e-9 com
+  interpolação linear e com cúbica, e o limite de endividamento se impõe nos mesmos pontos da
+  grade. O dolo encerra cada passo com resíduo de 1e-8, o que deixa a sua política a cerca de 1e-7
+  do ponto fixo, e por isso a comparação aperta essa tolerância. No crescimento estocástico com
+  utilidade logarítmica e depreciação total, o erro contra a forma fechada cai com o quadrado do
+  espaçamento, até 7e-6 com 80 pontos de capital e interpolação cúbica.
 - [ ] **0.7.3 — iteração da função valor**, com os passos de melhoria de Howard. Ela precisa de
   uma declaração que o modelo ainda não tem: a recompensa, o fator de desconto e a transição dos
   estados endógenos. Referência: a função valor em forma fechada do crescimento estocástico com

@@ -35,6 +35,9 @@ jobs:
           python-version: "3.13"
       # SALib and QuantEcon are the references of compare_gsa.py and compare_markov.py
       - run: python -m pip install ".[symbolic]" "SALib==1.6.0" "quantecon==0.13.1"
+      # uv creates the Python 3.11 environment in which dolo, the reference of
+      # compare_time_iteration.py, runs (validation/dolo/setup.sh)
+      - run: python -m pip install "uv==0.12.5"
 
       - name: Octave and Dynare
         run: |
