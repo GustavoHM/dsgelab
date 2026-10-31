@@ -48,18 +48,20 @@ política ótima, previsão perfeita, estimação, OccBin, trajetória estendida
 e diagnóstico. As equações de calibração são validadas contra o MacroModelling.jl. Os detalhes
 estão em [`validation/`](validation/README.md).
 
-A versão 0.7.0 traz os marcos 0.6 e 0.7. Em terceira ordem, a regra de decisão está completa na
-forma do Dynare, com todos os blocos cúbicos e de risco, o estado estacionário estocástico e tensores
-esparsos para modelos grandes, e a solução tem derivadas analíticas em relação aos parâmetros nas
-três ordens. A estimação ganha HMC e NUTS sobre o gradiente da verossimilhança de Kalman, e filtros
-de partículas e de inversão em segunda e terceira ordem. Para identificação e dados, há
-identificação local, GMM, SMM e ajuste de IRF, projeções locais, momentos filtrados, restrições de
-calibração sobre IRFs e momentos, sensibilidade global (mapeamento de estabilidade, filtragem de
-Monte Carlo e índices de Sobol), avaliação de previsões fora da amostra, dados de frequência mista
-e gráficos. Cada um é validado contra uma referência independente: o Dynare na maioria dos casos, o
-SALib para os índices de Sobol, o `forecast::dm.test` do R para o teste de Diebold–Mariano e o
-resultado populacional de Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes
-estão em [`validation/`](validation/README.md).
+A versão 0.7.0, lançada em 30 de outubro de 2026 no PyPI e no Zenodo (DOI
+[10.5281/zenodo.23825088](https://doi.org/10.5281/zenodo.23825088)), traz os marcos 0.6 e 0.7. Em
+terceira ordem, a regra de decisão está completa na forma do Dynare, com todos os blocos cúbicos e
+de risco, o estado estacionário estocástico e tensores esparsos para modelos grandes, e a solução
+tem derivadas analíticas em relação aos parâmetros nas três ordens. A estimação ganha HMC e NUTS
+sobre o gradiente da verossimilhança de Kalman, e filtros de partículas e de inversão em segunda e
+terceira ordem. Para identificação e dados, há identificação local, GMM, SMM e ajuste de IRF,
+projeções locais, momentos filtrados, restrições de calibração sobre IRFs e momentos, sensibilidade
+global (mapeamento de estabilidade, filtragem de Monte Carlo e índices de Sobol), avaliação de
+previsões fora da amostra, dados de frequência mista e gráficos. Cada um é validado contra uma
+referência independente: o Dynare na maioria dos casos, o SALib para os índices de Sobol, o
+`forecast::dm.test` do R para o teste de Diebold–Mariano e o resultado populacional de
+Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes estão em
+[`validation/`](validation/README.md).
 
 ## O que conta como pronto
 
@@ -238,12 +240,12 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
 - [x] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes
   (`release.yml`, disparado por uma tag `v*`). O fluxo confere a tag contra a versão, publica no
   TestPyPI, roda a suíte contra o que o TestPyPI serve e só publica no PyPI depois da aprovação do
-  revisor obrigatório. A versão 0.5.0 saiu assim em 18 de outubro de 2026.
+  revisor obrigatório. As versões 0.5.0 e 0.7.0 saíram assim, em 18 e 30 de outubro de 2026.
 - [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
   mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.5.0 é
-  10.5281/zenodo.23456475, e o DOI conceitual 10.5281/zenodo.23456474, que leva sempre à versão
-  mais recente, está no `CITATION.cff`.
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.7.0 é
+  10.5281/zenodo.23825088 (a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual
+  10.5281/zenodo.23456474, que leva sempre à versão mais recente, está no `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
 - [x] `py.typed` e anotações de tipo na API pública, sem nenhuma função ou método público sem
   anotação e sem erro novo acusado pelo `mypy`. Os wrappers de importação preguiçosa (*lazy*) de

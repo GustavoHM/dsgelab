@@ -312,21 +312,21 @@ without knowing which. [`CITATION.cff`](https://github.com/GustavoHM/dsgelab/blo
 holds the same metadata in the format GitHub reads.
 
 Moreira, G. H. (2026). dsgelab: A general toolkit for solving DSGE models in Python (Version
-0.5.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23456475
+0.7.0) [Computer software]. Zenodo. https://doi.org/10.5281/zenodo.23825088
 
 ```bibtex
 @software{dsgelab_2026,
   author  = {Moreira, Gustavo Hoffmann},
   title   = {{dsgelab}: a general toolkit for solving DSGE models in Python},
   year    = {2026},
-  version = {0.5.0},
+  version = {0.7.0},
   license = {MIT},
-  doi     = {10.5281/zenodo.23456475},
+  doi     = {10.5281/zenodo.23825088},
   url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Python package}
 }
 ```
 
 Each release is archived on Zenodo with a DOI of its own; the DOI above is that of version
-0.5.0. The concept DOI [10.5281/zenodo.23456474](https://doi.org/10.5281/zenodo.23456474)
+0.7.0. The concept DOI [10.5281/zenodo.23456474](https://doi.org/10.5281/zenodo.23456474)
 resolves to the latest release.
