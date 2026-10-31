@@ -1021,14 +1021,14 @@ cubica = dsg.value_iteration(crescimento, {}, grid=grade, markov={"z": log_z},
 simples.iterations, vi.iterations
 k = vi.grid.points[:, 0]
 c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma fechada
-[f"{np.abs(sol.policy[..., 0] / c - 1).max():.1e}" for sol in (vi, cubica)]
-[f"{np.abs(sol.bellman_errors()).max():.1e}" for sol in (vi, cubica)]</code></pre>
+[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubica)]
+[f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubica)]</code></pre>
 <pre class="output" data-label="Saída"><code><span class="out-expr">simples.iterations, vi.iterations</span>
 (361, 18)
-<span class="out-expr">[f"{np.abs(sol.policy[..., 0] / c - 1).max():.1e}" for sol in (vi, cubica)]</span>
-['5.5e-03', '7.4e-07']
-<span class="out-expr">[f"{np.abs(sol.bellman_errors()).max():.1e}" for sol in (vi, cubica)]</span>
-['2.0e-04', '6.6e-05']</code></pre>
+<span class="out-expr">[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubica)]</span>
+['6e-03', '7e-07']
+<span class="out-expr">[f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubica)]</span>
+['2e-04', '7e-05']</code></pre>
   <p><code>value_iteration</code> resolve um <code>DynamicProgram</code>, que declara a recompensa,
   a transição, o fator de desconto e os limites de uma equação de Bellman, objetos que um
   <code>Model</code> de condições de equilíbrio não contém. O valor fica numa grade do capital, uma
