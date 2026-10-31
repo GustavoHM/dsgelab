@@ -502,6 +502,74 @@ fastest; `midpoints` lists the centres of the cells; `shape`, `n` and `d` give t
 policy whose second derivative at the ends of the grid is not zero, its error there falls as the
 square of the spacing.
 
+### `DynamicProgram(states, controls, reward, transition, discount, shocks=(), bounds=None, name="program")`
+
+The declaration of a problem in Bellman form, `V(s) = max r(s, x) + beta E[V(s')]` over the
+controls `x` within their bounds, with `s' = g(s, x, e')`. A `Model` holds equilibrium conditions
+and has no reward, so value function iteration takes this declaration instead.
+
+| Field | Meaning |
+|---|---|
+| `states`, `controls`, `shocks` | the names, which must all differ. States that follow a Markov chain are listed among the states |
+| `reward` | `reward(s, x, params)`, the period reward, with `s` and `x` name-indexed views of the states and the controls |
+| `transition` | `transition(s, x, e, params)`, next period's states, as `{state: value}` or as a sequence in the order of `states`. `e` holds the shocks and, under their own names, the next values of the states that follow a Markov chain, so that cash on hand can depend on next period's income. The entry of a Markov state is not used |
+| `discount` | a number, the name of a parameter, or `discount(params)`, which must lie in `[0, 1)` |
+| `bounds` | `{control: (lower, upper)}`, each a number, `None`, or `bound(states, params)` |
+
+`beta(params)` returns the discount factor.
+
+### `value_iteration(program, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, interpolation="linear", choices=None, initial=None, howard=20, tol=1e-8, max_iter=10000, inner_tol=1e-10, inner_max_iter=100) -> ValueIterationSolution`
+
+Value function iteration with Howard's (1960) improvement steps. The value is kept at the grid
+points, one copy per node of the Markov chain, and interpolated between them. Each iteration
+applies the Bellman operator once, maximizing at every grid point, and then applies the operator
+of the policy it found `howard` times, which needs no maximization. The iteration stops when the
+Bellman operator moves the value by less than `tol` at every grid point, and the value is then
+within `beta tol / (1 - beta)` of the operator's fixed point on the grid. With `howard=0` this is
+plain value function iteration.
+
+With one control, the maximization at each point is a golden-section search between the bounds,
+followed by a comparison with the two bounds themselves, so that a binding bound is found exactly.
+With several, it is a projected Newton method (Bertsekas, 1982) whose gradient and Hessian come
+from finite differences that stay inside the bounds. It starts from the best of the previous
+policy and a lattice of 5 points per control inside the bounds, so that a point does not stay at
+a local maximum reached from an early value function. Over an interval, every control needs finite
+bounds. A reward that is `nan` or infinite marks the controls as infeasible, which is the way to
+exclude, say, negative consumption that the bounds alone do not rule out.
+
+| Argument | Meaning |
+|---|---|
+| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid, the Markov states and the shocks' integration, as in `time_iteration` |
+| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly |
+| `choices` | `{control: values}` for every control, to choose among finitely many values, all combinations of which are tried. With next period's states among the grid points, this is the problem QuantEcon's `DiscreteDP` solves |
+| `initial` | the starting value: a number, `initial(states, params)` at a row-stacked array of states, or a `ValueIterationSolution` (to refine on another grid, whose policy also starts the maximization). With `None`, zero |
+| `howard` | the number of applications of the policy's own operator after each maximization |
+| `tol`, `max_iter` | the stopping rule, on the largest change the Bellman operator makes to the value |
+| `inner_tol`, `inner_max_iter` | the maximization's tolerance on the controls, relative to the width of the bounds with one control and to `1 + |x|` with several, and its limit on iterations |
+
+Beyond the grid the value is extrapolated linearly, and a linear extrapolation of a concave value
+overstates it far from the grid. Bounds that let next period's states fall far outside the grid can
+then make a poor choice look good and give a fixed point that is not the problem's. Bounds that
+keep the next states on or near the grid avoid it.
+
+The reward and the transition are first called with every point at once, each variable a vector,
+and point by point if that fails or disagrees with a call at a single point, as in
+`time_iteration`.
+
+### `ValueIterationSolution`
+
+`value(states)` gives the value and `controls(states)`, also `solution(states)`, the policy at one
+state or at a row-stacked array of states in the program's order, or at a mapping from names to
+values, interpolated between the grid points. A Markov state must take one of its chain's node
+values. `bellman_errors(states=None)` gives `T V - V` at `states`, with `T` the Bellman operator,
+by default at the centres of the grid's cells and at every node of the chain. At the grid points it
+is at most the final `distance`, and between them it measures how far the interpolated value is
+from satisfying the Bellman equation. `simulate(periods, *, start=None, seed=None, shocks=None)`
+returns `states`, `controls`, `rewards` and `nodes`, one row per period. The value at the grid
+points is in `values` `(n_nodes, grid.n)` and the policy in `policy` `(n_nodes, grid.n,
+n_controls)`. The other fields are `program`, `params`, `grid`, `chain`, `markov_states`,
+`interpolation`, `discount`, `iterations`, `converged`, `distance` and `history`.
+
 ---
 
 ## Transitions

@@ -991,6 +991,48 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   equation is written as a ratio, and they are largest in the cell where the bound starts to bind.
   The validation solves three of the example models in dolo's repository, among them consumption
   and saving with this limit, and agrees with dolo's <code>time_iteration</code> to 1e-9 or better.</p>
+  <h3>31. Stochastic growth, by value function iteration</h3>
+<pre><code>alpha, beta = 0.36, 0.95
+log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log productivity
+
+def output(s):
+    return np.exp(s.z) * s.k ** alpha
+
+growth = dsg.DynamicProgram(
+    states=["k", "z"], controls=["c"],
+    reward=lambda s, x, p: np.log(x.c),
+    transition=lambda s, x, e, p: {"k": output(s) - x.c},
+    discount=beta, bounds={"c": (1e-9, lambda s, p: output(s) - 1e-9)})
+kss = (alpha * beta) ** (1 / (1 - alpha))
+grid = {"k": (0.5 * kss, 1.5 * kss, 40)}
+plain = dsg.value_iteration(growth, {}, grid=grid, markov={"z": log_z}, howard=0)
+vi = dsg.value_iteration(growth, {}, grid=grid, markov={"z": log_z})        # 20 Howard steps
+cubic = dsg.value_iteration(growth, {}, grid=grid, markov={"z": log_z}, interpolation="cubic")
+plain.iterations, vi.iterations
+k = vi.grid.points[:, 0]
+c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the closed form
+[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubic)]
+[f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubic)]</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">plain.iterations, vi.iterations</span>
+(361, 18)
+<span class="out-expr">[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubic)]</span>
+['6e-03', '7e-07']
+<span class="out-expr">[f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubic)]</span>
+['2e-04', '7e-05']</code></pre>
+  <p><code>value_iteration</code> solves a <code>DynamicProgram</code>, which declares the reward,
+  the transition, the discount factor and the bounds of a Bellman equation, the objects a
+  <code>Model</code> of equilibrium conditions does not hold. The value is kept on a grid of
+  capital, one copy per productivity node, and each iteration maximizes over consumption at every
+  grid point. After each maximization, Howard's steps apply the operator of the policy just found
+  20 times, at the cost of an interpolation each, and cut the iterations by a factor of about 20
+  without changing the fixed point. The closed form of this model, consumption a share
+  <code>1 - alpha beta</code> of output, measures the error. With linear interpolation the value
+  has a kink at every grid point, and the policy found by maximizing it is off by up to 0.6 per
+  cent. With cubic interpolation the value is smooth, and the policy's error falls below 1e-6. The
+  Bellman errors, at the centres of the cells, are in units of the value. The validation
+  compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
+  version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
+  two controls.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1295,6 +1337,21 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
     </tbody>
   </table>
 
+  <h3>Value function iteration against QuantEcon and dolo</h3>
+  <p>QuantEcon's <code>DiscreteDP</code> solves the discretised growth model exactly, by policy
+  iteration, and dolo 0.4.9.20's <code>value_iteration</code> solves its Markov RBC with two
+  controls and cubic interpolation. As published, dolo's run ends in NaN on that model, and the
+  comparison makes four changes, listed in the validation, to run it without editing dolo.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>discretised growth against <code>DiscreteDP</code>, value (the policies are the same)</td><td class="num">6e-12</td><td class="ok">OK</td></tr>
+      <tr><td>Markov RBC against dolo, value, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>Markov RBC against dolo, controls (dolo's maximizer stops some 1e-6 short)</td><td class="num">6e-7</td><td class="ok">OK</td></tr>
+      <tr><td>stochastic growth against its closed form, value, 80 capital points, cubic</td><td class="num">3e-9</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
   <code>tests/identification</code> and <code>fs2000</code> from its examples. In
@@ -1377,8 +1434,9 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation and time
-  iteration, such as value iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
+  second-order solution. For global methods beyond Chebyshev collocation, time iteration
+  and value function iteration, such as the endogenous grid method,
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
   agents are outside dsgelab, and
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> and
   <a href="https://github.com/gboehl/econpizza">econpizza</a> solve those models.</p></div>

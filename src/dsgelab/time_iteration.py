@@ -396,40 +396,11 @@ class _Problem:
         # the grid's axes, in the grid's order, as positions in the state vector
         self.cont_idx = np.array([model.states.index(s) for s in grid.names], dtype=int)
         self.endo = [s for s in model.states if s not in markov]
-        if markov:
-            chains = [markov[s] for s in self.markov_names]
-            P = chains[0].transition
-            vals = chains[0].nodes[:, None]
-            for c in chains[1:]:
-                P = np.kron(P, c.transition)
-                vals = np.column_stack([np.repeat(vals, c.n, axis=0),
-                                        np.tile(c.nodes, vals.shape[0])])
-            self.chain = MarkovChain(np.arange(P.shape[0], dtype=float), P) \
-                if len(chains) > 1 else chains[0]
-            self.node_values = vals          # (n_nodes, n_markov)
-        else:
-            self.chain = None
-            self.node_values = np.zeros((1, 0))
+        self.chain, self.node_values = _markov_product([markov[s] for s in self.markov_names])
         self.n_nodes = self.node_values.shape[0]
         self.transition = self.chain.transition if self.chain is not None else np.ones((1, 1))
-        # shocks
-        self.chol = None
-        if quadrature is not None:
-            nodes, weights = quadrature
-            nodes = np.asarray(nodes, dtype=float).reshape(-1, model.n_shocks)
-            weights = np.asarray(weights, dtype=float).ravel()
-            if weights.size != nodes.shape[0] or not np.isclose(weights.sum(), 1.0):
-                raise ValueError("quadrature needs one weight per node, summing to one")
-            self.eps_nodes, self.eps_weights = nodes, weights
-            mean = weights @ nodes
-            Sigma = (nodes - mean).T @ ((nodes - mean) * weights[:, None])
-            self.chol = _factor(Sigma)
-        elif markov and cov is None or model.n_shocks == 0:
-            self.eps_nodes, self.eps_weights = np.zeros((1, model.n_shocks)), np.ones(1)
-        else:
-            Sigma = shock_covariance(model.shocks, cov)
-            self.eps_nodes, self.eps_weights = _gauss_hermite(Sigma, n_quad)
-            self.chol = _factor(Sigma)
+        self.eps_nodes, self.eps_weights, self.chol = _shock_rule(
+            model.shocks, cov, n_quad, quadrature, bool(markov))
         # controls' bounds
         for name in bounds:
             if name not in model.jumps:
@@ -783,6 +754,46 @@ def _fischer_burmeister(u, F, lo, hi, has_lo, has_hi):
         lower = fb(a, F)
         upper = -fb(b, -F)
     return np.where(has_lo & has_hi, both, np.where(has_lo, lower, np.where(has_hi, upper, F)))
+
+
+def _markov_product(chains):
+    """The product of independent chains, the last varying fastest, and its node values.
+
+    Returns ``(chain, values)`` with ``values`` of shape ``(n_nodes, len(chains))``; with no
+    chain, ``(None, an empty row)``, so that the code that loops over nodes sees one node.
+    """
+    if not chains:
+        return None, np.zeros((1, 0))
+    P = chains[0].transition
+    vals = chains[0].nodes[:, None]
+    for c in chains[1:]:
+        P = np.kron(P, c.transition)
+        vals = np.column_stack([np.repeat(vals, c.n, axis=0), np.tile(c.nodes, vals.shape[0])])
+    chain = MarkovChain(np.arange(P.shape[0], dtype=float), P) if len(chains) > 1 else chains[0]
+    return chain, vals
+
+
+def _shock_rule(shocks, cov, n_quad, quadrature, has_markov):
+    """Nodes and weights for the shocks, one row per node, and a factor of their covariance.
+
+    With a Markov chain and neither ``cov`` nor ``quadrature``, or with no shocks, the shocks
+    are zero and the factor is ``None``.
+    """
+    n = len(shocks)
+    if quadrature is not None:
+        nodes, weights = quadrature
+        nodes = np.asarray(nodes, dtype=float).reshape(-1, n)
+        weights = np.asarray(weights, dtype=float).ravel()
+        if weights.size != nodes.shape[0] or not np.isclose(weights.sum(), 1.0):
+            raise ValueError("quadrature needs one weight per node, summing to one")
+        mean = weights @ nodes
+        Sigma = (nodes - mean).T @ ((nodes - mean) * weights[:, None])
+        return nodes, weights, _factor(Sigma)
+    if has_markov and cov is None or n == 0:
+        return np.zeros((1, n)), np.ones(1), None
+    Sigma = shock_covariance(shocks, cov)
+    nodes, weights = _gauss_hermite(Sigma, n_quad)
+    return nodes, weights, _factor(Sigma)
 
 
 def _gauss_hermite(Sigma, n):
