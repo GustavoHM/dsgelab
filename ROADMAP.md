@@ -58,6 +58,11 @@ SALib for the Sobol indices, R's `forecast::dm.test` for the Diebold–Mariano t
 population result of Plagborg-Møller and Wolf (2021) for the local projections. The details are in
 [`validation/`](validation/README.md).
 
+Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026, brings the first:
+the discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods,
+validated against QuantEcon, against the same probabilities in 40-digit arithmetic and against
+Rouwenhorst's closed form.
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard

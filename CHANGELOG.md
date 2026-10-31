@@ -7,6 +7,11 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ## Unreleased
 
+## 0.7.1 — 2026-10-30
+
+The first part of the roadmap's milestone 0.8 (global methods): the discretisation of a process
+into a Markov chain.
+
 ### Added
 
 - `tauchen` and `rouwenhorst`: an AR(1) as a Markov chain, by Tauchen's (1986) method and by

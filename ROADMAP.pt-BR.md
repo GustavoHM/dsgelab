@@ -63,6 +63,11 @@ referência independente: o Dynare na maioria dos casos, o SALib para os índice
 Plagborg-Møller e Wolf (2021) para as projeções locais. Os detalhes estão em
 [`validation/`](validation/README.md).
 
+O marco 0.8 sai em partes. A versão 0.7.1, lançada em 30 de outubro de 2026, traz a primeira: a
+discretização de um AR(1) numa cadeia de Markov pelos métodos de Tauchen e de Rouwenhorst,
+validada contra o QuantEcon, contra as mesmas probabilidades em aritmética de 40 dígitos e contra
+a forma fechada de Rouwenhorst.
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada
