@@ -13,7 +13,7 @@ version: "0.7.2"
 date-released: "2026-10-31"
 license: MIT
 # The concept DOI on Zenodo resolves to the latest archived release; each release also has a DOI
-# of its own (0.7.1: 10.5281/zenodo.23827669). A repository URL is not an archivable reference.
+# of its own (0.7.2: 10.5281/zenodo.23835374). A repository URL is not an archivable reference.
 doi: "10.5281/zenodo.23456474"
 repository-code: "https://github.com/GustavoHM/dsgelab"
 keywords:

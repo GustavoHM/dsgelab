@@ -67,7 +67,8 @@ O marco 0.8 sai em partes. A versão 0.7.1, lançada em 30 de outubro de 2026 no
 [10.5281/zenodo.23827669](https://doi.org/10.5281/zenodo.23827669)), traz a primeira: a
 discretização de um AR(1) numa cadeia de Markov pelos métodos de Tauchen e de Rouwenhorst, validada
 contra o QuantEcon, contra as mesmas probabilidades em aritmética de 40 dígitos e contra a forma
-fechada de Rouwenhorst. A versão 0.7.2, lançada em 31 de outubro de 2026, acrescenta a iteração no
+fechada de Rouwenhorst. A versão 0.7.2, lançada em 31 de outubro de 2026 no PyPI e no Zenodo (DOI
+[10.5281/zenodo.23835374](https://doi.org/10.5281/zenodo.23835374)), acrescenta a iteração no
 tempo numa grade cartesiana, com limites sobre os controles impostos por complementaridade. Ela
 concorda com o `time_iteration` do dolo em três modelos publicados com ele e com a forma fechada do
 crescimento estocástico.
@@ -249,14 +250,14 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
 - [x] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes
   (`release.yml`, disparado por uma tag `v*`). O fluxo confere a tag contra a versão, publica no
   TestPyPI, roda a suíte contra o que o TestPyPI serve e só publica no PyPI depois da aprovação do
-  revisor obrigatório. As versões 0.5.0, 0.7.0 e 0.7.1 saíram assim, a primeira em 18 de outubro de
-  2026 e as outras duas em 30 de outubro.
+  revisor obrigatório. As versões 0.5.0, 0.7.0, 0.7.1 e 0.7.2 saíram assim, a primeira em 18 de
+  outubro de 2026, as duas seguintes em 30 de outubro e a 0.7.2 em 31 de outubro.
 - [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
   mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.7.1 é
-  10.5281/zenodo.23827669 (a 0.7.0 é 10.5281/zenodo.23825088, a 0.5.0 é 10.5281/zenodo.23456475), e
-  o DOI conceitual 10.5281/zenodo.23456474, que leva sempre à versão mais recente, está no
-  `CITATION.cff`.
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.7.2 é
+  10.5281/zenodo.23835374 (a 0.7.1 é 10.5281/zenodo.23827669, a 0.7.0 é 10.5281/zenodo.23825088,
+  a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual 10.5281/zenodo.23456474, que leva sempre
+  à versão mais recente, está no `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
 - [x] `py.typed` e anotações de tipo na API pública, sem nenhuma função ou método público sem
   anotação e sem erro novo acusado pelo `mypy`. Os wrappers de importação preguiçosa (*lazy*) de
