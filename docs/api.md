@@ -432,6 +432,76 @@ it, and `autocorrelation(lag=1)` their autocorrelation. `simulate(periods, *, st
 seed=None, indices=False)` draws a path of `periods` values, from node `start` or from the
 stationary distribution, and returns node indices instead of values with `indices=True`.
 
+### `time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation="linear", initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=1000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
+
+Time iteration (Coleman, 1990) on the model's own residual, the one the perturbation solves. Each
+iteration takes the current policy as the next period's and solves the equilibrium conditions for
+today's jumps at every grid point, by Newton's method point by point. It stops when no jump moves
+by more than `tol` at any point.
+
+The rows of the residual are sorted by what they contain at `t+1`, which is found by moving one
+next-period variable at a time. A row with next-period states and no next-period jump is a
+transition and gives the next states from today's states, jumps and shock. Every other row,
+including a static one with nothing at `t+1`, is an equilibrium condition, integrated over the
+next period and set to zero. The model needs as many transitions as states and as many
+equilibrium conditions as jumps; otherwise the call raises `ValueError` and lists the rows. When
+the transitions are affine in the next states, as in `k' - g(k, u, eps)`, the next states come
+from one evaluation, and otherwise from a Newton solve.
+
+| Argument | Meaning |
+|---|---|
+| `grid` | a `CartesianGrid` of the continuous states, or the mapping that builds one; every state without a Markov chain needs an axis |
+| `markov` | `{state: MarkovChain}`, exogenous states given by chains whose nodes are the state's values in levels. Several chains are independent, and the product chain orders its nodes with the last chain fastest. The transition row of a Markov state (the row with that state at `t+1` and no endogenous state there) is left out |
+| `cov`, `n_quad` | the shocks are integrated by a tensor Gauss–Hermite rule with `n_quad` nodes per shock, scaled by `cov` (`None` is the identity, as elsewhere in the package) |
+| `quadrature` | `(nodes, weights)`, one row of shocks per node, in place of Gauss–Hermite. With a Markov chain and neither `cov` nor `quadrature`, the shocks are set to zero |
+| `bounds` | `{jump: (lower, upper)}`, each a number, `None`, or `bound(states, params)` with `states` a name-indexed view of today's states (`s.w`, `s["w"]`) |
+| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis. Both extrapolate linearly beyond the grid |
+| `initial` | the starting policy: a `TimeIterationSolution` (to refine on another grid), `initial(states, params)` returning the jumps in model order, or `{jump: number or function}`. With `None`, the first-order perturbation, which needs `guess` or `steady` |
+| `tol`, `max_iter` | the stopping rule of the iteration, on the largest change of a jump |
+| `inner_tol`, `inner_max_iter` | the Newton solve at each grid point, on the largest residual |
+
+A bounded jump is paired with the equilibrium condition in its position, so that the `j`-th
+equilibrium condition, in the order of the equations, goes with the `j`-th jump. The pair
+satisfies the complementarity in the standard convention, which dolo also uses for its arbitrage
+equations. The condition is zero between the bounds, nonnegative at the lower bound and
+nonpositive at the upper one. A borrowing limit `c <= w` therefore goes with the Euler equation written as
+`beta R E[(c'/c)^(-gamma)] - 1`, and a zero lower bound `i >= 0` with the policy rule written as
+`i - rule`. The pair is solved through the Fischer–Burmeister function in its box form, and the
+Newton steps keep a bounded jump within its bounds.
+
+The equations are first called with every grid point at once, each variable a vector. If they fail
+or disagree with a call at a single point (because they use `math.log` or `float()`, say), the
+residual is evaluated point by point. The policy is the same either way, but the point-by-point
+evaluation is slower.
+
+### `TimeIterationSolution`
+
+`controls(states)`, also `solution(states)`, gives the jumps at one state or at a row-stacked
+array of states, in levels and in the model's state order, or at a mapping from state names to
+values; a Markov state must take one of its chain's node values. `euler_errors(states=None)` gives
+the equilibrium conditions, integrated, at `states`, by default at the centres of the grid's cells
+and at every node of the chain. For a bounded jump the error is the natural residual
+`mid(u - lower, F, u - upper)`, which is the condition itself between the bounds and only its
+wrong-signed part at a bound. The errors are in the units the condition is written in.
+`simulate(periods, *, start=None, seed=None, shocks=None)` returns `states`, `jumps` and `nodes`
+(the chain's index), one row per period, with shocks drawn from the covariance or the quadrature
+the solution was built with, or given in `shocks`. Between grid points the interpolated policy is
+not held within the bounds. The policy at the grid points is in `values`
+`(n_nodes, grid.n, n_jumps)`, and the bounds there in `lower` and `upper`. The other fields are
+`grid`, `chain` (the product chain if there are several), `markov_states`, `interpolation`,
+`iterations`, `converged`, `distance` (the last change) and `history` (every change).
+
+### `CartesianGrid(axes)`
+
+A tensor grid: `axes` maps each name to an increasing vector of nodes, or to `(low, high, n)` for
+`n` evenly spaced ones. `points` lists every node, one row each, with the last axis varying
+fastest; `midpoints` lists the centres of the cells; `shape`, `n` and `d` give the size.
+`interpolate(values, points, kind="linear")` interpolates `values`, one row per grid point, at
+`points`. The cubic interpolant is the natural spline along each axis, the same as SciPy's
+`CubicSpline(bc_type="natural")` in one dimension, extended linearly beyond the ends. With a
+policy whose second derivative at the ends of the grid is not zero, its error there falls as the
+square of the spacing.
+
 ---
 
 ## Transitions

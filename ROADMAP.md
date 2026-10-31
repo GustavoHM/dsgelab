@@ -62,7 +62,9 @@ Milestone 0.8 comes out in parts. Version 0.7.1, released on 30 October 2026 on 
 (DOI [10.5281/zenodo.23827669](https://doi.org/10.5281/zenodo.23827669)), brings the first: the
 discretisation of an AR(1) into a Markov chain by Tauchen's and Rouwenhorst's methods, validated
 against QuantEcon, against the same probabilities in 40-digit arithmetic and against Rouwenhorst's
-closed form.
+closed form. Version 0.7.2, released on 31 October 2026, adds time iteration on a Cartesian grid,
+with bounds on the controls imposed by complementarity. It agrees with dolo's `time_iteration` on
+three models from the dolo repository and with the closed form of stochastic growth.
 
 ## What counts as done
 
@@ -407,14 +409,20 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   computes the upper tail as `1 - cdf`, is off by 3e-8 on the coarsest chains. The release also
   lengthens the wait in `release.yml` for TestPyPI to serve a new upload, which ran out on 0.7.0,
   and stops pip from reusing the index page it cached.
-- [ ] **0.7.2 — time iteration.** The groundwork of every global method enters here: the split of
-  the model's states into endogenous and exogenous, with the exogenous ones given by a
-  `MarkovChain` or by quadrature; a Cartesian grid with linear and cubic interpolation; bounds on
-  the controls, imposed by complementarity (Fischer–Burmeister), for borrowing limits and the zero
-  lower bound; a solution object that evaluates and simulates the policy and reports Euler-equation
-  errors. Time iteration solves the model's own residual, the same one the perturbation uses.
-  Reference: dolo's `time_iteration` on its RBC and on a consumption–savings model with a
-  borrowing limit, and the closed form of stochastic growth.
+- [x] **0.7.2 — time iteration.** `time_iteration` solves the model's own residual, the one the
+  perturbation uses, with its rows sorted into transitions and equilibrium conditions by what they
+  contain at `t+1`. Exogenous states are given by a `MarkovChain` or kept on the grid with the
+  shocks integrated by quadrature. `CartesianGrid` interpolates linearly or by a natural cubic
+  spline. Bounds on the controls are imposed by complementarity (Fischer–Burmeister), for
+  borrowing limits and the zero lower bound, and `TimeIterationSolution` evaluates and simulates
+  the policy and reports Euler-equation errors. Against dolo 0.4.9.20's `time_iteration` on three
+  of its own models (its RBC with an iid shock, its RBC with Markov productivity and bounds on both
+  controls, and consumption and saving with a borrowing limit), on the same grids, the policies
+  agree within 1e-9 with linear and with cubic interpolation, and the borrowing limit binds at the
+  same grid points. dolo stops each step at a residual of 1e-8, which leaves its policy some 1e-7
+  from the fixed point, so the comparison tightens that tolerance. On stochastic growth with log
+  utility and full depreciation the error against the closed form falls as the square of the
+  spacing, to 7e-6 with 80 capital points and cubic interpolation.
 - [ ] **0.7.3 — value function iteration**, with Howard's improvement steps. It needs a
   declaration the model does not yet have: a reward, a discount factor and the transition of the
   endogenous states. Reference: the closed-form value function of stochastic growth with log

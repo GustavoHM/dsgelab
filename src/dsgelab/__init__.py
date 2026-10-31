@@ -74,6 +74,7 @@ from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plo
                     posterior_density, prior_density)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
                            sample_restrictions)
 from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
@@ -83,7 +84,7 @@ from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -114,6 +115,7 @@ __all__ = [
     "prior", "Prior",
     "solve_projection", "Projection",
     "tauchen", "rouwenhorst", "MarkovChain",
+    "time_iteration", "TimeIterationSolution", "CartesianGrid",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",
