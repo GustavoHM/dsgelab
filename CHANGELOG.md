@@ -1,9 +1,32 @@
 # Changelog
 
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
-before 1.0, a minor version may add to the API and a patch version only fixes bugs.
+before 1.0, a minor version may add to the API and a patch version only fixes bugs. The exception
+is the roadmap's milestone 0.8, released in parts: versions 0.7.1 to 0.7.5 each add one of its
+features, without changing the API of an earlier release, and 0.8.0 closes it.
 
 ## Unreleased
+
+### Added
+
+- `tauchen` and `rouwenhorst`: an AR(1) as a Markov chain, by Tauchen's (1986) method and by
+  Rouwenhorst's, with the recursion of Kopecky and Suen (2010). `MarkovChain` holds the nodes and
+  the transition matrix, and gives the stationary distribution (GTH elimination), its mean,
+  variance and autocorrelations, and simulated paths. Rouwenhorst's chain has the variance and the
+  autocorrelations of the AR(1) exactly. Tauchen's probabilities are computed from the side of the
+  conditional mean each interval lies on, so that small probabilities keep their relative accuracy
+  in both tails. `validation/compare_markov.py` checks both against QuantEcon on 120 processes, to
+  rounding, and Tauchen's probabilities and stationary distributions against a 40-digit
+  computation, within 1.1e-11 and 1.1e-14. QuantEcon computes the upper tail as `1 - cdf`, and on
+  the coarsest chains its stationary distribution is off by 3e-8.
+
+### Fixed
+
+- The release workflow waits up to 15 minutes, instead of three, for TestPyPI to list a new
+  upload, and reads the index again on every try instead of reusing pip's cached page. On 0.7.0
+  the wait ran out and the check had to be rerun by hand.
+- The weekly validation job installs SALib and QuantEcon, the references of `compare_gsa.py` and
+  `compare_markov.py`.
 
 ## 0.7.0 — 2026-10-30
 

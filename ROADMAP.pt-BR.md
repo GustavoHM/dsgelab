@@ -408,12 +408,16 @@ O marco sai em partes, um recurso por versão de correção, da 0.7.1 à 0.7.5, 
 depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma anterior. A versão
 0.8.0 fecha o marco, sem recurso novo próprio.
 
-- [ ] **0.7.1 — discretização de processos.** `tauchen` e `rouwenhorst` transformam um AR(1) em
+- [x] **0.7.1 — discretização de processos.** `tauchen` e `rouwenhorst` transformam um AR(1) em
   uma `MarkovChain` com nós, matriz de transição, distribuição estacionária, momentos e simulação.
-  Referência: `tauchen` e `rouwenhorst` do QuantEcon com as mesmas entradas, e a forma fechada, já
-  que a cadeia de Rouwenhorst reproduz exatamente a média, a variância e a primeira
-  autocorrelação do AR(1) (Kopecky e Suen, 2010). A versão também alonga, no `release.yml`, a
-  espera para que o TestPyPI sirva um envio novo, que se esgotou na 0.7.0.
+  Contra `tauchen` e `rouwenhorst` do QuantEcon, em 120 processos, os nós e as matrizes coincidem
+  até o arredondamento. A cadeia de Rouwenhorst tem a distribuição estacionária binomial e a
+  média, a variância e as autocorrelações do AR(1) (Kopecky e Suen, 2010). As probabilidades e as
+  distribuições estacionárias de Tauchen coincidem com um cálculo de 40 dígitos a menos de 1,1e-11
+  e 1,1e-14; o QuantEcon, que calcula a cauda superior como `1 - cdf`, erra por 3e-8 nas cadeias
+  mais grossas. A versão também alonga, no `release.yml`, a espera para que o TestPyPI sirva um
+  envio novo, que se esgotou na 0.7.0, e impede o pip de reaproveitar a página do índice guardada
+  em cache.
 - [ ] **0.7.2 — iteração temporal.** Aqui entra a base de todos os métodos globais: a divisão dos
   estados do modelo em endógenos e exógenos, com os exógenos dados por uma `MarkovChain` ou por
   quadratura; uma grade cartesiana com interpolação linear e cúbica; limites nos controles,

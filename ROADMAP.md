@@ -391,12 +391,15 @@ policy has no bounds. The milestone is released in parts, one feature per patch 
 0.7.1 to 0.7.5, each published only after it meets the six conditions above. No release changes the
 API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own.
 
-- [ ] **0.7.1 — process discretisation.** `tauchen` and `rouwenhorst` turn an AR(1) into a
+- [x] **0.7.1 — process discretisation.** `tauchen` and `rouwenhorst` turn an AR(1) into a
   `MarkovChain` with nodes, transition matrix, stationary distribution, moments and simulation.
-  Reference: QuantEcon's `tauchen` and `rouwenhorst` on the same inputs, and the closed form,
-  since Rouwenhorst's chain reproduces the mean, variance and first autocorrelation of the AR(1)
-  exactly (Kopecky and Suen, 2010). The release also lengthens the wait in `release.yml` for
-  TestPyPI to serve a new upload, which ran out on 0.7.0.
+  Against QuantEcon's `tauchen` and `rouwenhorst` on 120 processes, nodes and matrices agree to
+  rounding. Rouwenhorst's chain has the binomial stationary distribution and the mean, variance and
+  autocorrelations of the AR(1) (Kopecky and Suen, 2010). Tauchen's probabilities and stationary
+  distributions agree with a 40-digit computation within 1.1e-11 and 1.1e-14; QuantEcon, which
+  computes the upper tail as `1 - cdf`, is off by 3e-8 on the coarsest chains. The release also
+  lengthens the wait in `release.yml` for TestPyPI to serve a new upload, which ran out on 0.7.0,
+  and stops pip from reusing the index page it cached.
 - [ ] **0.7.2 — time iteration.** The groundwork of every global method enters here: the split of
   the model's states into endogenous and exogenous, with the exogenous ones given by a
   `MarkovChain` or by quadrature; a Cartesian grid with linear and cubic interpolation; bounds on
