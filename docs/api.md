@@ -1092,7 +1092,7 @@ standard deviation, where `sd = inf` gives `nu = 2`), `inv_gamma2` and
 `lower`, `upper`. `logpdf(x)` uses Dynare's normalising constants,
 `score(x)` differentiates it, and `sample(rng, size=None)` draws from it.
 
-### `EstimationProblem(model, data, params, observables, priors={}, cov=None, measurement=None, transforms=None, steady_fn=None, guess=None, init="auto", qz_criterium=None, first_obs=1, presample=0, free=None, bounds=None, order=1, nonlinear_filter="particle", particles=1000, particle_seed=0, resample=0.5)`
+### `EstimationProblem(model, data, params, observables, priors={}, cov=None, measurement=None, transforms=None, steady_fn=None, guess=None, init="auto", qz_criterium=None, first_obs=1, presample=0, free=None, bounds=None, order=1, nonlinear_filter="particle", particles=1000, particle_seed=0, resample=0.5, aggregation=None, dsge_var=None, dsge_varlag=4, dsge_var_constant=True)`
 
 What is estimated and against which data. Names follow Dynare's
 `estimated_params`, with a parameter's own name, `"stderr e"` for the standard
@@ -1112,10 +1112,31 @@ measurement error. Particle and inversion smoothing are available through `smoot
 | `filter(theta)` | a `FilterResult`, `ParticleFilterResult` or `InversionFilterResult` |
 | `smoother(theta)` | a `SmootherResult`, `ParticleSmootherResult` or `InversionFilterResult` |
 | `start()` | the calibration, or the prior mean |
+| `dsge_var_prior(theta)`, `dsge_var_posterior(theta)` | in a DSGE-VAR, the `NormalInverseWishart` prior and posterior of the VAR's coefficients and covariance at `theta` |
 
 `ModFile.estimation_problem(data, **kwargs)` builds one from a `.mod`'s
 `estimated_params`, `varobs` and `estimation(...)` options. With no initial value
 Dynare starts from the prior mean, and so does `EstimationProblem`.
+
+With `dsge_var=lambda`, or with `"dsge_prior_weight"` among the priors (or `free`),
+the likelihood is that of the DSGE-VAR of Del Negro and Schorfheide (2004), as
+Dynare's `estimation(dsge_var=...)` computes it. A VAR with `dsge_varlag` lags on
+the observables, with a constant unless `dsge_var_constant=False` (Dynare's
+`noconstant`), takes as its prior `lambda T` artificial observations from the
+model's population moments at first order, and the VAR's coefficients and
+covariance are integrated out (their formula A.2). `lambda` may be `inf`, which
+gives the likelihood of the VAR the model implies. Below `(k + n) / T`, with `k`
+the regressors and `n` the observables, the prior is improper and the likelihood is
+`-inf`. The `dsge_varlag` observations before `first_obs` start the VAR, so
+`first_obs` must exceed `dsge_varlag`, and `T` is the number of observations from
+`first_obs` on. Dynare 7.2 adds the `dsge_varlag` initial observations to that `T`
+(94 for the 90 rows of its `tests/dsge-var`), which gives a different likelihood
+and moves its mode by up to 0.39 posterior standard deviations on those tests. As in
+Dynare, a DSGE-VAR has no measurement errors and no `presample`. The mode and the
+samplers work as for any `EstimationProblem`. The search for the mode uses
+numerical derivatives, and `posterior_forecast` and `forecast_evaluation` refuse a
+DSGE-VAR. `is_dsge_var` says whether the problem is one and `dsge_var_weight(theta)`
+gives `lambda` at `theta`.
 
 ### `posterior_mode(problem, x0=None, *, method=None, options=None) -> ModeResult`
 
@@ -1290,6 +1311,91 @@ The 0.2 Gaussian log likelihood of `Y`, `(T, n_obs)` in the solution's rescaled
 deviations, under the state space of `sol` with observation matrix `Z`,
 measurement covariance `R` and shock covariance `Sigma`. The filter starts at the
 unconditional distribution of the states.
+
+---
+
+## Bayesian VARs
+
+### `bvar(data, lags, *, observables=None, first_obs=1, presample=0, nobs=None, tau=3.0, decay=0.5, lambda_=5.0, mu=2.0, omega=1, flat=False, train=0, constant=True, prefilter=False) -> BVAR`
+
+A VAR with `lags` lags and the prior of Sims and Zha (1998), as Dynare's
+`bvar_density` and `bvar_forecast` set it up (Dynare's `+bvar` package, after Sims's
+`varprior.m` and `rfvar3.m`). The VAR is `y_t' = x_t' Phi + u_t'`, with `x_t` the
+first lag of every variable, then the second and so on, and the constant last, and
+`u_t ~ N(0, Sigma)`. The prior is a set of dummy observations appended to the data:
+`tau` sets the overall tightness (larger is tighter), `decay` the shrinkage of lag
+`l` as `l^-decay`, `omega` the number of dummies for `Sigma`, `lambda_` the weight of
+the co-persistence dummy (negative leaves the constant out of it) and `mu` that of the
+own-persistence dummies. Each variable's scale is the standard deviation of the
+`lags + 1` observations that start the sample. `flat=True` puts a flat prior on
+`Sigma` instead of Jeffreys'. With `train`, the `train` observations before
+`first_obs + presample` form a training sample, and the prior is the posterior from
+the dummies and those observations. `first_obs`, `presample` and `nobs` are Dynare's
+options, `first_obs` counted from 1 and `nobs` by default to the end of the data. The
+names and defaults of the hyperparameters are Dynare's `bvar_prior_*` options, with
+`lambda_` for `bvar_prior_lambda` because `lambda` is a Python keyword.
+
+| Argument | Meaning |
+|---|---|
+| `data`, `observables` | a mapping of series, or a `(T, n)` array, and the names in order (by default the mapping's keys, or `y1, y2, ...`) |
+| `constant` | include a constant; `False` is Dynare's `noconstant` |
+| `prefilter` | subtract each series' mean over the sample, with no constant, as Dynare's `prefilter` |
+
+### `BVAR`
+
+`prior` and `posterior` are `NormalInverseWishart`. `log_marginal` is the log
+marginal density of the `nobs` observations from `first_obs + presample` on,
+Dynare's `oo_.bvar.log_marginal_data_density`. `lag_matrices` `(lags, n, n)` and
+`intercept` give `y_t = c + sum_l A_l y_{t-l}` at the posterior mean. `initial` holds
+the last `lags` observations of the sample and `realized` the observations after it.
+`rmse()` is the RMSE of the forecast at the posterior mean over `realized`, which
+Dynare's `bvar_forecast` prints. The other fields are `names`, `lags`, `constant` and
+`hyperparameters`.
+
+`forecast(horizon, draws=2000, *, seed=0, coverage=0.6) -> BVARForecast` is Dynare's
+`bvar_forecast`. Each draw takes `(Phi, Sigma)` from the posterior and runs the VAR
+forward from `initial`, once without shocks and once with shocks from
+`N(0, Sigma)`, using the normal draws in the order Dynare's code uses them. `seed`
+is a seed or a numpy `Generator`. `BVARForecast` has `paths` and `paths_no_shock`
+`(draws, horizon, n)`, `point` (the path at the posterior mean), `explosive` (the
+share of draws with a root of modulus above one, which are kept, as in Dynare), and
+`mean(shocks=True)`, `median(shocks=True)` and `bands(coverage=None, shocks=True)`,
+the last a pair `(lower, upper)`. The default coverage is Dynare's `bvar.conf_sig`,
+0.6.
+
+### `bvar_density(data, max_lags, **kwargs) -> dict`
+
+`{p: log marginal density}` for `p = 1..max_lags`, Dynare's `bvar_density(max_lags)`.
+`kwargs` go to `bvar`.
+
+### `NormalInverseWishart(Phi, XXi, S, df)`
+
+`Sigma ~ IW(S, df)` and `vec(Phi) | Sigma ~ N(vec(Phi), Sigma kron XXi)`, the fields
+of Dynare's `oo_.bvar.posterior` (`PhiHat` there is `Phi` here). `Sigma` is the mean
+of `Sigma`, `S / (df - n - 1)`, `Phi_std` the standard deviations of the
+coefficients, `log_integral()` the log of the kernel's integral (Dynare's
+`matrictint`), and `draw(draws=1000, *, seed=0)` returns arrays of coefficients
+`(draws, k, n)` and covariances `(draws, n, n)`. A whole `df` draws `Sigma` as Dynare
+does, the inverse of `X'X` with `X` a `df x n` normal matrix times the Cholesky factor
+of `S^-1`, and a fractional one, as a DSGE-VAR has, by Bartlett's decomposition.
+
+Validated against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var` (see
+`validation/README.md`).
+
+```python
+import numpy as np
+import dsgelab as dsg
+
+rng = np.random.default_rng(0)
+A = np.array([[0.5, 0.1], [0.2, 0.4]])
+y = np.zeros((200, 2))
+for t in range(1, 200):
+    y[t] = A @ y[t - 1] + 0.1 * rng.standard_normal(2)
+data = {"x": y[:, 0], "z": y[:, 1]}
+print(dsg.bvar_density(data, 4, first_obs=5))      # every lag length on the same observations
+var = dsg.bvar(data, 1, first_obs=5)
+lower, upper = var.forecast(8, 2000, seed=1).bands(0.9)
+```
 
 ---
 

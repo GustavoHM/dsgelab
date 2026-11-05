@@ -101,6 +101,8 @@ step "Dynare: calibration restrictions" bash run_restrictions.sh
 step "compare_restrictions.py" "$PYTHON" compare_restrictions.py
 step "Dynare and R: forecast evaluation" bash run_forecast_eval.sh
 step "compare_forecast_eval.py" "$PYTHON" compare_forecast_eval.py
+step "Dynare: BVAR and DSGE-VAR" bash run_bvar.sh
+step "compare_bvar.py"     "$PYTHON" compare_bvar.py
 step "Dynare: stability mapping" bash run_gsa.sh
 step "compare_gsa.py"       "$PYTHON" compare_gsa.py
 step "Dynare: mixed frequency" bash run_mixed.sh

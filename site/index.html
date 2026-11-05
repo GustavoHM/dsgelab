@@ -1033,6 +1033,53 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+  <h3>32. A BVAR, and the model as the prior of a VAR</h3>
+<pre><code>data = {"y": series}                                  # the AR(1) data of example 14
+dens = dsg.bvar_density(data, 4, first_obs=5)         # Sims-Zha prior, Dynare's defaults
+{p: round(v, 1) for p, v in dens.items()}
+var = dsg.bvar(data, 1, first_obs=5, nobs=386)        # the last 10 observations held out
+var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)
+fc = var.forecast(4, 1000, seed=0)                    # 1000 draws from the posterior
+fc.point["y"].round(3), fc.mean()["y"].round(3)
+round(var.rmse()["y"], 3)
+
+common = dict(model=ar, data=data, params=dict(rho=0.5), observables=["y"], priors=pb.priors,
+              guess=dict(a=0, y=1), first_obs=5, dsge_varlag=4)
+{w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)
+ for w in (0.05, 0.5, 2.0, float("inf"))}
+dv = dsg.EstimationProblem(**common, dsge_var=0.5)
+{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">{p: round(v, 1) for p, v in dens.items()}</span>
+{1: 365.1, 2: 367.5, 3: 368.5, 4: 368.2}
+<span class="out-expr">var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)</span>
+(0.844, [0.154])
+<span class="out-expr">fc.point["y"].round(3), fc.mean()["y"].round(3)</span>
+([1.13 1.108 1.09 1.074], [1.127 1.103 1.085 1.072])
+<span class="out-expr">round(var.rmse()["y"], 3)</span>
+0.09
+<span class="out-expr">{w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)</span>
+ for w in (0.05, 0.5, 2.0, float("inf"))}
+{0.05: 372.7, 0.5: 378.1, 2.0: 379.2, inf: 379.4}
+<span class="out-expr">{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</span>
+{'rho': 0.738, 'stderr e': 0.091}</code></pre>
+  <p><code>bvar</code> does what Dynare's <code>bvar_density</code> and <code>bvar_forecast</code>
+  do: a VAR whose prior is the dummy observations of Sims and Zha (1998), with Dynare's
+  hyperparameters by default (<code>tau=3</code>, <code>decay=0.5</code>, <code>lambda_=5</code>,
+  <code>mu=2</code>, <code>omega=1</code>). Prior and posterior are normal-inverse-Wishart, so the
+  marginal density is the ratio of their integrating constants. On these AR(1) data it favours
+  three lags over one by 3.4 in logs, and the one-lag VAR puts 0.844 on the lag, for a true value
+  of 0.8. A forecast runs the VAR forward from draws of the coefficients and the covariance, with
+  and without shocks, and <code>rmse()</code> scores the forecast at the posterior mean on the
+  observations after <code>nobs</code>, as Dynare prints it. With <code>dsge_var=</code>, an
+  <code>EstimationProblem</code> becomes the DSGE-VAR of Del Negro and Schorfheide (2004): a VAR
+  with four lags, here, whose prior is <code>lambda T</code> artificial observations from the
+  model, with its coefficients integrated out of the likelihood. On data simulated from the model
+  the likelihood rises with the weight, from 372.7 at <code>lambda = 0.05</code> to 379.4 at
+  <code>lambda = inf</code>, where the VAR is the model's own. A prior on
+  <code>"dsge_prior_weight"</code> estimates the weight. The validation reproduces Dynare's
+  <code>tests/bvar_a_la_sims</code> and <code>tests/dsge-var</code>, the simulated forecasts
+  included, with the same random draws. Dynare counts the VAR's initial observations in
+  <code>T</code>, and dsgelab does not.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1276,6 +1323,24 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
       <tr><td>Diebold–Mariano statistic and p-value, 48 cases</td><td class="num">3e-15</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
+
+  <h3>BVAR and DSGE-VAR against Dynare</h3>
+  <p>Dynare's <code>tests/bvar_a_la_sims</code> (two files, lag lengths 1 to 2 and 1 to 8) and
+  <code>tests/dsge-var</code> (λ = 0.8 and λ estimated), with their data, options and priors.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>BVAR prior and posterior (<code>df</code>, <code>S</code>, <code>XXi</code>, <code>PhiHat</code>), relative</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>log marginal density, 10 lag lengths</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
+      <tr><td>3002 simulated forecast paths, draw by draw, with Octave's normal draws</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>DSGE-VAR log posterior at 11 points, with Dynare's <code>T</code></td><td class="num">5e-12</td><td class="ok">OK</td></tr>
+      <tr><td>DSGE-VAR posterior modes, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">5e-5</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">Dynare 7.2 counts the VAR's 4 initial observations
+  in the <code>T</code> of the DSGE-VAR's likelihood, 94 for the 90 rows the VAR is fitted on, and
+  the comparison sets dsgelab's <code>T</code> to that count. With dsgelab's own <code>T</code>, the
+  number of rows, the modes move by up to 0.39 posterior standard deviations.</p>
 
   <h3>Global sensitivity against Dynare and SALib</h3>
   <p>The stability mapping of Lubik and Schorfheide (2003), from Dynare's

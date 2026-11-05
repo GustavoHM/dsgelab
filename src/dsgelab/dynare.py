@@ -717,8 +717,12 @@ class ModFile:
         and measurement standard deviations), ``varobs`` the observables, and the
         options of ``estimation(...)`` the rest: ``loglinear`` with ``logdata``
         makes every observable a log, ``first_obs`` and ``presample`` carry over,
-        ``diffuse_filter`` makes the start diffuse. ``data`` maps each observable
-        to its series, as Dynare's datafile would; ``kwargs`` override anything.
+        ``diffuse_filter`` makes the start diffuse, and ``dsge_var``,
+        ``dsge_varlag`` and ``noconstant`` make it a DSGE-VAR (with the weight
+        estimated when ``dsge_prior_weight`` is in ``estimated_params``). ``data``
+        maps each observable to its series, as Dynare's datafile would, and
+        ``nobs`` is not read, so the data end at the last observation used.
+        ``kwargs`` override anything.
         """
         from .estimation import EstimationProblem
 
@@ -743,7 +747,7 @@ class ModFile:
                 e["prior"].mean if e["prior"] is not None else np.nan)
             if not np.isfinite(start):
                 continue
-            if e["kind"] == "param":
+            if e["kind"] == "param" and e["target"] != "dsge_prior_weight":
                 params[e["target"]] = start
             elif e["kind"] == "stderr" and e["role"] == "shock":
                 sd[e["target"]] = start
@@ -761,6 +765,14 @@ class ModFile:
                   init="diffuse" if "diffuse_filter" in opts else "auto",
                   first_obs=int(float(opts.get("first_obs", 1))),
                   presample=int(float(opts.get("presample", 0))))
+        if "dsge_var" in opts:
+            if opts["dsge_var"].strip():
+                kw["dsge_var"] = float(opts["dsge_var"])
+            elif "dsge_prior_weight" not in free:
+                raise DynareImportError("dsge_var with no weight needs dsge_prior_weight in "
+                                        "estimated_params")
+            kw["dsge_varlag"] = int(float(opts.get("dsge_varlag", 4)))
+            kw["dsge_var_constant"] = "noconstant" not in opts
         bounds = {e["name"]: (e["lower"], e["upper"]) for e in self.estimated
                   if e["prior"] is None and np.isfinite(e["lower"])}
         if bounds:

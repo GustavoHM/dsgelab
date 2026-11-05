@@ -75,6 +75,7 @@ Markov regime switching requires **RISE**.
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
 | 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare, to 1.4e-12 under Ramsey and 3.5e-13 in an RBC with capital (6.1e-10 under discretion) | — | — | — | — | — | ✅ |
 | **Bayesian estimation** | ✅ ‡ mode, Laplace and Metropolis against Dynare on `fs2000`, SMC and maximum likelihood against the conjugate case, R-hat, ESS. HMC and NUTS at first order, with the likelihood gradient checked against finite differences and the samplers against the exact posterior of an AR(1) coefficient. Particle filter up to third order, against Dynare's likelihood on an AR(1) to 0.006, and inversion filter up to second order, against Dynare's OccBin filter on the same AR(1) | ✅ via PyMC | — | 📄 with ZLB | — | — 📄 states it has none | ✅ |
+| BVAR (Sims–Zha prior) and DSGE-VAR | ✅ ‡ against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var`: priors, posteriors, marginal densities, forecasts draw by draw, DSGE-VAR likelihood and mode | ? | — | ? | — | — | ✅ `bvar_density`, `bvar_forecast`, `dsge_var` |
 | Kalman filter / smoothing | ✅ ‡ filter with exact diffuse start and smoother, against Dynare (likelihood at 6e-12, smoother at 8.4e-15) | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibration on targets** | ✅ joint, with bounds | ✅ parameters calibrated to target ratios | ? | ? | ? | ? | 📄 |
 | **Identification diagnostic for the calibration** | ✅ rank and null directions | ? | ? | ? | ? | ? | 📄 (model identification) |
@@ -157,8 +158,9 @@ constraints, the extended path, declared trends, the analytic steady state and m
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
-plots. Still absent are global methods beyond Chebyshev collocation, regime switching,
-heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
+plots, and milestone 0.9 the BVAR and the DSGE-VAR. Still absent are global methods beyond
+Chebyshev collocation, regime switching, heterogeneous agents and the declaration of trends in
+`from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
@@ -248,7 +250,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, time iteration and value function iteration; the endogenous grid method and sparse grids missing | 0.7.4–0.8 |
-| Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
+| BVAR (Sims–Zha prior) and DSGE-VAR | ✅ Dynare (`+bvar`, `estimation(dsge_var=...)`) | **done**: `bvar`, `bvar_density` and `BVAR.forecast` against Dynare's `tests/bvar_a_la_sims` (posteriors within 1.8e-14, log marginal densities within 1.8e-12, forecast paths draw by draw within 2.1e-16), and `EstimationProblem(dsge_var=...)` against `tests/dsge-var` (log posterior within 4.9e-12, modes within 1e-4 posterior sd) with Dynare's count of `T`, which dsgelab does not use by default; IRFs missing | 0.9 |
+| Regime switching and heterogeneous agents | 📄 RISE, sequence-jacobian | missing | 0.9 |
 
 ---
 
