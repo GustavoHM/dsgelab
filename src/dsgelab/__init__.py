@@ -70,8 +70,13 @@ from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecas
                      low_frequency, shock_decomposition, state_space)
 from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
 from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
-from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plot_posterior,
-                    posterior_density, prior_density)
+from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
+                    plot_brooks_gelman, plot_conditional_forecast, plot_decomposition,
+                    plot_filtering, plot_forecast, plot_identification, plot_irf,
+                    plot_mh_autocorrelation, plot_mode_check, plot_occbin, plot_occbin_regimes,
+                    plot_paths, plot_posterior, plot_posterior_irf, plot_priors,
+                    plot_smoothed_observables, plot_smoothed_shocks, posterior_density,
+                    posterior_irf, prior_density, trace_plot)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
@@ -112,6 +117,11 @@ __all__ = [
     "low_frequency",
     "plot_irf", "plot_paths", "plot_decomposition", "plot_forecast", "plot_posterior",
     "prior_density", "posterior_density",
+    "plot_priors", "trace_plot", "plot_mh_autocorrelation", "plot_brooks_gelman", "plot_mode_check",
+    "plot_smoothed_shocks", "plot_smoothed_observables", "plot_posterior_irf",
+    "plot_conditional_forecast", "plot_occbin", "plot_occbin_regimes", "plot_identification",
+    "plot_filtering", "brooks_gelman", "BrooksGelman", "mh_autocorrelation", "mode_check",
+    "posterior_irf",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "prior", "Prior",
     "solve_projection", "Projection",

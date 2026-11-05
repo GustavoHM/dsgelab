@@ -105,7 +105,7 @@ step "Dynare: stability mapping" bash run_gsa.sh
 step "compare_gsa.py"       "$PYTHON" compare_gsa.py
 step "Dynare: mixed frequency" bash run_mixed.sh
 step "compare_mixed.py"     "$PYTHON" compare_mixed.py
-step "Dynare: plot densities" bash run_plots.sh
+step "Dynare: plots"        bash run_plots.sh
 step "compare_plots.py"     "$PYTHON" compare_plots.py
 step "compare_markov.py"    "$PYTHON" compare_markov.py
 if [ -n "${SKIP_DOLO:-}" ]; then
