@@ -443,11 +443,20 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   inverts in closed form given the next period's policy, with the inverse supplied by the user.
   Reference: dolo's `egm` on the consumption–savings model, and the time-iteration solution of
   0.7.2 on the same grid.
-- [ ] **0.7.5 — sparse grids.** Smolyak collocation (Judd, Maliar, Maliar and Valero, 2014),
-  isotropic and anisotropic, so that projection and time iteration run with more than three
-  states. Reference: Tasmanian's Smolyak nodes and interpolation weights, and the closed form of
-  stochastic growth with several capital stocks, a planner's problem with log utility and full
-  depreciation, whose policy is known in any dimension.
+- [x] **0.7.5 — sparse grids.** `SmolyakGrid` builds the Smolyak grid of Judd, Maliar, Maliar
+  and Valero (2014), with nested Chebyshev extrema and disjoint sets of Chebyshev polynomials,
+  isotropic or with one level per axis, and `solve_projection` and `time_iteration` take it in
+  place of their grids, with any number of states. The projection solves for all the coefficients
+  by Newton's method, with a Jacobian assembled from the residual's derivatives at each node.
+  Against Tasmanian 8.2's Clenshaw–Curtis global grids of type `level`, built from source in an
+  environment of their own, 40 grids in one to six dimensions at levels 0 to 6, anisotropic ones
+  included, have the same number of points, and the nodes agree within 9e-16 and the
+  interpolation weights within 2e-14. On stochastic growth with three to five capital stocks, log
+  utility and full depreciation, where each stock's investment is a constant share of output, the
+  error of the policy falls by a factor of at least 37 per level, to 2e-8 with four states and
+  3e-8 with six at level 4 (1457 points), and projection and time iteration agree within 2.3e-9.
+  With six states, level 1 along productivity, in which the policy is linear, keeps the error of
+  the isotropic grid with 1283 points instead of 1457.
 - [ ] **0.8.0** — the milestone complete: the comparison row and the README updated, and the
   release made in the same way as 0.7.0.
 

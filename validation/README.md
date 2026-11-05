@@ -1218,6 +1218,141 @@ two controls, which exercises the projected Newton method, and the discrete-choi
 an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
 with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
 
+## Sparse grids against Tasmanian and the closed form
+
+```bash
+bash tasmanian/setup.sh                             # Python 3.12, Tasmanian 8.2 built from source
+tasmanian/.venv/bin/python tasmanian/run_tasmanian.py   # about a second
+python compare_smolyak.py                           # about 3 minutes on an idle machine
+```
+
+```
+1. Tasmanian 8.2, global grids of type 'level' on the clenshaw-curtis rule
+  levels               box         points     nodes   weights
+  [0]                  own              1   2.2e-16   0.0e+00
+  [1]                  [-1, 1]          3   0.0e+00   1.6e-16
+  [2]                  own              5   1.7e-16   1.9e-15
+  [3]                  [-1, 1]          9   2.2e-16   7.8e-16
+  [4]                  own             17   8.9e-16   5.3e-15
+  [5]                  [-1, 1]         33   3.3e-16   6.8e-15
+  [6]                  own             65   2.2e-16   2.2e-14
+  [0, 0]               own              1   0.0e+00   0.0e+00
+  [1, 1]               [-1, 1]          5   0.0e+00   2.2e-16
+  [2, 2]               own             13   1.1e-16   1.4e-15
+  [3, 3]               [-1, 1]         29   2.2e-16   1.3e-15
+  [4, 4]               own             65   4.4e-16   2.1e-14
+  [5, 5]               [-1, 1]        145   3.3e-16   2.0e-14
+  [0, 0, 0]            own              1   0.0e+00   0.0e+00
+  [1, 1, 1]            [-1, 1]          7   0.0e+00   3.3e-16
+  [2, 2, 2]            own             25   2.2e-16   1.7e-15
+  [3, 3, 3]            [-1, 1]         69   2.2e-16   2.2e-15
+  [4, 4, 4]            own            177   8.9e-16   1.1e-14
+  [0, 0, 0, 0]         own              1   5.6e-17   0.0e+00
+  [1, 1, 1, 1]         [-1, 1]          9   0.0e+00   4.4e-16
+  [2, 2, 2, 2]         own             41   3.3e-16   2.4e-15
+  [3, 3, 3, 3]         [-1, 1]        137   2.2e-16   2.7e-15
+  [4, 4, 4, 4]         own            401   4.4e-16   1.3e-14
+  [0, 0, 0, 0, 0]      own              1   0.0e+00   0.0e+00
+  [1, 1, 1, 1, 1]      [-1, 1]         11   0.0e+00   8.9e-16
+  [2, 2, 2, 2, 2]      own             61   2.2e-16   2.7e-15
+  [3, 3, 3, 3, 3]      [-1, 1]        241   2.2e-16   4.4e-15
+  [4, 4, 4, 4, 4]      own            801   6.7e-16   1.7e-14
+  [0, 0, 0, 0, 0, 0]   own              1   2.2e-16   0.0e+00
+  [1, 1, 1, 1, 1, 1]   [-1, 1]         13   0.0e+00   1.0e-15
+  [2, 2, 2, 2, 2, 2]   own             85   2.2e-16   2.5e-15
+  [3, 3, 3, 3, 3, 3]   [-1, 1]        389   2.2e-16   8.4e-15
+  [4, 4, 4, 4, 4, 4]   own           1457   4.4e-16   1.3e-14
+  [3, 1]               own             19   4.4e-16   1.6e-15
+  [1, 4]               own             35   1.1e-16   2.9e-15
+  [3, 1, 2]            own             51   4.4e-16   3.0e-15
+  [0, 2, 1, 3]         own             51   4.4e-16   2.3e-15
+  [3, 2, 1, 1, 0]      own             97   3.3e-16   2.6e-15
+  [3, 3, 2, 2, 1, 1]   own            329   3.9e-16   6.0e-15
+  [4, 1, 1, 1, 1, 1]   own            627   4.4e-16   8.4e-15
+  40 grids, 0 with a different number of points
+  ok   largest difference in a node                                    8.88e-16  (limit 1e-14)
+  ok   largest difference in an interpolation weight                   2.25e-14  (limit 1e-12)
+2. stochastic growth with several capital stocks, log utility and full depreciation, against the closed form
+   relative error of k_j' at 1000 points in the box; seconds in brackets
+  4 states (3 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1      9   5.46e-03 [  1.6]   5.46e-03 [  5.8]     4.8e-11
+                     2     41   1.23e-04 [  1.3]   1.23e-04 [  7.7]     4.8e-11
+                     3    137   1.81e-06 [  0.8]   1.81e-06 [  8.5]     4.3e-11
+                     4    401   2.09e-08 [  6.7]   2.11e-08 [ 33.5]     6.0e-10
+  ok   4 states, level 4: largest relative error, projection           2.09e-08  (limit 3e-08)
+  ok   4 states, level 4: largest relative error, time iteration       2.11e-08  (limit 3e-08)
+  ok   4 states: smallest fall of the error per level, inverted        2.26e-02  (limit 0.05)
+  ok   4 states: projection against time iteration                     5.97e-10  (limit 1e-08)
+  5 states (4 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1     11   4.31e-03 [  1.6]   4.31e-03 [  4.7]     4.9e-11
+                     2     61   1.11e-04 [  0.4]   1.11e-04 [  4.5]     4.8e-11
+                     3    241   1.92e-06 [  1.4]   1.92e-06 [  7.6]     1.3e-10
+                     4    801   2.51e-08 [ 17.4]   2.54e-08 [ 66.9]     7.7e-10
+  ok   5 states, level 4: largest relative error, projection           2.51e-08  (limit 6e-08)
+  ok   5 states, level 4: largest relative error, time iteration       2.54e-08  (limit 6e-08)
+  ok   5 states: smallest fall of the error per level, inverted        2.57e-02  (limit 0.05)
+  ok   5 states: projection against time iteration                     7.68e-10  (limit 1e-08)
+  6 states (5 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1     13   4.36e-03 [  0.8]   4.36e-03 [  9.7]     1.5e-10
+                     2     85   1.17e-04 [  1.0]   1.17e-04 [ 14.0]     1.4e-10
+                     3    389   2.21e-06 [  7.6]   2.21e-06 [ 24.9]     1.3e-10
+                     4   1457   3.38e-08 [155.3]   3.33e-08 [223.5]     2.3e-09
+  ok   6 states, level 4: largest relative error, projection           3.38e-08  (limit 6e-08)
+  ok   6 states, level 4: largest relative error, time iteration       3.33e-08  (limit 6e-08)
+  ok   6 states: smallest fall of the error per level, inverted        2.68e-02  (limit 0.05)
+  ok   6 states: projection against time iteration                     2.27e-09  (limit 1e-08)
+  6 states, anisotropic: level 1 along a
+                levels points          projection      time iteration  difference
+    [3, 3, 3, 3, 3, 1]    363   2.21e-06 [  5.0]   2.21e-06 [ 12.9]     1.2e-10
+    [4, 4, 4, 4, 4, 1]   1283   3.34e-08 [ 35.9]   3.33e-08 [ 90.9]     1.2e-10
+    levels [3, 3, 3, 3, 3, 1]: 363 points against 389 at isotropic level 3
+  ok   6 states, levels [3, 3, 3, 3, 3, 1]: error over isotropic level 3's  1.00e+00  (limit 1.05)
+    levels [4, 4, 4, 4, 4, 1]: 1283 points against 1457 at isotropic level 4
+  ok   6 states, levels [4, 4, 4, 4, 4, 1]: error over isotropic level 4's  9.90e-01  (limit 1.05)
+
+all checks passed
+```
+
+Tasmanian is distributed on PyPI as source only, and its build calls `cmake` by name. `setup.sh`
+installs CMake 4.4.4 and scikit-build 0.19.1 from PyPI into the environment, puts its `bin` first
+on the `PATH` and builds Tasmanian 8.2 without build isolation, which would otherwise fetch the
+build tools again, unpinned. On 3 November 2026 the build took a minute and a half on macOS 27
+(arm64) with Apple clang 21.
+
+A global grid of type `level` on Tasmanian's Clenshaw–Curtis rule has, along one axis, one node at
+level 0 and `2^l + 1` at level `l`, the Chebyshev extrema, and takes the multi-indices whose levels
+sum to at most the depth. That is JMMV's isotropic grid with Tasmanian's level `l` as JMMV's
+`i - 1`. `liLevelLimits` caps the level along each axis, which gives JMMV's anisotropic grid.
+Tasmanian builds the interpolant as Smolyak's combination of tensor Lagrange interpolants, and
+`SmolyakGrid` by solving for the coefficients of JMMV's Chebyshev basis. On nested
+nodes both spaces are the span of the same tensor products, so the interpolant is the same
+polynomial and the weights agree to rounding, 2e-14 at most. The cases are 33 isotropic grids, in
+one to six dimensions at levels 0 to 6 (up to 1457 points), and 7 anisotropic ones with a level 0
+or 1 on some axes. The odd levels are on the canonical box `[-1, 1]^d` and the others on boxes of
+their own, set with `setDomainTransform`. The test suite checks the interpolant without Tasmanian,
+against a combination of tensor Lagrange interpolants written in the test.
+
+The second part solves a planner's problem with `n` capital stocks, log utility and full
+depreciation, `c + k_1' + ... + k_n' = a k_1^alpha_1 ... k_n^alpha_n` with `log a` an AR(1), whose
+policy is `k_j' = beta alpha_j y` in any dimension. The shares `alpha_j` sum to 0.36, `beta` is
+0.96 and the persistence 0.9. Each capital stock varies by 25 per cent on either side of its
+steady state and productivity by 3 per cent, and the shock's standard deviation is 0.01, integrated
+by five Gauss–Hermite nodes. The policy does not depend on the shock's variance, so the error
+against the closed form is the approximation's alone. It falls by a factor of 37 to 87 per level,
+and projection and time iteration, which solve the same collocation equations, agree within
+2.3e-9. Time iteration stops when the policy moves by less than 1e-11, and the difference is
+larger than that away from the nodes, most at level 4. The policy is linear in productivity. With
+six states, level 1 along productivity removes 26 of 389 points at level 3 and 174 of 1457 at
+level 4, and the error changes by less than 1 per cent. Both methods start from the first-order
+policy, and time iteration then takes 13 to 15 iterations at levels 1 to 3. The numbers come from
+a run on 5 November 2026, with Tasmanian 8.2 on Python 3.12 and `dsgelab` on Python 3.13, on a
+machine shared with other jobs (load average about 60). The seconds in brackets are therefore
+larger than on an idle machine: alone, on 3 November, the six-state grid of level 4 took 15 seconds by projection
+and 31 by time iteration, and the anisotropic one 13 and 30.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

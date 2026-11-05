@@ -100,8 +100,8 @@ examples in English and Portuguese.
 | Impulse responses, simulation, moments, variance decomposition | `FirstOrderSolution` |
 | Second-order perturbation, innovation tensors and risk corrections | `solve_second_order`, `SecondOrderSolution.decision_rule` |
 | Third-order perturbation: full decision rule in Dynare's form, stochastic steady state, sparse tensors | `solve_third_order`, `ThirdOrderSolution.decision_rule`, `stochastic_steady_state` |
-| Global solution by Chebyshev collocation, up to three states | `solve_projection` |
-| Global solution by time iteration on a Cartesian grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
+| Global solution by Chebyshev collocation, on a tensor grid up to three states or on a Smolyak sparse grid with any number, isotropic or anisotropic, validated against Tasmanian | `solve_projection`, `SmolyakGrid` |
+| Global solution by time iteration on a Cartesian or a Smolyak grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
 | Value function iteration with Howard's improvement steps, over intervals or finite sets of choices, validated against QuantEcon and dolo | `value_iteration`, `ValueIterationSolution`, `DynamicProgram` |
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
@@ -285,9 +285,12 @@ planned.
 - **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.
-- **Global methods are limited** to Chebyshev collocation with up to three states and to time
-  iteration and value function iteration on a Cartesian grid, whose size grows as the product of
-  the points on each axis. There is no endogenous grid method or sparse grid yet.
+- **Global methods are limited** to Chebyshev collocation and time iteration, on a Cartesian
+  grid or on a Smolyak sparse grid, and to value function iteration on a Cartesian grid, whose size
+  grows as the product of the points on each axis. Collocation on a Smolyak grid solves for all
+  the coefficients at once with a dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for
+  six states at level 4. The shocks are integrated by a tensor Gauss–Hermite rule, which
+  projection builds for at most two shocks. There is no endogenous grid method yet.
 - **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
 - **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's

@@ -1,0 +1,11 @@
+# The environment in which Tasmanian 8.2 is built for compare_smolyak.py. Tasmanian comes from PyPI
+# as source only, built by scikit-build with CMake and the system's C++ compiler; setup.sh builds it
+# without build isolation, against these versions, resolved on 3 November 2026 and frozen so that
+# the reference does not move.
+numpy==2.5.4
+cmake==4.4.4
+scikit-build==0.19.1
+setuptools==84.2.1
+wheel==0.48.0
+packaging==26.3
+distro==1.9.0

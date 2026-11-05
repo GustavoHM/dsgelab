@@ -74,6 +74,7 @@ from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plo
                     posterior_density, prior_density)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .smolyak import SmolyakGrid
 from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
@@ -114,7 +115,7 @@ __all__ = [
     "prior_density", "posterior_density",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "prior", "Prior",
-    "solve_projection", "Projection",
+    "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",

@@ -1043,6 +1043,52 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
   <code>value_iteration</code> com o <code>DiscreteDP</code> do QuantEcon na versão discretizada
   deste modelo e com o <code>value_iteration</code> do dolo no RBC markoviano dele, que tem dois
   controles.</p>
+  <h3>32. Cinco estados, numa grade de Smolyak</h3>
+<pre><code>fatias = np.array([0.12, 0.10, 0.08, 0.06])         # alpha_j, que somam 0,36
+capitais, inv = [f"k{j}" for j in range(4)], [f"i{j}" for j in range(4)]
+
+def planejador(nxt, cur, eps, p):
+    def produto(x):                                  # produto e consumo
+        y = x.a * np.prod([x[k] ** s for k, s in zip(capitais, fatias)], axis=0)
+        return y, y - sum(x[i] for i in inv)
+    y, c = produto(cur)
+    y1, c1 = produto(nxt)
+    return ([nxt[k] - cur[i] for k, i in zip(capitais, inv)]                       # k_j' = i_j
+            + [1 - 0.96 * c / c1 * s * y1 / nxt[k] for k, s in zip(capitais, fatias)]  # Euler
+            + [np.log(nxt.a) - 0.9 * np.log(cur.a) - eps.e])
+
+estoques = dsg.Model(states=capitais + ["a"], jumps=inv, shocks=["e"], equations=planejador)
+k_ss = 0.96 * fatias * np.exp(np.sum(fatias * np.log(0.96 * fatias)) / (1 - fatias.sum()))
+caixa = {k: (0.75 * v, 1.25 * v) for k, v in zip(capitais, k_ss)} | {"a": (0.97, 1.03)}
+inicio = dict(zip(capitais, k_ss)) | dict(zip(inv, k_ss)) | {"a": 1.0}
+X = np.random.default_rng(0).uniform(*np.array(list(caixa.values())).T, (1000, 5))
+exata = 0.96 * fatias * (X[:, 4] * np.prod(X[:, :4] ** fatias, axis=1))[:, None]  # beta alpha_j y
+for nivel in (1, 2, 3):
+    esparsa = dsg.SmolyakGrid(caixa, nivel)
+    proj = dsg.solve_projection(estoques, {}, grid=esparsa, guess=inicio, cov={"e": 0.01},
+                                n_quad=5)
+    print(nivel, esparsa.n, f"{np.abs(proj.jumps(X) / exata - 1).max():.0e}")
+aniso = dsg.SmolyakGrid(caixa, dict.fromkeys(capitais, 3) | {"a": 1})  # política linear em a
+ti_esparsa = dsg.time_iteration(estoques, {}, grid=aniso, cov={"e": 0.01}, guess=inicio)
+aniso.n, ti_esparsa.iterations, f"{np.abs(ti_esparsa.controls(X) / exata - 1).max():.0e}"</code></pre>
+<pre class="output" data-label="Saída"><code>1 11 5e-03
+2 61 1e-04
+3 241 3e-06
+<span class="out-expr">aniso.n, ti_esparsa.iterations, f"{np.abs(ti_esparsa.controls(X) / exata - 1).max():.0e}"</span>
+(219, 7, '3e-06')</code></pre>
+  <p>Um planejador com quatro estoques de capital, utilidade logarítmica e depreciação total
+  investe em cada estoque uma fração constante <code>beta alpha_j</code> do produto, e por isso a
+  política é conhecida em qualquer dimensão. <code>SmolyakGrid</code> constrói a grade esparsa de
+  Judd, Maliar, Maliar e Valero (2014): 11, 61 e 241 pontos nos níveis 1 a 3, onde a grade
+  tensorial com os mesmos nove nós em cada eixo teria 59049. <code>solve_projection</code> a
+  recebe no lugar de <code>bounds</code> e <code>order</code>, e o erro contra a forma fechada, em
+  1000 pontos sorteados na caixa, cai por um fator de 36 do nível 1 para o 2 e de 55 do nível 2
+  para o 3. A política é linear na produtividade, e por isso uma grade anisotrópica com nível 1
+  nela e nível 3 nos estoques de capital elimina 22 dos 241 pontos e dá o mesmo erro com um
+  algarismo.
+  <code>time_iteration</code> recebe a mesma grade, e o seu ponto fixo resolve as mesmas equações
+  de colocação que a projeção. A validação compara os nós e os pesos de interpolação das grades com
+  os do Tasmanian em uma a seis dimensões, e resolve este modelo com até seis estados.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1370,6 +1416,24 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
     </tbody>
   </table>
 
+  <h3>Grades esparsas comparadas com o Tasmanian e com uma forma fechada</h3>
+  <p>As grades globais do Tasmanian 8.2 na regra de Clenshaw–Curtis, 40 ao todo, isotrópicas em
+  uma a seis dimensões nos níveis 0 a 6 e anisotrópicas com um teto no nível de cada eixo, dão os
+  nós e os pesos de interpolação de referência. Todas as grades têm o mesmo número de pontos que as
+  do Tasmanian. O modelo de crescimento do exemplo 32, com três a cinco estoques de capital, é
+  resolvido por projeção e por iteração temporal em grades de Smolyak. O erro é o maior erro
+  relativo da política de investimento em 1000 pontos da caixa.</p>
+  <table>
+    <thead><tr><th>O que é comparado</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nós contra o Tasmanian, 40 grades com até 1457 pontos</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>pesos de interpolação contra o Tasmanian, 40 pontos por grade</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>4 estados contra a forma fechada, nível 4 (401 pontos)</td><td class="num">2e-8</td><td class="ok">OK</td></tr>
+      <tr><td>6 estados contra a forma fechada, nível 4 (1457 pontos)</td><td class="num">3e-8</td><td class="ok">OK</td></tr>
+      <tr><td>projeção contra iteração temporal, todas as grades</td><td class="num">2e-9</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de
   <code>tests/identification</code> do Dynare, e <code>fs2000</code>, dos seus exemplos. Em
@@ -1434,7 +1498,7 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
       <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
       <tr><td>3ª ordem com risco na inclinação</td><td>sim, com a regra de decisão completa do Dynare (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
-      <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, até três estados)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
+      <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, numa grade tensorial até três estados ou numa grade de Smolyak)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
       <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
       <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
       <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings, SMC, HMC e NUTS, com o filtro de Kalman na primeira ordem, o de partículas até a terceira e o de inversão até a segunda)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
@@ -1455,7 +1519,8 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
   Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev, da iteração temporal e da iteração da função valor, como o método da
+  colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal e da iteração
+  da função valor, como o método da
   grade endógena, o <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais
   recursos. Agentes
   heterogêneos ficam fora do dsgelab, e o

@@ -5,6 +5,7 @@
 # Usage:  bash run_all.sh            (everything)
 #         SKIP_JULIA=1 bash run_all.sh
 #         SKIP_DOLO=1 bash run_all.sh
+#         SKIP_TASMANIAN=1 bash run_all.sh
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
@@ -13,7 +14,9 @@
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
 # compare_time_iteration.py and compare_value_iteration.py, runs in a Python 3.11 environment of its
-# own that dolo/setup.sh creates with uv.
+# own that dolo/setup.sh creates with uv. Tasmanian, the reference of compare_smolyak.py, is built
+# from source, with CMake and the system's C++ compiler, in a Python 3.12 environment that
+# tasmanian/setup.sh creates with uv.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -118,6 +121,15 @@ else
   step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
+fi
+if [ -n "${SKIP_TASMANIAN:-}" ]; then
+  results+=("skipped  Tasmanian (SKIP_TASMANIAN)")
+else
+  # without deleting it, a failed Tasmanian run would let the comparison read an earlier result
+  rm -f out_smolyak/tasmanian.json
+  step "Tasmanian: environment" bash tasmanian/setup.sh
+  step "Tasmanian: Smolyak grids" tasmanian/.venv/bin/python tasmanian/run_tasmanian.py
+  step "compare_smolyak.py"  "$PYTHON" compare_smolyak.py
 fi
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
