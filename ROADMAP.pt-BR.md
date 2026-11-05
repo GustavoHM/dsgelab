@@ -460,10 +460,22 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   estocástico com utilidade logarítmica e depreciação total, o erro do valor contra a forma fechada
   cai pelo menos 3,4 vezes quando o espaçamento cai à metade, até 1e-4 com 80 pontos de capital e
   interpolação linear e 3e-9 com a cúbica.
-- [ ] **0.7.4 — método da grade endógena** (Carroll, 2006), para problemas cuja equação de Euler
-  se inverte em forma fechada dada a política do período seguinte, com a inversa fornecida pelo
-  usuário. Referência: o `egm` do dolo no modelo de consumo e poupança, e a solução por iteração
-  temporal da 0.7.2 na mesma grade.
+- [x] **0.7.4 — método da grade endógena.** `egm` resolve um `EGMProgram`, uma declaração nova
+  com um estado endógeno, a sua variável pós-decisão, a expectativa da equação de Euler, a
+  resposta direta que a inverte para os controles e o mapa reverso da variável pós-decisão para o
+  estado, pelo método da grade endógena (Carroll, 2006). A grade fica na variável pós-decisão, os
+  demais estados seguem cadeias de Markov, e a política fica dentro dos seus limites, o que dá um
+  limite de endividamento. No modelo de consumo e poupança do dolo, com a mesma grade, o `egm` do
+  dolo 0.4.9.20 e o do `dsgelab` concordam dentro de 9e-13 com renda iid e de 1,1e-11 com a renda
+  numa cadeia de Markov de três estados. O dolo roda tal como publicado depois de silenciada uma
+  linha de depuração, e a sua política é lida onde a regra que ele reamostra coincide com ela. A
+  iteração temporal no mesmo modelo tem a mesma solução, mas não a mesma discretização, e nas
+  grades de 100 pontos do dolo as duas diferem em até 3,4e-4 com renda iid e 2,8e-3 com a cadeia,
+  mais perto da quina em que o limite de endividamento deixa de se impor. Com as duas grades
+  estendidas até recursos iguais a 8, a diferença média cai a 4,3e-7 e 1,9e-6 com 1600 pontos. No
+  crescimento estocástico com utilidade logarítmica e depreciação total, o erro relativo da
+  política contra a forma fechada cai de 3,9 a 4,0 vezes quando o espaçamento cai à metade, até
+  1,6e-4 com 80 pontos e interpolação linear e 5,4e-5 com a cúbica.
 - [ ] **0.7.5 — grades esparsas.** Colocação de Smolyak (Judd, Maliar, Maliar e Valero, 2014),
   isotrópica e anisotrópica, para que a projeção e a iteração temporal rodem com mais de três
   estados. Referência: os nós e os pesos de interpolação de Smolyak do Tasmanian, e a forma

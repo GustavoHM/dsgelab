@@ -1033,6 +1033,53 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+  <h3>32. Saving with a borrowing limit, by the endogenous grid method</h3>
+<pre><code>saving_egm = dsg.EGMProgram(
+    states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],
+    expectation=lambda s, x, e, p: p["beta"] * p["R"] * x.c ** -p["gamma"],
+    direct_response=lambda a, z, p: z.m ** (-1 / p["gamma"]),    # c = m^(-1/gamma)
+    reverse_state=lambda a, x, p: a.a + x.c,                      # w = a + c
+    half_transition=lambda a, e, p: p["R"] * a.a + e.y,           # w' = R a + y'
+    post_decision=lambda s, x, p: s.w - x.c,                      # a = w - c
+    bounds={"c": (0.0, lambda s, p: s.w)})
+eg = dsg.egm(saving_egm, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+             grid={"a": (0.0, 12.0, 80)}, markov={"y": income},
+             initial={"c": lambda s, p: 0.5 * s.w})
+eg.converged, eg.iterations
+eg.endogenous[:, 0].round(3)              # cash on hand at which the limit stops binding
+eg.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)
+gap = max(np.abs(eg.controls(np.column_stack([w, np.full(w.size, y)]))[:, 0]
+                 - ti.values[m, :, 0]).max() for m, y in enumerate(income.nodes))
+f"{gap:.1e}"
+errors = np.abs(eg.euler_errors())
+f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">eg.converged, eg.iterations</span>
+(True, 184)
+<span class="out-expr">eg.endogenous[:, 0].round(3)</span>
+[0.429 0.641 0.891 1.154 1.437]
+<span class="out-expr">eg.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)</span>
+[[0.5738]
+ [1]
+ [1.046]]
+<span class="out-expr">f"{gap:.1e}"</span>
+'4.0e-03'
+<span class="out-expr">f"{errors.mean():.1e}, {np.median(errors):.1e}"</span>
+'1.3e-04, 4.2e-06'</code></pre>
+  <p><code>egm</code> solves the problem of example 30 by the endogenous grid method (Carroll,
+  2006). The grid is on the poststate <code>a</code>, the saving carried into the next period. At
+  each saving level the expectation in the Euler equation depends only on <code>a</code>, so
+  consumption follows from it in closed form, and cash on hand from the budget,
+  <code>w = a + c</code>. These points of cash on hand form the endogenous grid, one per income
+  state, and no equation is solved numerically. With zero saving the point is the cash on hand at
+  which the borrowing limit stops binding, and below it the bound holds consumption at cash on
+  hand. The limit binds up to higher cash on hand the higher income is, as in example 30, and at
+  the three states printed there the policy is within 1e-4 of time iteration's. The largest
+  difference at time iteration's grid points is at the first point above the kink where the limit
+  stops binding for the lowest income. That kink falls inside a cell of time iteration's grid and
+  on a point of the endogenous grid, so the two interpolations differ most there. The Euler errors
+  are relative to consumption here, and largest in the same cell. The validation compares
+  <code>egm</code> with dolo's <code>egm</code> on dolo's consumption-savings model, with an iid
+  and with a Markov income, where the two agree to 1e-11.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1352,6 +1399,25 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
     </tbody>
   </table>
 
+  <h3>The endogenous grid method against dolo and time iteration</h3>
+  <p>dolo 0.4.9.20's <code>egm</code> solves its consumption-savings model, with the iid income of
+  the published file and with log income a three-state Markov chain, on the same grid of saving.
+  The two interpolate in the same way and agree at 199 points of cash on hand. Time iteration
+  solves the same model on a fixed grid of cash on hand, and the two methods differ by their
+  interpolation error, which is largest next to the kink where the borrowing limit stops binding.
+  With both grids extended to cash on hand 8, past where next period's cash on hand falls, the
+  difference shrinks as the grids are refined.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>consumption and saving against dolo, iid income, relative</td><td class="num">9e-13</td><td class="ok">OK</td></tr>
+      <tr><td>consumption and saving against dolo, Markov income, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>against time iteration, Markov income, 100 points, largest</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
+      <tr><td>against time iteration, Markov income, 1600 points up to 8, largest (mean 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
+      <tr><td>stochastic growth against its closed form, consumption, 80 points, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
   <code>tests/identification</code> and <code>fs2000</code> from its examples. In
@@ -1434,8 +1500,8 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation, time iteration
-  and value function iteration, such as the endogenous grid method,
+  second-order solution. For global methods beyond Chebyshev collocation, time iteration,
+  value function iteration and the endogenous grid method, such as expectations iteration,
   <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
   agents are outside dsgelab, and
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> and

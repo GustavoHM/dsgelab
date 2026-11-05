@@ -1218,6 +1218,93 @@ two controls, which exercises the projected Newton method, and the discrete-choi
 an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
 with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
 
+## The endogenous grid method against dolo, time iteration and the closed form
+
+```bash
+bash dolo/setup.sh                            # if not run already
+dolo/.venv/bin/python dolo/run_dolo_egm.py    # about 10 seconds
+python compare_egm.py                         # about 15 seconds
+```
+
+```
+1. dolo 0.4.9.20 (interpolation 2.2.7), egm, tolerance 1e-12
+ iid: dsgelab 125 iterations, 0.04 s; dolo 155 iterations, 1.33 s
+  ok   iid: largest difference at 199 points of cash on hand       9.11e-13  (limit 1e-10)
+       Euler errors between the endogenous points, relative to c: max 1.14e-03, mean 2.52e-05
+ markov: dsgelab 310 iterations, 0.09 s; dolo 355 iterations, 0.85 s
+  ok   markov: largest difference at 199 points of cash on hand    1.06e-11  (limit 1e-10)
+       Euler errors between the endogenous points, relative to c: max 6.46e-03, mean 3.30e-05
+2. time_iteration on the same model
+  iid: on dolo's grids, 100 points of cash on hand up to 4 and 100 poststates up to 4: largest difference in c 3.36e-04, mean 4.82e-05
+  ok   iid, dolo's grids: largest difference in c                  3.36e-04  (limit 5e-03)
+  iid: both grids up to 8, with 100, 200, 400, 800, 1600 points, at cash on hand up to 4:
+       largest difference in c 1.28e-03, 2.99e-04, 1.65e-04, 5.54e-05, 3.68e-05
+       mean difference in c    1.19e-04, 3.93e-05, 1.34e-05, 1.32e-06, 4.25e-07
+  ok   iid, up to 8, 1600 points: largest difference in c          3.68e-05  (limit 1e-04)
+  ok   iid, up to 8, 1600 points: mean difference in c             4.25e-07  (limit 5e-06)
+  markov: on dolo's grids, 100 points of cash on hand up to 4 and 100 poststates up to 4: largest difference in c 2.78e-03, mean 4.54e-04
+  ok   markov, dolo's grids: largest difference in c               2.78e-03  (limit 5e-03)
+  markov: both grids up to 8, with 100, 200, 400, 800, 1600 points, at cash on hand up to 4:
+       largest difference in c 3.25e-03, 1.59e-03, 4.54e-04, 4.28e-04, 8.59e-05
+       mean difference in c    4.38e-04, 9.18e-05, 8.14e-06, 1.26e-05, 1.94e-06
+  ok   markov, up to 8, 1600 points: largest difference in c       8.59e-05  (limit 1e-04)
+  ok   markov, up to 8, 1600 points: mean difference in c          1.94e-06  (limit 5e-06)
+3. stochastic growth with log utility and full depreciation, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 poststates: 1.03e-02, 2.55e-03, 6.48e-04, 1.63e-04
+         error ratios when the spacing halves: 4.02, 3.94, 3.99
+  ok   linear, 80 points: largest relative error of c              1.63e-04  (limit 2e-04)
+  ok   linear: error ratio when the spacing halves, distance from 4  6.01e-02  (limit 5e-01)
+  cubic: largest relative error of c with 10, 20, 40, 80 poststates: 4.82e-03, 1.01e-03, 2.29e-04, 5.41e-05
+         error ratios when the spacing halves: 4.76, 4.42, 4.23
+  ok   cubic, 80 points: largest relative error of c               5.41e-05  (limit 1e-04)
+  ok   cubic: error ratio when the spacing halves, distance from 4  7.56e-01  (limit 1e+00)
+
+all checks passed
+```
+
+`consumption_savings_iid.yaml`, which `setup.sh` already downloads for the time-iteration
+comparison, declares the `expectation`, `half_transition`, `direct_response_egm` and
+`reverse_state` blocks that dolo's `egm` needs, and `compare_egm.py` writes the same four
+functions as an `EGMProgram`, with `post_decision`, `a = w - c`, added. The second case replaces
+the iid income of the file with log income an AR(1) with persistence 0.9, which dolo discretizes
+as a three-state Rouwenhorst chain. dolo 0.4.9.20's `egm` runs on both as published. It prints a
+debugging line at every step of its inner loop, which `run_dolo_egm.py` silences. It also returns
+the policy resampled on the model's grid of cash on hand and interpolated there by cubic splines,
+which between the grid's points is not the policy of the method, so the runner asks for 199
+points, the 100 of the file and the centres between them, and reads the policy only there. Both
+implementations interpolate linearly between the points of the endogenous grid, extrapolate
+linearly and hold consumption between 0 and cash on hand, so they iterate on the same fixed point
+and agree within 9e-13 with iid income and 1.1e-11 with the chain, relative to the largest
+consumption. The counts of iterations differ because the two start from different policies, dolo
+from its calibrated consumption, 0.9 at every point, and `dsgelab` from 0.9 times cash on hand,
+and because dolo stops on the sum of the changes in the controls and in the endogenous grid and
+`dsgelab` on the larger of the two.
+
+Time iteration solves the same problem with a different discretisation, so the comparison with it
+measures the two interpolation errors, not a shared fixed point. On a fixed grid of cash on hand,
+the kink where the borrowing limit stops binding falls inside a cell, and the linear interpolant's
+error there falls only with the spacing, not with its square. The endogenous grid has a point at
+that kink, the one the lowest poststate, zero saving, leads to. On dolo's grids, with 100 points
+up to 4, the two policies differ by up to 3.4e-4 with iid income and 2.8e-3 with the chain. With
+the chain, next period's cash on hand exceeds 4 when income is high, time iteration extrapolates
+its policy there, and the difference stays at that size as the grids are refined. With both grids
+extended to 8 and compared up to 4, the mean difference falls from 1.2e-4 to 4.3e-7 with iid income
+and from 4.4e-4 to 1.9e-6 with the chain, from 100 to 1600 points. The largest difference falls to
+3.7e-5 and 8.6e-5, unevenly, because it depends on where the kink falls within time iteration's
+cell.
+
+The closed form is stochastic growth with log utility and full depreciation, written with next
+period's capital as the poststate, `c = 1/E[beta alpha exp(z') k'^(alpha-1)/c']` and
+`k = ((k' + c)/exp(z))^(1/alpha)`. Its policy, `c = (1 - alpha beta) exp(z) k^alpha`, is not
+linear in `k`, and the relative error at the centres between the endogenous points falls by 3.9
+to 4.0 each time the spacing halves with linear interpolation. With cubic interpolation the error
+is smaller by a factor of 3 and falls by 4.2 to 4.8, as the square of the spacing, because the
+natural spline's zero second derivative at the ends is not the policy's. The test suite also
+checks a linear policy, consumption and saving with no income, which `egm` reproduces within
+1e-11, the agreement with time iteration, the borrowing limit, the refinement from a coarse
+solution, the simulation and the evaluation point by point. The numbers come from a run on
+3 November 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.13.
+
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash
