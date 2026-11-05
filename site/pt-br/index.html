@@ -1290,6 +1290,49 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   passos para trás, e derivar a trajetória inteira para um choque em cada data, a um custo 30
   vezes maior, dá a mesma matriz. A validação resolve os modelos de Krusell–Smith e HANK de um
   ativo do próprio sequence-jacobian em 7 por 500 pontos e concorda com ele até 2e-10.</p>
+  <h3>36. Uma regra de Taylor que muda de regime, resolvida e filtrada</h3>
+<pre><code>fisher = dsg.Model(
+    states=["r"], jumps=["pi"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.r - p["rho"] * cur.r - eps.e,                                   # juro real
+        p["meta"] + p["alpha"] * (cur.pi - p["meta"]) - cur.r - nxt.pi])    # Fisher, Taylor
+T = np.array([[0.95, 0.05], [0.10, 0.90]])
+ms = dsg.solve_markov_switching(
+    fisher, {"rho": 0.8, "meta": 2.0, "alpha": 1.5},
+    {"meta": (2.0, 6.0), "alpha": (3.0, 1.1)}, T, guess={"r": 0.0, "pi": 3.0})
+ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)
+impacto = [ms.irf("e", regime=s, levels=True)["pi"][0] - ms.steady["pi"] for s in (0, 1)]
+fechada = np.linalg.solve(np.diag([3.0, 1.1]) - 0.8 * T, [1.0, 1.0])
+np.round(impacto, 6), np.round(fechada, 6)
+ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)
+sim = ms.simulate(300, seed=2, levels=True)
+espaco = dsg.switching_state_space(ms, ["pi"], measurement={"pi": 0.2})
+kim = dsg.kim_filter(espaco, {"pi": sim["pi"]})
+float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))
+f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(espaco, sim['pi'][:12]):.1e}"</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)</span>
+(['meta'], 1, 0.64)
+<span class="out-expr">np.round(impacto, 6), np.round(fechada, 6)</span>
+([0.4953 2.736], [0.4953 2.736])
+<span class="out-expr">ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)</span>
+[2.049 4.025]
+<span class="out-expr">float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))</span>
+0.9633
+<span class="out-expr">f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(espaco, sim['pi'][:12]):.1e}"</span>
+'5.5e-06'</code></pre>
+  <p>A meta de inflação e a resposta à inflação mudam juntas, entre um regime com meta de 2 e
+  resposta de 3 e outro com meta de 6 e resposta de 1,1. O estado estacionário é o dos parâmetros
+  na média ergódica, de modo que a meta, que o desloca, é perturbada e entra como uma constante por
+  regime, enquanto a resposta, que não o desloca, mantém o seu valor em cada regime (Foerster,
+  Rubio-Ramírez, Waggoner e Zha, 2016). O impacto de uma inovação no juro real sobre a inflação é
+  então a forma fechada <code>(diag(alpha) - rho T)^(-1) 1</code>. Em cada regime, a inflação média
+  fica entre as duas metas, porque os agentes esperam que o regime mude. O filtro de Kim recupera o
+  regime simulado a partir da inflação medida com ruído, com probabilidade suavizada acima de meio
+  no regime certo em 96 por cento dos períodos. O colapso das normais que terminam no mesmo regime é
+  uma aproximação, e nos 12 primeiros períodos o filtro difere da verossimilhança exata, a mistura
+  dos filtros de Kalman das 4096 trajetórias de regime, pelo último número. A validação reproduz as
+  nove soluções que Foerster et al. (2013) imprimem para um modelo novo-keynesiano e compara o
+  filtro de Kim com o filtro de Hamilton do statsmodels.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1321,6 +1364,9 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
     Diebold–Mariano e PIT, variáveis observadas em frequência mista e gráficos dos resultados.</p></div>
     <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
     restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
+    <div class="card"><h4>Mudança de regime</h4><p>Parâmetros que mudam com uma cadeia de Markov,
+    em primeira ordem, com todas as soluções encontradas e a estabilidade em média quadrática, e o
+    filtro de Kim para a estimação.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
     ou cheia, com a correção de risco híbrida.</p></div>
     <div class="card"><h4>Modelos em níveis</h4><p>Tendências declaradas, verificação do crescimento
@@ -1684,6 +1730,22 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
       <tr><td>jacobianos de equilíbrio geral G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>respostas a impulso lineares e não lineares</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>notícias falsas contra força bruta (o dsgelab contra ele mesmo)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+  <h3>Mudança de regime markoviana comparada com soluções publicadas e com o statsmodels</h3>
+  <p>O RISE, o toolbox de mudança de regime, é distribuído como P-code do MATLAB, que o GNU Octave
+  não executa. A solução é comparada, no lugar dele, com as soluções que Foerster, Rubio-Ramírez,
+  Waggoner e Zha imprimem, obtidas com bases de Gröbner, e o filtro de Kim com o statsmodels 0.14.4,
+  onde o filtro é exato, e com a verossimilhança exata sobre todas as trajetórias de regime, onde não
+  é.</p>
+  <table>
+    <thead><tr><th>O que é comparado</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>modelo novo-keynesiano (2013), soluções encontradas, estáveis, duas parametrizações</td><td class="num">9 de 9; 1 e 2</td><td class="ok">OK</td></tr>
+      <tr><td>modelo novo-keynesiano, entradas impressas a menos de uma unidade do último dígito (um par conjugado aparece como -0,7000 e é -0,66695)</td><td class="num">106 de 108</td><td class="ok">OK</td></tr>
+      <tr><td>RBC (2016), coeficientes de primeira ordem truncados em quatro casas (a constante impressa como 0,000049 é 0,0000459)</td><td class="num">23 de 24</td><td class="ok">OK</td></tr>
+      <tr><td>regimes idênticos contra a solução de Klein</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>filtro de Hamilton contra o statsmodels, log-verossimilhança; probabilidades suavizadas</td><td class="num">3e-14; 2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>máxima verossimilhança contra o máximo do statsmodels</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>aproximação de Kim contra a verossimilhança exata, 14 datas, erro de medida grande</td><td class="num">0,018</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

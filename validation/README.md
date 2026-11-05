@@ -1637,6 +1637,161 @@ with other jobs on it. On an idle machine the steady states took 1.8 and 4.4 sec
 household Jacobians 0.3 and 1.5, `G` 0.3 and 1.4, and the nonlinear transitions 1.0 and 3.4. The
 numbers come from a run on 5 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and
 `dsgelab` on Python 3.13.
+
+## Markov regime switching: published solutions, statsmodels and the exact likelihood
+
+The roadmap names RISE as the reference. RISE runs only in MATLAB. At commit
+`9bdcd74cc72a2bf537ce3182f5883b8942b007b5` of `github.com/jmaih/RISE_toolbox` (27 September 2026)
+the toolbox has 1652 `.p` files, MATLAB P-code, and the `.m` file next to each holds only its help
+text. The `v2019` tag, kept for the earlier public version, is distributed the same way, with 1013
+`.p` files. GNU Octave 11.3 does not execute P-code: `rise_startup` runs the comment-only `.m` file
+and does nothing. The validation therefore uses the references that exist without MATLAB, the
+solutions Foerster, Rubio-Ramírez, Waggoner and Zha print, closed forms, statsmodels' Hamilton
+filter and the exact likelihood over every regime path. RISE's example folder holds the model files
+of those papers (`frwz_nk.rs`, `rbcs.rs`, `simple.rs`), which fix the timing and the
+parameterizations used here.
+
+```bash
+python compare_switching.py                   # about 20 seconds
+```
+
+```
+1. Foerster et al. (2013), New Keynesian model: all solutions of the quadratic system
+  psi(2) = 0.9: perturbed ['mu'], 402 starting points, 402 converged, 9 distinct solutions, 3 real
+  ok   psi(2) = 0.9: number of solutions found minus nine              0.00e+00  (limit 0e+00)
+       entries within a unit of the last printed digit: largest error 3.74e-04, 0.54 of that unit
+  ok   psi(2) = 0.9: entries off by more than a unit of the last digit  0.00e+00  (limit 0e+00)
+       real solutions, stability radius: 0.4532 (stable), 1.0160, 1.5354
+  ok   psi(2) = 0.9: stable solutions found minus 1                    0.00e+00  (limit 0e+00)
+  psi(2) = 0.7: perturbed ['mu'], 402 starting points, 402 converged, 9 distinct solutions, 3 real
+  ok   psi(2) = 0.7: number of solutions found minus nine              0.00e+00  (limit 0e+00)
+       entries within a unit of the last printed digit: largest error 1.94e-04, 0.55 of that unit
+       solution (4): printed -0.7000+4.6327j, computed -0.666951+4.632663j
+       solution (5): printed -0.7000-4.6327j, computed -0.666951-4.632663j
+  ok   psi(2) = 0.7: entries off by more than a unit of the last digit  2.00e+00  (limit 2e+00)
+       real solutions, stability radius: 0.4683 (stable), 0.9527 (stable), 1.5897
+  ok   psi(2) = 0.7: stable solutions found minus 2                    0.00e+00  (limit 0e+00)
+
+2. Foerster et al. (2016), Markov-switching RBC: printed first-order coefficients
+  steady state c = 2.082588, k = 22.15038, z = 1.00706 (printed 2.08259, 22.1504, 1.007); perturbed ['mu']
+  regime 1:
+      0.04056   0.12648   0.00917   0.00005
+      0.96920  -2.14061  -0.15521  -0.37201
+      0.00000   0.10000   0.00725   0.01846
+  regime 2:
+      0.04056   0.00000   0.02687  -0.09681
+      0.96920  -0.00000  -0.46499   0.92271
+      0.00000   0.00000   0.02175  -0.04102
+  ok   23 coefficients truncated to four decimals minus printed        0.00e+00  (limit 1e-12)
+       constant of c in regime 1: computed 0.0000459, printed 4.9e-05
+  ok   entries off by more than a unit of the last digit               1.00e+00  (limit 1e+00)
+  complex Newton from 403 starting points: 4 solutions, 2 real, stability radii 0.9394, 1.0848, 2.6052, 2.6052
+  ok   solutions found minus four (Groebner bases give four)           0.00e+00  (limit 0e+00)
+  ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
+
+3. Foerster et al. (2016), section 5: phi(s) pi_t + sigma(s) eps_t = E_t pi_{t+1}
+  pi_t = -0.080000 eps_t in regime 1, -0.625000 in regime 2 (printed -0.08 and -0.625)
+  ok   solution minus -sigma/phi                                       1.39e-17  (limit 1e-14)
+  with the lag of inflation as a state, coefficients on it: (0.0000, 0.0000) radius 0.000; (-0.0000, 1.1294) radius 1.084; (1.2681, 0.9056) radius 1.539; (1.3158, -0.0000) radius 1.645
+  ok   solutions found minus four                                      0.00e+00  (limit 0e+00)
+  ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
+
+4. Fisherian model with an AR(1) real rate: (diag(alpha) - rho T) c = 1
+  c = 0.976532929599, 2.036336109008
+  ok   c minus the closed form                                         4.44e-16  (limit 1e-14)
+
+5. Identical regimes: the Klein solution of the constant-parameter model
+  ok   rbc: F, P, Q minus Klein's, and constants                       1.78e-15  (limit 1e-13)
+  ok   nk3: F, P, Q minus Klein's, and constants                       4.44e-16  (limit 1e-13)
+
+all checks passed
+```
+
+Foerster et al. (2013, Atlanta Fed working paper 2013-1, section 6.2) solve a New Keynesian model in
+which the drift of technology switches and enters the Euler equation at `t+1`, and the response to
+inflation in the Taylor rule switches at `t`. The drift moves the steady state and is perturbed;
+the response does not and keeps its value in each regime, which `switching_system` finds from the
+residuals. They obtain every solution of the quadratic system with Gröbner bases and print the
+nine, for `psi(2) = 0.9` and for `psi(2) = 0.7`. Newton's method in complex arithmetic, from the
+Klein starting points and 400 random complex ones, finds the same nine in both cases, and the same
+stable ones: solution (1) for the first, (1) and (3) for the second. Each printed entry is compared
+in units of its last printed digit. The two that differ by more than one unit are the conjugate
+pair (4)–(5) of the second table, whose real part is printed as -0.7000 and is -0.66695 here; the
+other five entries of the same pair agree.
+
+For the RBC of Foerster et al. (2016, section 6.1), the paper prints the coefficients of the stable
+solution on `(k_{t-1}, z_{t-1}, eps_t, 1)` in its own timing, in which the predetermined variables
+are dated `t` and depend on `eps_t`. `dsgelab`'s states are `(k_{t-1}, z_t)`, so the comparison
+substitutes the law of motion of `z_t` into the solution. The printed values are truncated to four
+decimals (0.018459 is printed as 0.0184, 0.12648 as 0.1264), and 23 of the 24 then agree exactly.
+The constant of consumption in regime 1, printed to six decimals as 0.000049, is 0.0000459 here.
+Complex Newton finds the four solutions the paper reports, one stable.
+
+```bash
+python compare_kim.py --prepare               # simulates the series, writes out_kim/input.json
+bash statsmodels/setup.sh                     # if not run already
+statsmodels/.venv/bin/python statsmodels/run_statsmodels.py
+python compare_kim.py                         # about 2 minutes, most of it maximum likelihood
+```
+
+```
+1. Hamilton's filter: statsmodels 0.14.4
+  hamilton, 300 observations: log likelihood -213.4494648247, statsmodels -213.4494648247
+  ok   hamilton: log likelihood minus statsmodels'                     2.84e-14  (limit 1e-09)
+  ok   hamilton: filtered Pr(s=0) minus statsmodels'                   4.44e-16  (limit 1e-11)
+  ok   hamilton: smoothed Pr(s=0) minus statsmodels'                   2.00e-15  (limit 1e-11)
+       the smoothed probability puts the simulated regime above one half at 100.0% of the dates
+  ok   hamilton: Kim minus the exact likelihood, 14 observations       8.88e-16  (limit 1e-11)
+  maximum likelihood: dsgelab -207.12820351, statsmodels -207.12820351
+       p[0->0]        0.980276     0.980276
+       p[1->0]        0.095455     0.095455
+       const[0]       2.142501     2.142501
+       const[1]       6.134101     6.134104
+       sigma2[0]      0.128807     0.128807
+       sigma2[1]      0.751839     0.751836
+  ok   hamilton: maximized log likelihood minus statsmodels'           8.29e-10  (limit 1e-06)
+  ok   hamilton: implied reduced form minus statsmodels' estimate      2.57e-06  (limit 1e-04)
+  ar, 299 observations after the first: log likelihood -473.0062781287, statsmodels -473.0062781296
+  ok   ar: log likelihood minus statsmodels'                           9.44e-10  (limit 1e-08)
+  ok   ar: filtered Pr(s=0) minus statsmodels'                         6.12e-11  (limit 1e-09)
+  ok   ar: smoothed Pr(s=0) minus statsmodels'                         4.01e-11  (limit 1e-09)
+
+2. Kim's filter against the exact likelihood, all regime paths enumerated
+  ar, mu and phi switching, measurement s.d. 0.1: largest |Kim - exact| over 10 samples of 14 dates 2.12e-06 (|log likelihood| up to 30.5)
+  ar, mu and phi switching, measurement s.d. 0.5: largest |Kim - exact| over 10 samples of 14 dates 7.63e-03 (|log likelihood| up to 28.8)
+  ar, mu and phi switching, measurement s.d. 2.0: largest |Kim - exact| over 10 samples of 14 dates 1.84e-02 (|log likelihood| up to 30.7)
+  ok   ar: largest |Kim - exact|                                       1.84e-02  (limit 5e-02)
+  Foerster et al. (2013) NK, inflation observed: largest |Kim - exact| over 5 samples of 12 dates 8.62e-04 (|log likelihood| up to 61.1)
+  ok   NK: largest |Kim - exact|                                       8.62e-04  (limit 5e-03)
+
+all checks passed
+```
+
+Kim's filter collapses, at each date, the Gaussians that end in the same regime. It is exact in two
+cases, which statsmodels 0.14.4 computes by Hamilton's filter. In the first, the state is i.i.d.,
+so that observed inflation is `mu[s_t] + sigma[s_t] e_t`, statsmodels' `MarkovRegression`. In the
+second, an AR(1) is observed without error around a switching mean, `MarkovAutoregression`
+(Hamilton, 1989): given the regime, the data reveal the state. statsmodels conditions on the first
+observation, and the comparison does too, through `init=` and a missing first value. The
+smoothed probabilities come from the filter's joint probabilities of consecutive regimes, which
+makes them exact in both cases. Smoothing the marginal probabilities alone, as Kim's (1994)
+formula is often written, differs from statsmodels by up to 0.8 in the autoregression, because
+there the observation at `t` depends on the regime at `t-1`. Maximum likelihood estimates the
+Fisherian model's own parameters (the two inflation targets, the two responses to inflation and the
+staying probabilities), which map one to one into statsmodels' reduced form, and reaches the same
+maximum. The remaining differences, near 1e-9, come from the central differences behind the
+solution's coefficients.
+
+The exact likelihood is the mixture of the Kalman filters of all `2^T` regime paths, which
+`enumerated_likelihood` computes for samples of 12 and 14 dates. Against it, the collapse costs
+2e-6 in the log likelihood when the measurement error is small and up to 0.018 when it is large.
+In the New Keynesian model of Foerster et al. (2013) with inflation observed, the error is 9e-4.
+With output and the interest rate both observed, the regime is identified at almost every date and
+the collapse is exact to 1e-13. The test suite also checks that identical regimes reproduce the
+Kalman filter, Hamilton's filter written out in the test, the exact likelihood with missing data,
+and posterior mode and Metropolis–Hastings on switching parameters and a transition probability.
+The numbers come from a run on 5 November 2026, with `dsgelab` on Python 3.13 and statsmodels on
+Python 3.12.
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

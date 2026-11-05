@@ -480,7 +480,31 @@ MacroModelling.jl.
 
 ### 0.9 — the frontier
 
-- [ ] **Markov regime switching** in solution and estimation. Validation against RISE.
+- [x] **Markov regime switching** in solution and estimation. The validation could not use RISE: at
+  commit 9bdcd74 of its repository (27 September 2026), and at its `v2019` tag, the toolbox is
+  distributed as MATLAB P-code, with `.m` files that hold only the help text, and GNU Octave 11.3
+  cannot execute P-code. It uses instead the published solutions, statsmodels and the exact
+  likelihood. `solve_markov_switching` solves to first order with the partition perturbation of
+  Foerster, Rubio-Ramírez, Waggoner and Zha (2016): the parameters that move the steady state are
+  perturbed and enter as constants per regime, and the others keep their value in each regime. The
+  quadratic system is solved by Newton's method (Farmer, Waggoner and Zha, 2011) from the Klein
+  solutions and from random points, every distinct solution is kept, and the one used is the first
+  that is mean-square stable (Costa, Fragoso and Marques, 2005). For the New Keynesian model of
+  Foerster et al. (2013), complex Newton from 400 points finds the nine solutions they obtain with
+  Gröbner bases, under both of their parameterizations, with the same one and two stable solutions;
+  106 of the 108 printed entries agree within a unit of the last digit, and the other two, a
+  conjugate pair, are printed as -0.7000 where they are -0.66695 here. For their 2016 RBC it finds
+  the four solutions they report, one of them stable, and of its 24 first-order coefficients, 23
+  agree once truncated to four decimals, as the paper prints them, and the constant of consumption
+  in regime 1 is printed as 0.000049 where it is 0.0000459. Identical regimes give the Klein
+  solution within 2e-15. `kim_filter` computes Kim's (1994) likelihood, with filtered and smoothed
+  regime probabilities, and `MarkovSwitchingProblem` takes it to the posterior mode and the
+  samplers, with switching parameters and transition probabilities. Where Kim's filter is exact, it
+  agrees with statsmodels 0.14.4's Hamilton filter within 3e-14 in the log likelihood and 2e-15 in
+  the probabilities, and with its autoregression within 1e-9, and maximum likelihood reaches
+  statsmodels' maximum within 8e-10. Against the exact likelihood over every regime path, Kim's
+  approximation errs by up to 0.018 on samples of 14 dates with large measurement errors. Higher
+  orders and endogenous transition probabilities, which RISE has, remain outside the package.
 - [x] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
   sequence-jacobian. *The design requirement, inherited from the earlier exclusion, is that* `vec`
   remains the way to write a finite number of groups, and that a distribution is a different

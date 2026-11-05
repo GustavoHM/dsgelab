@@ -588,7 +588,7 @@ def posterior_mode(problem: EstimationProblem, x0: ArrayLike | None = None, *,
     ``log posterior kernel + k/2 log 2 pi - 1/2 log det H``.
     """
     gradient = None
-    if problem.order == 1 and not problem.is_dsge_var:
+    if isinstance(problem, EstimationProblem) and problem.order == 1 and not problem.is_dsge_var:
         from .derivatives import log_posterior_gradient
         gradient = lambda theta: log_posterior_gradient(problem, theta)
     x, res, n = _optimise(problem, problem.log_posterior, x0, method, options, gradient)
@@ -610,7 +610,7 @@ def maximum_likelihood(problem: EstimationProblem, x0: ArrayLike | None = None, 
         return problem.log_likelihood(x)
 
     gradient = None
-    if problem.order == 1 and not problem.is_dsge_var:
+    if isinstance(problem, EstimationProblem) and problem.order == 1 and not problem.is_dsge_var:
         from .derivatives import log_likelihood_gradient
         gradient = lambda theta: log_likelihood_gradient(problem, theta)
     x, res, n = _optimise(problem, ll, x0, method, options, gradient)

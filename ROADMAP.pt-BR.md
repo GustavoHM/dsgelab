@@ -503,7 +503,33 @@ projeto Julia já usado para o MacroModelling.jl.
 
 ### 0.9 — a fronteira
 
-- [ ] **Mudança de regime markoviana** na solução e na estimação. Validação contra o RISE.
+- [x] **Mudança de regime markoviana** na solução e na estimação. A validação não pôde usar o RISE:
+  no commit 9bdcd74 do seu repositório (27 de setembro de 2026), e na tag `v2019`, o toolbox é
+  distribuído como P-code do MATLAB, com arquivos `.m` que contêm só o texto de ajuda, e o GNU
+  Octave 11.3 não executa P-code. Ela usa no lugar as soluções publicadas, o statsmodels e a
+  verossimilhança exata. `solve_markov_switching` resolve em primeira ordem com a perturbação por
+  partição de Foerster, Rubio-Ramírez, Waggoner e Zha (2016): os parâmetros que deslocam o estado
+  estacionário são perturbados e entram como constantes por regime, e os outros mantêm o seu valor
+  em cada regime. O sistema quadrático é resolvido pelo método de Newton (Farmer, Waggoner e Zha,
+  2011) a partir das soluções de Klein e de pontos aleatórios, toda solução distinta é guardada, e a
+  usada é a primeira estável em média quadrática (Costa, Fragoso e Marques, 2005). No modelo
+  novo-keynesiano de Foerster et al. (2013), o Newton complexo a partir de 400 pontos encontra as
+  nove soluções que eles obtêm com bases de Gröbner, nas duas parametrizações, com as mesmas uma e
+  duas soluções estáveis; 106 das 108 entradas impressas concordam a menos de uma unidade do último
+  dígito, e as outras duas, um par conjugado, aparecem impressas como -0,7000 onde aqui são
+  -0,66695. No RBC de 2016, encontra as quatro soluções que eles relatam, uma delas estável, e dos
+  seus 24 coeficientes de primeira ordem, 23 concordam depois de truncados em quatro casas, como o
+  artigo os imprime, e a constante do consumo no regime 1 aparece como 0,000049 onde aqui é
+  0,0000459. Regimes idênticos dão a solução de Klein a menos de 2e-15. `kim_filter` calcula a
+  verossimilhança de Kim (1994), com as probabilidades filtradas e suavizadas dos regimes, e
+  `MarkovSwitchingProblem` a leva à moda a posteriori e aos amostradores, com parâmetros que mudam
+  de regime e probabilidades de transição. Onde o filtro de Kim é exato, ele concorda com o filtro
+  de Hamilton do statsmodels 0.14.4 a menos de 3e-14 na log-verossimilhança e de 2e-15 nas
+  probabilidades, e com a sua autorregressão a menos de 1e-9, e a máxima verossimilhança alcança o
+  máximo do statsmodels a menos de 8e-10. Contra a verossimilhança exata sobre todas as trajetórias
+  de regime, a aproximação de Kim erra em até 0,018 em amostras de 14 datas com erros de medida
+  grandes. Ordens mais altas e probabilidades de transição endógenas, que o RISE tem, continuam fora
+  do pacote.
 - [x] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências, validados contra
   o sequence-jacobian. *O requisito de projeto, herdado da exclusão anterior, é que* `vec`
   continue sendo a forma de escrever um número finito de grupos, e que uma distribuição seja outro

@@ -107,6 +107,8 @@ examples in English and Portuguese.
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
 | BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts) and the DSGE-VAR of Del Negro and Schorfheide, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)` |
 | Heterogeneous agents by the sequence-space Jacobian: one asset by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
+| Markov regime switching to first order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions` |
+| Likelihood of regime switching by Kim's filter, filtered and smoothed regime probabilities, estimation of switching parameters and transition probabilities | `kim_filter`, `MarkovSwitchingProblem` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
@@ -294,8 +296,11 @@ planned.
   endogenous state. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.
-- **No Markov regime switching.** Heterogeneous agents have one endogenous state, the asset, and a
-  Markov matrix and grid that stay fixed along a path.
+- **Markov regime switching is first order only,** with exogenous transition probabilities, and
+  Newton's method from finitely many starting points cannot prove that a stable solution is
+  unique. Kim's filter is an approximation, whose error the validation measures.
+- **Heterogeneous agents have one endogenous state,** the asset, and a Markov matrix and grid that
+  stay fixed along a path.
 - **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.

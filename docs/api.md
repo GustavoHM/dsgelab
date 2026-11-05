@@ -776,6 +776,129 @@ sequence-jacobian's `agrid`.
 
 ---
 
+## Markov regime switching
+
+### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100) -> MarkovSwitchingSolution`
+
+The first-order solution of a model some of whose parameters switch with a Markov chain. The model
+is an ordinary `Model`; it holds in expectation over the next regime and the next innovation,
+given the current regime. `switching` gives `{name: (value in regime 0, value in regime 1, ...)}`
+and `transition[i, j]` the probability of moving from regime `i` to regime `j` (a matrix or a
+`MarkovChain`). A switching parameter takes the value of the regime at `t`, or, if it is named in
+`next_regime`, that of the regime at `t+1`: the volatility of an innovation dated `t+1`, or a
+growth rate that enters an Euler equation at `t+1`. A parameter cannot take both dates; one that
+needs both is passed twice, under two names.
+
+The approximation point is the steady state of the ergodic-mean parameters, common to all
+regimes, as in the partition perturbation of Foerster, Rubio-Ramírez, Waggoner and Zha (2016). A
+switching parameter that moves the steady state is perturbed and enters the solution as a constant
+per regime. One that does not move it keeps its value in each regime, so that the coefficients
+differ across regimes. `perturbed` is found by setting each switching parameter to each regime's
+value at the steady state and keeping those that leave a residual, unless it is given. A partition
+that leaves a residual in some pair of regimes raises `MarkovSwitchingError`. In the rescaled
+deviations of `first_order_system`, the solution is
+
+```
+u_t     = F[s_t] k_t + f[s_t]
+k_{t+1} = P[s_t, s_{t+1}] k_t + Q[s_t, s_{t+1}] eps_{t+1} + p[s_t, s_{t+1}]
+```
+
+The rows with a state at `t+1` and no jump at `t+1` are the laws of motion, which hold for every
+next regime. There must be one per state, as for `time_iteration`, or the call raises
+`MarkovSwitchingError`. The other rows hold in expectation and form a system of quadratic matrix
+equations in `F[0], ..., F[h-1]`, which in general has several solutions. Newton's method, as in
+Farmer, Waggoner and Zha (2011), starts from the arrays in `initial`, then from the Klein solution
+of the model averaged over the regimes with the ergodic distribution, then from the Klein solution
+of each regime held forever, then from `starts` random points around the first of these. A
+solution is accepted when it is mean-square stable (Costa, Fragoso and Marques, 2005). The first
+stable solution found is used and every distinct solution is kept. Newton's method from finitely
+many points does not prove that a stable solution is the only one, as the Gröbner-basis search of
+Foerster et al. (2016) does; more `starts` make a second one more likely to be found if it exists.
+`MarkovSwitchingError` is raised when no starting point converges or no solution found is stable,
+with what was found in its `solutions`.
+
+### `MarkovSwitchingSolution`
+
+`F` `(h, n_jumps, n_states)`, `f` `(h, n_jumps)`, `P` `(h, h, n_states, n_states)`, `Q`
+`(h, h, n_states, n_shocks)` and `p` `(h, h, n_states)` are those of `solution`, the `MSVSolution`
+used. `solutions` holds every distinct solution found and `stable_solutions` the stable ones;
+`tried` and `converged` count the starting points. The other fields are `model`, `steady`,
+`system`, `params`, `switching`, `next_regime`, `perturbed`, `transition`, `h`, `ergodic` (the
+ergodic distribution of the regimes) and `coords`.
+
+| Method | Meaning |
+|---|---|
+| `irf(name, size=1.0, periods=40, *, regime=0, expected=False, levels=False, percent=True)` | impulse response to shock `name`, with `regime` held throughout or a path of `periods` regimes. The impulse arrives with the regime of the period before equal to the first. With `expected=True` and one starting regime, the response averaged over the regimes that follow. Units as in `FirstOrderSolution.irf` |
+| `simulate(periods=1000, cov=None, *, seed=None, burn=100, levels=False, regimes=None)` | regimes drawn from the chain from its ergodic distribution, or a given path of `periods + burn` regimes, and every variable; the regimes are under `"regime"` |
+| `moments(cov=None)` | `mean`, `cov`, `std`, `std_by_name`, `conditional_mean` (per regime) and `probabilities`, exact under the ergodic distribution of the regimes and the states |
+| `regime_moments(cov=None)` | `(pi, mean, second)`: the ergodic probabilities and the mean and second moment of the states given each regime |
+| `variables(k, regimes, constants=True)`, `to_levels(paths)`, `regime_params(regime)`, `summary()` | paths from states, levels, the parameters of one regime, a report |
+
+### `switching_system(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, ctx=None, positive=(), h=1e-6, tol=1e-11) -> (SwitchingSystem, SteadyState, perturbed)`
+
+The linearisation behind `solve_markov_switching`. `SwitchingSystem` holds `A`, `B`, `C`, `c`,
+one block per pair of regimes, in `A[i,j] E y' = B[i,j] y + C[i,j] eps' + c[i,j]`, with one row
+scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion) and `expected` (the
+other rows).
+
+### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=100) -> (solutions, tried, converged)`
+
+Newton's method from the starting points above, returning the distinct `MSVSolution`s in the order
+found. With `complex=True` the random points are complex and the iteration runs in complex
+arithmetic, which also finds the complex solutions of the quadratic system; a complex solution is
+never stable. Each `MSVSolution` has `F`, `f`, `P`, `Q`, `p`, `radius` (of the stability
+operator), `residual` (of the quadratic system), `iterations`, `stable` and `is_real`.
+
+### `mean_square_stability(P, transition) -> float`
+
+The spectral radius of the map `M_j' = sum_i transition[i, j] P[i, j] M_i P[i, j]'` of the second
+moments of `k' = P[s, s'] k`, for `P` `(h, h, n, n)`, or `(h, n, n)` for matrices that depend on
+the next regime only (Costa, Fragoso and Marques, 2005). Below one, the solution is mean-square
+stable.
+
+### `switching_state_space(sol, observables, *, transforms=None, measurement=None, cov=None) -> SwitchingStateSpace`
+
+The state space `k_t = T[i,j] k_{t-1} + c[i,j] + R[i,j] eps_t`, `y_t = d[j] + Z[j] k_t + e_t`,
+with `i` the regime at `t-1` and `j` that at `t`. The arguments are those of `state_space`, and
+`d` includes the regime constants. `ergodic_start()` gives the ergodic probabilities of the
+regimes and the mean and variance of the states given each.
+
+### `kim_filter(space, data, *, init="ergodic") -> KimFilterResult`
+
+Kim's (1994) filter. At each date it runs the `h^2` Kalman steps from each regime to each and
+collapses the steps that end in the same regime into one Gaussian with the mean and variance of
+their mixture (Kim and Nelson, 1999). The collapse is the approximation; it is exact when nothing
+but the regime has dynamics (Hamilton's filter) and when the regime and the data reveal the state.
+`init` is `"ergodic"` or `(probabilities, means, covariances)` of the first regime and of the first
+state given it, before the first observation; missing data are `nan`. `KimFilterResult` has
+`loglik`, `loglik_t`, `filtered` `Pr(s_t | y_1..y_t)`, `predicted` `Pr(s_t | y_1..y_{t-1})`,
+`smoothed` `Pr(s_t | y_1..y_T)`, `states` and `regime_states` (the filtered states, and given
+each regime). The smoothed probabilities come from a backward recursion on the filter's joint
+probabilities of `(s_{t-1}, s_t)`, with Kim's (1994) approximation that the data after `t` depend
+on `s_{t-1}` only through `s_t`.
+
+### `enumerated_likelihood(space, data, *, init="ergodic", max_paths=2**20) -> float`
+
+The exact log likelihood: the mixture of the Kalman filters of all `h^T` regime paths, for short
+samples. It measures Kim's approximation.
+
+### `MarkovSwitchingProblem(model, data, params, observables, switching, transition, priors={}, cov=None, measurement=None, transforms=None, next_regime=(), perturbed=None, steady_fn=None, guess=None, init="ergodic", first_obs=1, presample=0, free=None, bounds=None, starts=0, seed=0)`
+
+An estimation problem with Kim's likelihood, accepted by `posterior_mode`, `maximum_likelihood`,
+`metropolis_hastings` and `smc`, which then use numerical derivatives. Besides the names of
+`EstimationProblem`, an estimated name may be `"psi[1]"`, the switching parameter `psi` in regime
+1, or `"p[0,1]"`, the probability of moving from regime 0 to regime 1; `switching` and
+`transition` give the starting and fixed values. In each row of the transition matrix the entries
+not estimated share what the estimated ones leave of one, in their original proportions, so with
+two regimes `"p[0,0]"` also sets `p[0,1] = 1 - p[0,0]`. A transition probability without a prior
+or bounds is kept in `[0, 1]`. A parameter vector at which no stable solution is found has
+likelihood `-inf`; `starts` random points are added to the Klein starting points at each
+evaluation. Methods: `log_likelihood`, `log_prior`, `log_posterior`, `solve(theta) -> (solution,
+space)`, `filter(theta) -> KimFilterResult`, `unpack(theta) -> (params, shock covariance,
+measurement sds, switching, transition)` and `start()`.
+
+---
+
 ## Transitions
 
 ### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
@@ -2042,6 +2165,7 @@ writer.
 | `WelfareError` | `ValueError` | the objective or the model cannot carry a welfare calculation |
 | `DynareImportError` | `ValueError` | a `.mod` construct is not read |
 | `OccbinError` | `RuntimeError` | the regime iteration does not settle |
+| `MarkovSwitchingError` | `RuntimeError` | a Markov-switching model has no stable solution among those found, or its system cannot be solved |
 | `dsgelab.symbolic.SymbolicError` | `ValueError` | a text equation is malformed or uses an undeclared name |
 
 A steady state, a transition or a calibration that misses its tolerance raises

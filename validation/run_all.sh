@@ -18,7 +18,9 @@
 # environment of its own that dolo/setup.sh creates with uv, and so does sequence-jacobian, the
 # reference of compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates. Tasmanian,
 # the reference of compare_smolyak.py, is built from source, with CMake and the system's C++
-# compiler, in a Python 3.12 environment that tasmanian/setup.sh creates with uv.
+# compiler, in a Python 3.12 environment that tasmanian/setup.sh creates with uv, and statsmodels,
+# the reference of compare_kim.py, runs in a Python 3.12 environment that statsmodels/setup.sh
+# creates.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -146,6 +148,13 @@ else
   step "Tasmanian: Smolyak grids" tasmanian/.venv/bin/python tasmanian/run_tasmanian.py
   step "compare_smolyak.py"  "$PYTHON" compare_smolyak.py
 fi
+step "compare_switching.py"  "$PYTHON" compare_switching.py
+# without deleting it, a failed statsmodels run would let the comparison read an earlier result
+rm -f out_kim/statsmodels.json
+step "Kim: series"           "$PYTHON" compare_kim.py --prepare
+step "statsmodels: environment" bash statsmodels/setup.sh
+step "statsmodels: Hamilton filter" statsmodels/.venv/bin/python statsmodels/run_statsmodels.py
+step "compare_kim.py"        "$PYTHON" compare_kim.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 
