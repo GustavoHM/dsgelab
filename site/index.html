@@ -919,6 +919,45 @@ for name, fig in figs.items():
   <code>prior_density</code> reproduces its <code>draw_prior_density</code> and
   <code>posterior_density</code> the kernel estimate of its <code>posterior_moments</code>, with the
   bandwidth corrected for the draws a Metropolis chain repeats.</p>
+<pre><code>bg = dsg.brooks_gelman(chain, origin=200)                 # chains of 750 draws, example 14
+slices = dsg.mode_check(pb, mode)
+irf_post = dsg.posterior_irf(pb, chain, n_draws=200, periods=20)
+more = {
+    "priors.png": dsg.plot_priors(pb),
+    "trace.png": dsg.trace_plot(chain, posterior=True),
+    "brooks_gelman.png": dsg.plot_brooks_gelman(bg),
+    "mode_check.png": dsg.plot_mode_check(slices),
+    "posterior_irf.png": dsg.plot_posterior_irf(irf_post, "e"),
+    "smoothed.png": dsg.plot_smoothed_observables(pb.smoother(mode.x), pb.Y),
+    "occbin.png": dsg.plot_occbin(ob, ["c", "b", "lam"]),                     # example 15
+    "collinearity.png": dsg.plot_identification(bad),                         # example 19
+    "filtering.png": dsg.plot_filtering(stab, scatter=False),                 # example 26
+}
+for name, fig in more.items():
+    fig.savefig(name, dpi=80)
+bg.iterations[[0, -1]], bg.univariate.shape
+slices["rho"]["x"][[0, 10, 20]].round(3)
+irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">bg.iterations[[0, -1]], bg.univariate.shape</span>
+([200 746], (92, 6, 2))
+<span class="out-expr">slices["rho"]["x"][[0, 10, 20]].round(3)</span>
+[0.501 0.75 1]
+<span class="out-expr">irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</span>
+(200, True)</code></pre>
+  <p>The rest of Dynare's figures follow the same pattern. <code>trace_plot</code>,
+  <code>plot_mh_autocorrelation</code> and <code>plot_brooks_gelman</code> are the MCMC diagnostics
+  of <code>estimation</code>: the draws with their moving average, their autocorrelations, and the
+  convergence measures of Brooks and Gelman (1998) on the pooled draws and within each chain, which
+  settle at the same value when the chains have converged. <code>mode_check</code> evaluates the log
+  posterior and the log likelihood through the mode on Dynare's grid, here from 0.501 to 1 for
+  <code>rho</code>, whose mode is 0.75: the beta prior cuts the right side at 1, and the grid is made symmetric.
+  <code>posterior_irf</code> solves the model at draws of the posterior and gives the mean, median,
+  HPD interval and deciles of the responses, as Dynare's <code>bayesian_irf</code>. The smoother
+  (<code>plot_smoothed_shocks</code>, <code>plot_smoothed_observables</code>), the OccBin paths and
+  regimes, the collinearity patterns of <code>identification</code>, the Monte Carlo filtering of
+  global sensitivity, conditional forecasts and shock groups in the decomposition have their
+  figures too. The statistics they draw are computed as Dynare computes them and need no
+  matplotlib, and the validation compares them with the numbers in Dynare's own figures.</p>
   <h3>29. A process as a Markov chain</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log productivity, quarterly
 var = sigma ** 2 / (1 - rho ** 2)
@@ -1341,9 +1380,11 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   the eigenvalues by signed value when they are all real, and its rule cannot see rank
   failures.</p>
 
-  <h3>Mixed-frequency data and plot densities against Dynare</h3>
+  <h3>Mixed-frequency data and plots against Dynare</h3>
   <p><code>fs2000.mod</code> with output growth observed only as its annual mean, which Dynare reads
-  through an auxiliary variable; and the two densities the posterior plots draw.</p>
+  through an auxiliary variable; and the numbers the plots draw that the package did not compute
+  before, against those in Dynare's own figures after an estimation of <code>fs2000.mod</code>
+  with <code>mode_check</code>, two chains and <code>bayesian_irf</code>.</p>
   <table>
     <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
     <tbody>
@@ -1352,6 +1393,10 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
       <tr><td>posterior mode, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
       <tr><td>prior densities of the nine priors (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
       <tr><td>posterior kernel density (<code>posterior_moments</code>), draws with repeats</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>Brooks and Gelman diagnostics, univariate and multivariate (relative)</td><td class="num">8e-14</td><td class="ok">OK</td></tr>
+      <tr><td>moving average of <code>trace_plot</code>, autocorrelogram of the draws</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td><code>mode_check</code>: grid, and kernels where the prior is bounded (relative)</td><td class="num">6e-11</td><td class="ok">OK</td></tr>
+      <tr><td>posterior IRFs on Dynare's 1,200 draws: mean, median, HPD interval, deciles</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

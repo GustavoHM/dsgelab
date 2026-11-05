@@ -350,8 +350,8 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   `prior_density` concorda com `draw_prior_density` nas nove prioris do `fs2000` até `1.9e-12`, e
   `posterior_density` com a estimativa de núcleo de `posterior_moments`, com a largura de banda
   corrigida para sorteios repetidos, até `8.9e-16` (30 de outubro de 2026). A suíte de testes
-  confere que cada figura desenha os números que recebe. Ficam de fora os gráficos de diagnóstico
-  do MCMC e os gráficos de identificação e de sensibilidade do Dynare.
+  confere que cada figura desenha os números que recebe. Os gráficos de diagnóstico do MCMC e os
+  gráficos de identificação e de sensibilidade do Dynare ficaram de fora e vieram na 0.9 (abaixo).
 
 ### 0.7 — terceira ordem completa e derivadas
 
@@ -498,6 +498,17 @@ projeto Julia já usado para o MacroModelling.jl.
   o sequence-jacobian. *O requisito de projeto, herdado da exclusão anterior, é que* `vec`
   continue sendo a forma de escrever um número finito de grupos, e que uma distribuição seja outro
   algoritmo, num módulo próprio.
+- [x] **Os demais gráficos do Dynare**, acrescentados a pedido do autor: prioris, gráficos de
+  traço, a autocorrelação dos sorteios, os diagnósticos de convergência de Brooks e Gelman, o
+  `mode_check`, os choques e as variáveis do suavizador, IRFs a posteriori com bandas HPD,
+  decomposições de choques agrupadas e detalhadas, previsões condicionais, OccBin, a colinearidade
+  da identificação e os gráficos de filtragem da análise de sensibilidade. No `fs2000.mod`, com as
+  figuras do próprio Dynare registradas enquanto são desenhadas e comparadas nos mesmos sorteios,
+  as estatísticas de Brooks e Gelman concordam até 8e-14, as autocorrelações até 3e-15, os núcleos
+  do `mode_check` até 6e-11 onde a priori é limitada, e as IRFs a posteriori nos 1.200 sorteios de
+  parâmetros do Dynare até 3e-10 da maior resposta. Ficam de fora as barras de força da
+  identificação, que exigem a matriz de informação, as decomposições de choques anualizadas e por
+  safra e as bandas das previsões condicionais.
 - [ ] **BVAR e DSGE-VAR**, a serem conferidos contra o `+bvar` e o `dsge_var` do Dynare.
 
 ### 1.0

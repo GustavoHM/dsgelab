@@ -1646,15 +1646,32 @@ print(dsg.sobol(run, inside, n=256).summary())
 
 matplotlib is optional: `pip install "dsgelab[plot]"`. Each function returns a
 matplotlib `Figure`, built without `pyplot`, so nothing global changes; save it
-with `fig.savefig(...)` or let a notebook show it.
+with `fig.savefig(...)` or let a notebook show it. The figures are those Dynare
+draws, and the third column names the command or option that draws each one.
 
-| Function | Draws |
-|---|---|
-| `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values |
-| `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}` |
-| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line |
-| `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given |
-| `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed |
+| Function | Draws | Dynare |
+|---|---|---|
+| `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values | `stoch_simul` |
+| `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}`. A `TransitionPath` is accepted as it is, with `start=0` for its initial condition | `rplot` |
+| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None, groups=None, steady_state=None, detail=False)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line. `groups={label: shocks}` sums shocks, and those in no group join the initial condition as "Others + Initial Values"; `steady_state` labels the axis in levels; `detail` draws each contribution in a panel of its own, on a common scale | `plot_shock_decomposition` (`use_shock_groups`, `steadystate`, `detail_plot`) |
+| `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given | `forecast` |
+| `plot_conditional_forecast(forecast, variables=None, *, unconditional=None, conditions=None, columns=3, title=None, figsize=None)` | what `FirstOrderSolution.conditional_forecast` returns, solid, against the paths without conditions, dashed, with the imposed values in red | `plot_conditional_forecast` |
+| `plot_priors(priors, names=None, *, columns=3, title="Priors", figsize=None)` | the prior densities of a mapping or an `EstimationProblem`, in grey | `estimation(plot_priors)` |
+| `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed, on axes that span both densities and run to 1.1 times the higher peak | "Priors and posteriors" |
+| `trace_plot(draws, names=None, *, chains=None, window=200, posterior=False, title=None, figsize=None)` | the draws of one chain in grey with their centred moving average over `2 window + 1` draws, or several chains over each other; `posterior` adds the log posterior | `trace_plot` (`trace_plot_ma`) |
+| `plot_mh_autocorrelation(draws, names=None, *, chain=0, lags=30, columns=3, title=None, figsize=None)` | the autocorrelations of one chain's draws as bars | `mh_autocorrelation_function` |
+| `plot_brooks_gelman(diagnostics, names=None, *, multivariate=False, title=None, figsize=None)` | a `BrooksGelman` (or draws, diagnosed with the defaults): per parameter, the interval, m2 and m3, pooled in blue and within chains in red; with `multivariate`, the same for the log posterior | `mcmc_diagnostics` |
+| `plot_mode_check(slices, names=None, *, columns=3, title=None, figsize=None)` | what `mode_check` returns: the log posterior and the log-likelihood kernel through the mode, the mode as a line, red points where the model has no solution | `mode_check` |
+| `plot_smoothed_shocks(smoothed, names=None, *, measurement=False, shock_states=None, start=1, columns=3, title=None, figsize=None)` | the smoothed shocks of a `SmootherResult` against zero, or with `measurement` its measurement errors larger than 1e-6. For a model read from a `.mod`, `shock_states=mf.shock_states` reads the shocks from their `SHK_` states, as Dynare reports them | "Smoothed shocks", "Smoothed observation errors" |
+| `plot_smoothed_observables(smoothed, data=None, names=None, *, start=1, columns=3, title=None, figsize=None)` | the smoothed observables, `d + Z k_t`, in red, against the data, dashed | "Historical and smoothed variables" |
+| `plot_posterior_irf(irf, shock, variables=None, *, threshold=1e-10, columns=3, title=None, figsize=None)` | the responses to one shock from `posterior_irf`: the HPD interval in grey and the posterior mean in black, leaving out responses below `threshold` | `estimation(bayesian_irf)` (`irf_plot_threshold`) |
+| `plot_occbin(result, variables=None, *, deviations=False, binding=True, columns=3, title=None, figsize=None)` | the piecewise-linear paths of an `OccbinResult` in blue and the linear ones dashed in red, in levels or in deviations, and a panel per constraint with the dates it binds | `occbin_graph` |
+| `plot_occbin_regimes(result, *, title=None, figsize=None)` | for each surprise, the dates at which each regime of the plan made then starts: red stars binding, blue circles slack | `occbin.plot_regimes` |
+| `plot_identification(ident, groups=None, *, title=None, figsize=None)` | for each group size of `Identification.collinearity`, the cosine of the best fit of each parameter's moment derivatives, in the columns of the parameters that give it | `identification(advanced)`, "Collinearity patterns" |
+| `plot_filtering(result, names=None, *, kind="determinate", scatter=True, title=None, figsize=None)` | a `FilteringResult` (or a `StabilityMap` and the `kind` of its filtering), for the parameters with a significant Smirnov test: the cumulative distributions with and without the behaviour on the diagonal and the draws of each pair off it, or with `scatter=False` one panel of distributions per parameter with its p-value | `dynare_sensitivity`: `scatter_mcf`, `stability_mapping_univariate` |
+
+The numbers these figures draw that the package does not compute elsewhere come
+from the functions below, which do not need matplotlib.
 
 ### `prior_density(prior, *, steps=200, truncation=1e-3) -> (x, f)`
 
@@ -1668,10 +1685,60 @@ The kernel density of `posterior_moments` in Dynare: a Gaussian kernel with
 Silverman's bandwidth, corrected for the draws a Metropolis chain repeats when it
 rejects, by linear binning and a fast Fourier transform on `grid_points` points.
 
-Both densities are validated against Dynare: `draw_prior_density` on the nine
-priors of `fs2000.mod` within 2e-12, and `posterior_moments` on two sets of draws,
-one with repeated values, within 9e-16 (see `validation/README.md`). The plots draw
-what they are given; the test suite checks the numbers on each figure.
+### `brooks_gelman(draws, *, names=None, log_posterior=None, drop=0.5, origin=1000, step=None, alpha=0.2) -> BrooksGelman`
+
+The convergence diagnostics of Brooks and Gelman (1998) in Dynare's
+`mcmc_diagnostics`. Over windows that end at draws `origin, origin + step, ...`
+(about 100 windows by default) and drop the first share `drop` of the draws up to
+their end, each parameter gives the length of the interval that holds `1 - alpha`
+of its draws, their variance (m2) and their third absolute moment (m3), on all
+chains pooled and within each chain, averaged. The multivariate diagnostic does
+the same on the log posterior. `draws` is an `MCMCResult` or a `(chains, draws,
+parameters)` array. Dynare runs it on the whole chains with its `mh_drop`, and
+`metropolis_hastings(..., burn=0)` keeps the burn-in for that.
+
+`BrooksGelman` holds `iterations` (the end of each window), `names`,
+`univariate`, `(windows, 6, parameters)`, and `multivariate`, `(windows, 6)` or
+None, in Dynare's column order: pooled and within interval, pooled and within m2,
+pooled and within m3.
+
+### `mh_autocorrelation(draws, lags=30) -> ndarray`
+
+The autocorrelations of a chain at lags `0..lags`, Dynare's `sample_autocovariance`:
+each autocovariance sums over the last `N - lags` draws and divides by their number.
+
+### `mode_check(problem, mode, *, neighbourhood=0.5, points=20, symmetric=True, prior_trunc=0.0) -> dict`
+
+Slices of the log posterior kernel through `mode` (a `ModeResult`, a mapping or an
+array), one parameter at a time, on Dynare's grid: `points + 1` values spanning
+`neighbourhood` times the mode on each side, within the support of the prior (or
+its quantiles `prior_trunc`), made symmetric when a bound cuts one side. A zero
+mode or an infinite bound takes Dynare's other rule, written in terms of the
+prior standard deviation, which sends the grid of a parameter with a normal prior
+to -10 and 10. Returns `{name: {"x", "log_posterior", "log_likelihood", "mode"}}`.
+The log likelihood is shifted by the log prior at the mode, so that the curves
+meet there, and both are NaN where the model has no solution.
+
+### `posterior_irf(problem, draws, *, shocks=None, variables=None, periods=40, n_draws=1200, mass=0.9, percent=True, seed=0) -> dict`
+
+Dynare's `PosteriorIRF`. At `n_draws` parameter vectors from `draws` (an
+`MCMCResult` or an array; all, in order, with `n_draws=None`) the model is solved
+and the responses to a one-standard-deviation orthogonalised impulse of each
+shock computed (the Cholesky factor of the shock covariance, with Dynare's
+`1e-14` on its diagonal). `variables` are the observables by default. For each
+variable, shock and period, the statistics are those of `posterior_moments`: mean,
+median, the shortest interval that leaves out `round((1 - mass) n)` draws, and the
+deciles. Returns `{"mean", "median", "lower", "upper": {shock: {variable: path}},
+"deciles": {shock: {variable: (periods, 9)}}, "responses": {shock: {variable:
+(draws, periods)}}, "draws", "mass"}`.
+
+All of these are validated against Dynare on `fs2000.mod` (see
+`validation/README.md`): the densities within 2e-12; the Brooks and Gelman
+statistics, the moving average of `trace_plot` and the autocorrelations against
+the numbers in Dynare's own figures, within 8e-14; the grid of `mode_check`
+within 9e-16 and its kernels within 6e-11 where the prior is bounded; and the
+posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest
+response. The test suite checks the numbers on each figure.
 
 ```python
 import dsgelab as dsg

@@ -335,7 +335,7 @@ warning that lasts at least one minor version. The public API is what is in `__a
   `1.9e-12`, and `posterior_density` with the kernel estimate of `posterior_moments`, bandwidth
   corrected for repeated draws, within `8.9e-16` (30 October 2026). The test suite checks that
   each figure draws the numbers it is given. MCMC diagnostic plots and Dynare's identification
-  and sensitivity plots are left out.
+  and sensitivity plots were left out, and came in 0.9 (below).
 
 ### 0.7 — complete third order and derivatives
 
@@ -476,6 +476,16 @@ MacroModelling.jl.
   sequence-jacobian. *The design requirement, inherited from the earlier exclusion, is that* `vec`
   remains the way to write a finite number of groups, and that a distribution is a different
   algorithm, in a module of its own.
+- [x] **The rest of Dynare's figures**, added at the author's request: priors, trace plots, the
+  autocorrelation of the draws, Brooks and Gelman's convergence diagnostics, `mode_check`, the
+  smoother's shocks and variables, posterior IRFs with HPD bands, grouped and detailed shock
+  decompositions, conditional forecasts, OccBin, identification collinearity and the sensitivity
+  toolbox's filtering plots. On `fs2000.mod`, with Dynare's own figures recorded as they are drawn
+  and compared on the same draws, the Brooks and Gelman statistics agree within 8e-14, the
+  autocorrelations within 3e-15, the `mode_check` kernels within 6e-11 where the prior is bounded,
+  and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
+  The identification-strength bars, which need the information matrix, the annualised and vintage
+  shock decompositions and the bands of conditional forecasts are left out.
 - [ ] **BVAR and DSGE-VAR**, to be checked against Dynare's `+bvar` and `dsge_var`.
 
 ### 1.0

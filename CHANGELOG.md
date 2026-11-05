@@ -42,6 +42,29 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   square of the spacing, to 1.6e-4 with 80 points. `validation/dolo/run_dolo_egm.py` silences a
   debugging line in dolo's `egm` and reads its policy only at the points where dolo's resampled
   rule equals it, without editing dolo.
+- The rest of Dynare's figures, each from an object the package already returns: `plot_priors`
+  (`plot_priors`), `trace_plot` (`trace_plot`, with its moving average),
+  `plot_mh_autocorrelation` (`mh_autocorrelation_function`), `plot_brooks_gelman` (the univariate
+  and multivariate diagnostics of `mcmc_diagnostics`), `plot_mode_check` (`mode_check`),
+  `plot_smoothed_shocks` and `plot_smoothed_observables` (the smoother's "Smoothed shocks",
+  "Smoothed observation errors" and "Historical and smoothed variables"), `plot_posterior_irf`
+  (`bayesian_irf`), `plot_conditional_forecast`, `plot_occbin` and `plot_occbin_regimes`
+  (`occbin_graph` and `occbin.plot_regimes`), `plot_identification` (the collinearity patterns of
+  `identification`) and `plot_filtering` (`scatter_mcf` and `stability_mapping_univariate` of the
+  sensitivity toolbox). `plot_decomposition` gains `groups`, `steady_state` and `detail`
+  (`use_shock_groups`, `steadystate` and `detail_plot`), `plot_posterior` Dynare's axis limits,
+  and `plot_paths` accepts a `TransitionPath`. The numbers these figures draw that the package did
+  not compute before are computed as Dynare computes them, without matplotlib: `brooks_gelman`
+  (returning a `BrooksGelman`), `mh_autocorrelation`, `mode_check`, on Dynare's grid, and
+  `posterior_irf`, with the HPD interval and deciles of `posterior_moments`.
+  `validation/compare_plots.py` estimates `fs2000.mod` in Dynare with `mode_check`, two chains
+  and `bayesian_irf`, records the data of Dynare's own figures as they are drawn, and compares
+  them on the same draws: the Brooks and Gelman statistics within 8e-14, the moving average and
+  the autocorrelations within 3e-15, the `mode_check` grid within 9e-16 and its kernels within
+  6e-11 where the prior is bounded, and the posterior IRFs on Dynare's 1,200 parameter draws
+  within 3e-10 of the largest response. Dynare's identification-strength and sensitivity bars
+  need the information matrix, which the package does not compute, and are left out, as are the
+  annualised and vintage shock decompositions and the bands of conditional forecasts.
 
 ### Changed
 
