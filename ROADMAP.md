@@ -461,10 +461,21 @@ MacroModelling.jl.
 ### 0.9 — the frontier
 
 - [ ] **Markov regime switching** in solution and estimation. Validation against RISE.
-- [ ] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
+- [x] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
   sequence-jacobian. *The design requirement, inherited from the earlier exclusion, is that* `vec`
   remains the way to write a finite number of groups, and that a distribution is a different
-  algorithm, in a module of its own.
+  algorithm, in a module of its own. The module is `dsgelab.heterogeneous`: `HetBlock` for a
+  continuum of agents on one asset by a Markov chain, with Young's lottery and the fake-news
+  algorithm, `SimpleBlock` and `SolvedBlock` for the aggregates, and `BlockModel` for the steady
+  state with calibration, the general-equilibrium Jacobians, linear impulse responses and the
+  nonlinear transition by quasi-Newton. On sequence-jacobian 1.0.0's own Krusell–Smith and
+  one-asset HANK, from its notebooks at the v1.0.0 tag, on 7 by 500 points, the steady states
+  (unknowns, policies, distribution, aggregates) agree within 7.6e-10, the household Jacobians
+  within 2.5e-10, `G` within 1.7e-10 and the linear and nonlinear impulse responses within 1.9e-10,
+  relative to the largest value compared, with both packages' iterations tightened to 1e-12. The
+  fake-news Jacobians agree with the brute-force ones within 4.1e-8, and Krusell–Smith's nonlinear
+  transition approaches the linear response as the square of the shock. Two endogenous states, as
+  in the two-asset HANK, and Markov matrices that move along a path remain outside.
 - [ ] **BVAR and DSGE-VAR**, to be checked against Dynare's `+bvar` and `dsge_var`.
 
 ### 1.0

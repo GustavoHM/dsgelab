@@ -31,8 +31,8 @@ I read only the documentation, so a **📄** cell may be wrong without the table
 
 # DSGE
 
-`dsgelab` does not solve heterogeneous-agent models, which are the subject of **sequence-jacobian**
-and **econpizza**. Among global methods, `dsgelab` has polynomial projection up to three states
+`dsgelab` solves heterogeneous-agent models by the sequence-space Jacobian method, the subject of
+**sequence-jacobian**, against which it is validated, and of **econpizza**. Among global methods, `dsgelab` has polynomial projection up to three states
 and time and value function iteration on a grid, and **dolo** also documents expectations
 iteration and the endogenous grid method. **gEconpy** estimates through PyMC and its
 gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
@@ -54,7 +54,8 @@ Markov regime switching requires **RISE**.
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth | — | ✅ `time_iteration` | — | — | — | — |
 | Value function iteration, with Howard's improvement steps | ✅ ‡ on a Cartesian grid, over intervals or finite sets of choices; against QuantEcon's `DiscreteDP` within 6e-12, dolo 0.4.9.20's `value_iteration` on its Markov RBC within 1.3e-11 of the value, and the closed form of stochastic growth | — | ✅ `value_iteration` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
-| Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
+| Heterogeneous agents (HANK), steady state with calibration | ✅ ‡ one asset by a Markov chain, the backward step written by the user, Young's lottery; against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK, steady states within 7.6e-10 | — | — | — | 📄 | — | 📄 |
+| Sequence-space Jacobians (fake news), `G` and impulse responses | ✅ ‡ against sequence-jacobian 1.0.0 on the same two models: household Jacobians within 2.5e-10, `G` within 1.7e-10, linear and nonlinear responses within 1.9e-10; fake news against brute force within 4.1e-8 | — | — | — | 📄 | — | — |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
 | Unit root accepted (`qz_criterium`) | ✅ ‡ optional; strict by default | ? | ? | ? | ? | ? | ✅ by default |
 | **Nonlinear perfect foresight** | ✅ stacked-time Newton | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 shooting | ? | ✅ |
@@ -109,8 +110,11 @@ references for `dsgelab`'s. As published, its `value_iteration` ends in NaN on i
 model, and `validation/dolo/run_dolo_vfi.py` lists the four changes that make it run. Installation failed because the package pins a version of
 pandas that no longer builds, and I did not test Python versions earlier than 3.14.
 
-**`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject,** which the
-`ROADMAP.md` plans for version 0.9 of `dsgelab`. For representative-agent models, the table records
+**`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject.** `dsgelab` has
+the sequence-space Jacobian method for one asset and one Markov chain, validated against
+sequence-jacobian 1.0.0 on two of its own models. sequence-jacobian also has two endogenous
+states, the two-asset HANK among its examples, Markov matrices that move along a path,
+estimation from the impulse responses' covariances, and numba. For representative-agent models, the table records
 for `econpizza`, from its documentation, perfect foresight, IRFs, occasionally binding constraints
 and a global method.
 
@@ -157,8 +161,7 @@ constraints, the extended path, declared trends, the analytic steady state and m
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
-plots. Still absent are global methods beyond Chebyshev collocation, regime switching,
-heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
+plots. Still absent are global methods beyond Chebyshev collocation, regime switching, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
@@ -248,7 +251,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, time iteration and value function iteration; the endogenous grid method and sparse grids missing | 0.7.4–0.8 |
-| Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
+| Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; two endogenous states missing | 0.9 |
+| Regime switching, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare | missing | 0.9 |
 
 ---
 

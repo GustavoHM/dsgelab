@@ -64,6 +64,8 @@ from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          prior_predictive, rhat, smc)
 from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
                                   forecast_evaluation)
+from .heterogeneous import (BlockModel, BlockSteadyState, HetBlock, SimpleBlock, SolvedBlock,
+                            interpolate_rows, log_grid, simple)
 from .markov import MarkovChain, rouwenhorst, tauchen
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
@@ -118,6 +120,8 @@ __all__ = [
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",
+    "HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyState", "simple",
+    "interpolate_rows", "log_grid",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",

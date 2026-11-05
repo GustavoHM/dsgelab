@@ -24,6 +24,27 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   the controls, and against the closed-form value of stochastic growth. As published, dolo's
   `value_iteration` ends in NaN on that model, and `validation/dolo/run_dolo_vfi.py` makes four
   changes, listed there, without editing dolo.
+- Heterogeneous agents by the sequence-space Jacobian method of Auclert, Bardóczy, Rognlie and
+  Straub (2021), in a module of its own, `dsgelab.heterogeneous`; `Model` and `vec` are unchanged.
+  A `HetBlock` holds a continuum of agents on a grid of one asset by the nodes of a Markov chain,
+  with one step of their backward iteration written by the user, for example by the endogenous
+  grid method with `interpolate_rows`, and the distribution moved by Young's (2010) lottery. The
+  stationary distribution is found by one sparse solve. The block's Jacobians come from the
+  fake-news algorithm, `T` backward steps per input, or, to check them, from the nonlinear path
+  differentiated once for every date. `SimpleBlock` (and the decorator `simple`) holds equations
+  in the aggregates with lags and leads, `x(-1)` and `x(+1)`, with Jacobians by the complex step,
+  and `SolvedBlock` solves a model of blocks for some of its inputs. `BlockModel` joins the blocks
+  by the names of their inputs and outputs, solves the steady state for unknowns that hit targets,
+  and gives the Jacobians along the graph, the general-equilibrium Jacobians `G`, linear impulse
+  responses and the nonlinear perfect-foresight transition by a quasi-Newton iteration. `log_grid`
+  gives sequence-jacobian's asset grid. `validation/compare_heterogeneous.py` solves
+  sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at the
+  v1.0.0 tag, on 7 by 500 points: the steady states agree within 7.6e-10, the household
+  Jacobians within 2.5e-10, `G` within 1.7e-10 and the linear and nonlinear impulse responses
+  within 1.9e-10, relative to the largest value compared. The fake-news Jacobians agree with the
+  direct ones within 4.1e-8, and Krusell–Smith's nonlinear transition approaches the linear
+  response as the square of the shock. sequence-jacobian runs in an environment of its own,
+  created by `validation/sequence_jacobian/setup.sh` with the versions pinned.
 
 ### Changed
 

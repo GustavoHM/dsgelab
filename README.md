@@ -104,6 +104,7 @@ examples in English and Portuguese.
 | Global solution by time iteration on a Cartesian grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
 | Value function iteration with Howard's improvement steps, over intervals or finite sets of choices, validated against QuantEcon and dolo | `value_iteration`, `ValueIterationSolution`, `DynamicProgram` |
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
+| Heterogeneous agents by the sequence-space Jacobian: one asset by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
@@ -288,7 +289,8 @@ planned.
 - **Global methods are limited** to Chebyshev collocation with up to three states and to time
   iteration and value function iteration on a Cartesian grid, whose size grows as the product of
   the points on each axis. There is no endogenous grid method or sparse grid yet.
-- **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
+- **No Markov regime switching, BVAR or DSGE-VAR.** Heterogeneous agents have one endogenous
+  state, the asset, and a Markov matrix and grid that stay fixed along a path.
 - **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.

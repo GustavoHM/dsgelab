@@ -5,6 +5,7 @@
 # Usage:  bash run_all.sh            (everything)
 #         SKIP_JULIA=1 bash run_all.sh
 #         SKIP_DOLO=1 bash run_all.sh
+#         SKIP_SSJ=1 bash run_all.sh   (skips sequence-jacobian, the heterogeneous-agent reference)
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
@@ -13,7 +14,8 @@
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
 # compare_time_iteration.py and compare_value_iteration.py, runs in a Python 3.11 environment of its
-# own that dolo/setup.sh creates with uv.
+# own that dolo/setup.sh creates with uv, and so does sequence-jacobian, the reference of
+# compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -118,6 +120,15 @@ else
   step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
+fi
+if [ -n "${SKIP_SSJ:-}" ]; then
+  results+=("skipped  sequence-jacobian (SKIP_SSJ)")
+else
+  # without deleting it, a failed run would let the comparison read an earlier result
+  rm -f out_heterogeneous/ssj.npz
+  step "sequence-jacobian: environment" bash sequence_jacobian/setup.sh
+  step "sequence-jacobian: Krusell-Smith and HANK" sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py
+  step "compare_heterogeneous.py" "$PYTHON" compare_heterogeneous.py
 fi
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py

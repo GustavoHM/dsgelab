@@ -1033,6 +1033,72 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+  <h3>32. Krusell–Smith, by the sequence-space Jacobian</h3>
+<pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
+    c_next = 1 / (beta * Va_p)                         # log utility: u'(c) = 1 / c
+    coh = (1 + r) * a_grid + w * e_grid[:, None]       # cash on hand, by income state
+    a = dsg.interpolate_rows(c_next + a_grid, coh, a_grid)   # the endogenous grid method
+    a = np.maximum(a, a_grid[0])                       # the borrowing limit
+    c = coh - a
+    return (1 + r) / c, a, c
+
+def start(a_grid, e_grid, r, w):
+    return (1 + r) / (0.1 * ((1 + r) * a_grid + w * e_grid[:, None]))
+
+def grids(rho_e, sd_e, n_e, n_a):
+    chain = dsg.rouwenhorst(rho_e, sd_e * np.sqrt(1 - rho_e ** 2), n_e)
+    e = np.exp(chain.nodes)
+    return e / (chain.stationary @ e), chain.transition, dsg.log_grid(0.0, 200.0, n_a)
+
+hh = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                  hetinputs=[(grids, ["e_grid", "Pi", "a_grid"])])
+
+@dsg.simple("r", "w", "Y")
+def firm(K, Z, alpha, delta):
+    return (alpha * Z * K(-1) ** (alpha - 1) - delta, (1 - alpha) * Z * K(-1) ** alpha,
+            Z * K(-1) ** alpha)
+
+@dsg.simple("asset_mkt", "goods_mkt")
+def markets(A, K, Y, C, delta):
+    return A - K, Y - C - (K - (1 - delta) * K(-1))
+
+ks = dsg.BlockModel([hh, firm, markets])
+ss = ks.steady_state({"alpha": 0.11, "delta": 0.025, "rho_e": 0.966, "sd_e": 0.5, "n_e": 7,
+                      "n_a": 100},
+                     unknowns={"beta": 0.98, "Z": 0.85, "K": 3.0},
+                     targets={"r": 0.01, "Y": 1.0, "asset_mkt": 0.0})
+f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"
+T = 200
+dZ = 0.01 * 0.8 ** np.arange(T)                        # productivity, 1 per cent
+linear = ks.impulse_linear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+nonlinear = ks.impulse_nonlinear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+hh.h = 1e-6
+J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # by the fake-news algorithm
+direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
+('0.98191', '-3e-11')
+<span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('3.97 bp', '6e-07')
+<span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
+'1e-10'</code></pre>
+  <p>A <code>HetBlock</code> holds a continuum of households on 100 asset points by 7 income
+  states, and <code>household</code> is one step of their backward iteration by the endogenous
+  grid method, which <code>interpolate_rows</code> does row by row. The firm and the markets are
+  <code>simple</code> blocks, in which <code>K(-1)</code> is last period's capital, and
+  <code>BlockModel</code> joins the three by the names of their inputs and outputs. The steady
+  state is solved for the discount factor, productivity and capital that give an interest rate of
+  1 per cent and output of one, as in sequence-jacobian's Krusell–Smith notebook. The
+  distribution of households is the stationary one of Young's lottery. The goods market, which
+  is not a target, clears within 3e-11 (Walras's law), the order of the tolerance of 1e-10 at
+  which the backward iteration stops. The linear response to a productivity
+  shock is the general-equilibrium Jacobian <code>G</code> times its path. The nonlinear
+  transition, solved by a quasi-Newton iteration with the same Jacobian, differs from it by less
+  than 1e-6 in the interest rate. The fake-news algorithm builds the household's 30 x 30 Jacobian
+  with 30 backward steps, and differentiating the whole path for a shock at each date, which
+  costs 30 times more, gives the same matrix. The validation solves sequence-jacobian's own
+  Krusell–Smith and one-asset HANK models on 7 by 500 points and agrees with it to 2e-10.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1352,6 +1418,21 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
     </tbody>
   </table>
 
+  <h3>Heterogeneous agents against sequence-jacobian</h3>
+  <p>sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at
+  the v1.0.0 tag, on 7 income states by 500 asset points, with the same calibration, unknowns and
+  targets. The differences are relative to the largest value compared.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>steady state: unknowns, policies, distribution and aggregates</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>household Jacobians from the fake-news algorithm, T = 300</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>general-equilibrium Jacobians G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>linear and nonlinear impulse responses</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>fake news against brute force (dsgelab against itself)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Local identification against Dynare</h3>
   <p>Three models at the prior mean: <code>kim2</code> and <code>as2007</code> from Dynare's
   <code>tests/identification</code> and <code>fs2000</code> from its examples. In
@@ -1436,10 +1517,11 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
   second-order solution. For global methods beyond Chebyshev collocation, time iteration
   and value function iteration, such as the endogenous grid method,
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
-  agents are outside dsgelab, and
-  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> and
-  <a href="https://github.com/gboehl/econpizza">econpizza</a> solve those models.</p></div>
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. For heterogeneous agents, dsgelab
+  has the sequence-space Jacobian method with one asset, validated against
+  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>, which also
+  solves models with two assets, as does
+  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
   <p>In <code>dsgelab</code> a declared problem goes from the derived first-order conditions to a
   solution and to an export for Dynare or MacroModelling.jl, with the timing translated
   automatically. The same residual function serves the perturbation and the deterministic
