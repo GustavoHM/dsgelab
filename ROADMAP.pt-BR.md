@@ -509,7 +509,23 @@ projeto Julia já usado para o MacroModelling.jl.
   parâmetros do Dynare até 3e-10 da maior resposta. Ficam de fora as barras de força da
   identificação, que exigem a matriz de informação, as decomposições de choques anualizadas e por
   safra e as bandas das previsões condicionais.
-- [ ] **BVAR e DSGE-VAR**, a serem conferidos contra o `+bvar` e o `dsge_var` do Dynare.
+- [x] **BVAR e DSGE-VAR**, conferidos contra o `+bvar` e o `dsge_var` do Dynare. `bvar` e
+  `bvar_density` montam o VAR com a priori de observações artificiais de Sims e Zha (1998) como o
+  `bvar_density` do Dynare, com os hiperparâmetros e a amostra de treino dele, e
+  `BVAR.forecast` sorteia como o `bvar_forecast`. `EstimationProblem(dsge_var=...)` dá a
+  verossimilhança do DSGE-VAR de Del Negro e Schorfheide (2004), com o peso fixo ou estimado como
+  `dsge_prior_weight`, para a moda e os amostradores. Validados contra os `tests/bvar_a_la_sims` e
+  `tests/dsge-var` do Dynare 7.2 (3 de novembro de 2026). Com 1 a 2 e 1 a 8 defasagens, prioris e
+  posterioris coincidem em 1,8e-14, em termos relativos, e as densidades marginais em log em
+  1,8e-12. Com os sorteios normais que o Octave fez, as 3002 trajetórias de previsão simuladas
+  coincidem em 2,1e-16, sorteio a sorteio. Nos dois testes do DSGE-VAR, com `lambda = 0.8` e com
+  `lambda` estimado, a posteriori em log coincide em 4,9e-12 em 11 pontos, e a moda posterior do
+  `dsgelab` tem núcleo pelo menos igual ao do Dynare, a menos de 1e-4 desvio-padrão posterior
+  dela. As duas coisas valem com o `T` contado como o Dynare 7.2 conta, as 90 linhas do VAR mais
+  as 4 observações iniciais. O `T` do `dsgelab` é o número de linhas, aquele com que a
+  verossimilhança é o produto das densidades preditivas de um passo do VAR, verificação que está
+  na suíte. Com ele a moda se desloca até 0,39 desvio-padrão posterior, e o `lambda` estimado
+  passa de 0,533 a 0,568. As IRFs do `bvar_irf` e do DSGE-VAR (`bayesian_irf`) ficam de fora.
 
 ### 1.0
 

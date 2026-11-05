@@ -486,7 +486,24 @@ MacroModelling.jl.
   and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
   The identification-strength bars, which need the information matrix, the annualised and vintage
   shock decompositions and the bands of conditional forecasts are left out.
-- [ ] **BVAR and DSGE-VAR**, to be checked against Dynare's `+bvar` and `dsge_var`.
+- [x] **BVAR and DSGE-VAR**, checked against Dynare's `+bvar` and `dsge_var`. `bvar` and
+  `bvar_density` build the VAR with the Sims–Zha (1998) dummy-observation prior as Dynare's
+  `bvar_density` does, with its hyperparameters and training sample, and `BVAR.forecast` draws
+  as `bvar_forecast` does. `EstimationProblem(dsge_var=...)` gives the likelihood of the
+  DSGE-VAR of Del Negro and Schorfheide (2004), with the weight fixed or estimated as
+  `dsge_prior_weight`, for the mode and the samplers. Validated against Dynare 7.2's
+  `tests/bvar_a_la_sims` and `tests/dsge-var` (3 November 2026). On lag lengths 1 to 2 and
+  1 to 8, the priors and posteriors agree within 1.8e-14, relative, and the log marginal
+  densities within 1.8e-12. With the normal draws Octave took, the 3002 simulated forecast paths
+  agree within 2.1e-16, draw by draw. In the two DSGE-VAR tests, with `lambda = 0.8` and with
+  `lambda` estimated, the log posterior agrees within 4.9e-12 at 11 points, and `dsgelab`'s
+  posterior mode has a kernel at least as high as Dynare's, within 1e-4 posterior standard
+  deviations of it. Both hold with `T` counted as Dynare 7.2 counts it, the 90 rows of the VAR
+  plus its 4 initial observations. `dsgelab`'s `T` is the number of rows, the one under which
+  the likelihood equals the product of the VAR's one-step predictive densities, a check in the
+  suite. With it the mode moves by up to 0.39 posterior standard deviations, and the estimated
+  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) are
+  left out.
 
 ### 1.0
 

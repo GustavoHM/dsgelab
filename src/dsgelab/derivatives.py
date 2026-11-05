@@ -364,6 +364,9 @@ def log_likelihood_gradient(problem, theta) -> LikelihoodGradient:
     """
     if problem.order != 1:
         raise NotImplementedError("likelihood gradients currently require order=1")
+    if getattr(problem, "is_dsge_var", False):
+        raise NotImplementedError("likelihood gradients are of the Kalman likelihood, not the "
+                                  "DSGE-VAR's")
     theta = np.asarray(theta, dtype=float).reshape(-1)
     names = list(problem.names)
     if theta.size != len(names):

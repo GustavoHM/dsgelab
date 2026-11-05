@@ -76,3 +76,27 @@ mkdir -p bgp
 for f in solow-1/solow.mod ramsey-1/ramsey.mod nk-1/nk.mod; do
   get "$DY/7.2/tests/bgp/$f" "bgp/$(dirname "$f").mod"
 done
+# BVAR and DSGE-VAR (tests/bvar_a_la_sims and tests/dsge-var of Dynare 7.2), checked by SHA-256.
+# simul_hybrid.mod simulates the data of the two DSGE-VAR tests.
+mkdir -p bvar dsge_var
+getsum() {   # getsum <url> <destination> <sha256>
+  if get "$1" "$2" > /dev/null && echo "$3  $2" | shasum -a 256 -c --status -; then
+    echo "ok  $2"
+  else
+    echo "FAILED  $2  (download or SHA-256)"; rm -f "$2"
+  fi
+}
+getsum "$DY/7.2/tests/bvar_a_la_sims/bvar_standalone.mod" bvar/bvar_standalone.mod \
+  db4f4a7ba86ecf071af26ff6f7be432ec69af2b7e429848c3f2cdabe336d5296
+getsum "$DY/7.2/tests/bvar_a_la_sims/bvar_and_dsge.mod" bvar/bvar_and_dsge.mod \
+  f856ca48a3691b1479ad9412e79c45c26b8a92c02de1f8233bfc44a71b9dddac
+getsum "$DY/7.2/tests/bvar_a_la_sims/bvar_sample.m" bvar/bvar_sample.m \
+  f20ff9a540d484afee194f0dce6ce88394c8d682abb0f3022516beab87e23f2d
+getsum "$DY/7.2/tests/dsge-var/dsgevar_forward_calibrated_lambda.mod" \
+  dsge_var/dsgevar_forward_calibrated_lambda.mod \
+  acbe39f1164dcc3e2fceeea2f918bc03a07030e8c4784c910a2c1805103b2c8d
+getsum "$DY/7.2/tests/dsge-var/dsgevar_forward_estimated_lambda.mod" \
+  dsge_var/dsgevar_forward_estimated_lambda.mod \
+  445088f830979369a1d2257325b01e0f90a4beceb0e258fc581eb06c469acfac
+getsum "$DY/7.2/tests/dsge-var/simul_hybrid.mod" dsge_var/simul_hybrid.mod \
+  634dba42b156e9f8403a3179c0a7411e937ad1ac41b638bb6d3a22edfc223f64

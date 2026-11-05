@@ -65,6 +65,33 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   within 3e-10 of the largest response. Dynare's identification-strength and sensitivity bars
   need the information matrix, which the package does not compute, and are left out, as are the
   annualised and vintage shock decompositions and the bands of conditional forecasts.
+- `bvar` and `bvar_density`: a VAR with the prior of Sims and Zha (1998), as Dynare's
+  `bvar_density` and `bvar_forecast` build it, from dummy observations with Dynare's
+  hyperparameters (`tau`, `decay`, `lambda_`, `mu`, `omega`, `flat`, `train`) and options
+  (`first_obs`, `presample`, `nobs`, `noconstant` as `constant=False`, `prefilter`). `BVAR` holds
+  the normal-inverse-Wishart prior and posterior (`NormalInverseWishart`, with draws and the
+  integrating constant), the log marginal density and the RMSE Dynare prints, and
+  `BVAR.forecast` draws paths with and without shocks, with the normal draws in Dynare's order.
+  `validation/compare_bvar.py` runs Dynare 7.2's `tests/bvar_a_la_sims` as they are, apart from
+  the IRFs and the Metropolis of one of them: on lag lengths 1 to 2 and 1 to 8 the priors and
+  posteriors agree within 1.8e-14, relative, and the log marginal densities within 1.8e-12.
+  With the normal draws Octave took, the 1001 and 2001 forecast paths agree within 2.1e-16, draw
+  by draw.
+- The DSGE-VAR of Del Negro and Schorfheide (2004), as Dynare's `estimation(dsge_var=...)`:
+  `EstimationProblem` takes `dsge_var` (the weight `lambda` of the model's prior, `inf`
+  included), `dsge_varlag` and `dsge_var_constant`, or estimates the weight under the name
+  `"dsge_prior_weight"`. The likelihood is that of the VAR with its coefficients and covariance
+  integrated out, from the model's population moments at first order, and
+  `dsge_var_prior` and `dsge_var_posterior` give the VAR's prior and posterior at given
+  parameters. `ModFile.estimation_problem` reads `dsge_var`, `dsge_varlag` and `noconstant`.
+  The suite checks the likelihood against conjugate updating, one observation at a time.
+  `validation/compare_bvar.py` runs Dynare 7.2's `tests/dsge-var`, with `lambda = 0.8` and with
+  `lambda` estimated, without Metropolis. Dynare counts the `dsge_varlag` initial observations
+  in the likelihood's `T` (94 for 90 rows), and with that `T` the log posterior agrees within
+  4.9e-12 at 11 points, and the mode `dsgelab` finds has a kernel at least as high as Dynare's,
+  within 1e-4 posterior standard deviations of it. With `dsgelab`'s `T`, the number of rows,
+  the mode moves by up to 0.18 and 0.39 posterior standard deviations, and the estimated
+  `lambda` from 0.533 to 0.568.
 
 ### Changed
 
