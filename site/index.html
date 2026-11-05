@@ -1033,6 +1033,49 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+  <h3>32. A Taylor rule that switches regime, solved and filtered</h3>
+<pre><code>fisher = dsg.Model(
+    states=["r"], jumps=["pi"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.r - p["rho"] * cur.r - eps.e,                                   # real rate
+        p["target"] + p["alpha"] * (cur.pi - p["target"]) - cur.r - nxt.pi])  # Fisher, Taylor
+T = np.array([[0.95, 0.05], [0.10, 0.90]])
+ms = dsg.solve_markov_switching(
+    fisher, {"rho": 0.8, "target": 2.0, "alpha": 1.5},
+    {"target": (2.0, 6.0), "alpha": (3.0, 1.1)}, T, guess={"r": 0.0, "pi": 3.0})
+ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)
+impact = [ms.irf("e", regime=s, levels=True)["pi"][0] - ms.steady["pi"] for s in (0, 1)]
+closed = np.linalg.solve(np.diag([3.0, 1.1]) - 0.8 * T, [1.0, 1.0])
+np.round(impact, 6), np.round(closed, 6)
+ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)
+sim = ms.simulate(300, seed=2, levels=True)
+space = dsg.switching_state_space(ms, ["pi"], measurement={"pi": 0.2})
+kim = dsg.kim_filter(space, {"pi": sim["pi"]})
+float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))
+f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(space, sim['pi'][:12]):.1e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)</span>
+(['target'], 1, 0.64)
+<span class="out-expr">np.round(impact, 6), np.round(closed, 6)</span>
+([0.4953 2.736], [0.4953 2.736])
+<span class="out-expr">ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)</span>
+[2.049 4.025]
+<span class="out-expr">float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))</span>
+0.9633
+<span class="out-expr">f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(space, sim['pi'][:12]):.1e}"</span>
+'5.5e-06'</code></pre>
+  <p>The inflation target and the response to inflation switch together, between a regime with a
+  target of 2 and a response of 3 and one with a target of 6 and a response of 1.1. The steady
+  state is that of the ergodic-mean parameters, so the target, which moves it, is perturbed and
+  enters as a constant per regime, while the response, which does not, keeps its value in each
+  regime (Foerster, Rubio-Ramírez, Waggoner and Zha, 2016). The impact of a real-rate innovation
+  on inflation is then the closed form <code>(diag(alpha) - rho T)^(-1) 1</code>. Given each
+  regime, mean inflation lies between the two targets, because agents expect the regime to change.
+  Kim's filter recovers the simulated regime from noisy inflation, with smoothed probabilities
+  above one half at the right regime in 96 per cent of the periods. Its collapse of the Gaussians that end in
+  the same regime is an approximation, and on the first 12 periods it differs from the exact
+  likelihood, the mixture of the Kalman filters of all 4096 regime paths, by the last number. The
+  validation reproduces the nine solutions that Foerster et al. (2013) print for a New Keynesian
+  model, and checks Kim's filter against statsmodels' Hamilton filter.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1062,6 +1105,8 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
     Diebold–Mariano and PIT, mixed-frequency observables, and plots of the results.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
+    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first order, with
+    every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
     tree, with the hybrid risk correction.</p></div>
     <div class="card"><h4>Models in levels</h4><p>Declared trends, the balanced-growth check and the
@@ -1349,6 +1394,25 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
       <tr><td>Markov RBC against dolo, value, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
       <tr><td>Markov RBC against dolo, controls (dolo's maximizer stops some 1e-6 short)</td><td class="num">6e-7</td><td class="ok">OK</td></tr>
       <tr><td>stochastic growth against its closed form, value, 80 capital points, cubic</td><td class="num">3e-9</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Markov regime switching against published solutions and statsmodels</h3>
+  <p>RISE, the toolbox for regime switching, is distributed as MATLAB P-code, which GNU Octave cannot
+  execute. The solution is checked instead against the solutions Foerster, Rubio-Ramírez, Waggoner
+  and Zha print, which they find with Gröbner bases, and Kim's filter against statsmodels 0.14.4,
+  where the filter is exact, and against the exact likelihood over every regime path, where it is
+  not.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>New Keynesian model (2013), solutions found, stable ones, two parameterizations</td><td class="num">9 of 9; 1 and 2</td><td class="ok">OK</td></tr>
+      <tr><td>New Keynesian model, printed entries within a unit of the last digit (one conjugate pair is printed as -0.7000 and is -0.66695)</td><td class="num">106 of 108</td><td class="ok">OK</td></tr>
+      <tr><td>RBC (2016), first-order coefficients truncated to four decimals (the constant printed as 0.000049 is 0.0000459)</td><td class="num">23 of 24</td><td class="ok">OK</td></tr>
+      <tr><td>identical regimes against the Klein solution</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>Hamilton's filter against statsmodels, log likelihood; smoothed probabilities</td><td class="num">3e-14; 2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>maximum likelihood against statsmodels' maximum</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>Kim's approximation against the exact likelihood, 14 dates, large measurement error</td><td class="num">0.018</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 

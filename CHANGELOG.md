@@ -24,9 +24,47 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   the controls, and against the closed-form value of stochastic growth. As published, dolo's
   `value_iteration` ends in NaN on that model, and `validation/dolo/run_dolo_vfi.py` makes four
   changes, listed there, without editing dolo.
+- `solve_markov_switching`: the first-order solution of a `Model` whose parameters switch with a
+  Markov chain, from milestone 0.9. A switching parameter takes the value of the regime at `t` or,
+  with `next_regime=`, at `t+1`. The approximation point is the steady state of the ergodic-mean
+  parameters, and the parameters that move it are perturbed and enter as constants per regime,
+  the partition principle of Foerster, Rubio-Ramírez, Waggoner and Zha (2016). The quadratic
+  system of the minimum-state-variable solution (Farmer, Waggoner and Zha, 2011) is solved by
+  Newton's method from the Klein solutions and from random points, in real or complex arithmetic
+  (`msv_solutions`), and every distinct solution is kept, with its mean-square stability radius
+  (`mean_square_stability`, Costa, Fragoso and Marques, 2005). `MarkovSwitchingSolution` gives
+  impulse responses with the regime held, along a regime path or averaged over regimes,
+  simulation of regimes and states, and exact unconditional and regime-conditional moments.
+  `MarkovSwitchingError` reports when no stable solution is found, with what was found.
+- `kim_filter`: the likelihood of a Markov-switching state space (`switching_state_space`) by
+  Kim's (1994) filter, with filtered and smoothed regime probabilities, and
+  `enumerated_likelihood`, the exact likelihood over every regime path on short samples.
+  `MarkovSwitchingProblem` estimates switching parameters (`"psi[1]"`) and transition
+  probabilities (`"p[0,1]"`) with `posterior_mode`, `maximum_likelihood`, `metropolis_hastings`
+  and `smc`.
+- RISE runs only in MATLAB, since its current release and its `v2019` tag are distributed as MATLAB
+  P-code, which GNU Octave cannot execute, so the validation uses the references that exist without
+  it. `validation/compare_switching.py` finds the nine solutions, three of them real, that Foerster
+  et al. (2013) print for a New Keynesian model under two parameterizations, with the same one and
+  two stable solutions. Of the 108 printed entries, 106 agree within a unit of the last printed
+  digit, and the real part of the pair (4)–(5) in the second table is printed as -0.7000 where it is
+  -0.66695 here. For the RBC of Foerster et al. (2016) it finds the four solutions they report, one
+  of them stable, whose first-order coefficients agree in 23 of 24 entries once truncated to four
+  decimals, as the paper prints them, and the constant of consumption in regime 1 is printed as
+  0.000049 where it is 0.0000459 here. The script also checks closed forms, and the Klein solution
+  when the regimes are identical. `validation/compare_kim.py` checks Kim's filter against
+  statsmodels 0.14.4, in an environment of its own (`validation/statsmodels/setup.sh`). With an
+  i.i.d. state it is Hamilton's filter, and the log likelihood, the filtered and the smoothed
+  probabilities agree within 3e-14, 4e-16 and 2e-15; maximum likelihood in the model's parameters
+  reaches statsmodels' maximum within 8e-10. In Hamilton's (1989) autoregression they agree within
+  1e-9, 6e-11 and 4e-11. Against the exact likelihood over all regime paths, Kim's approximation
+  errs by up to 0.018 on samples of 14 dates with large measurement errors, and by 9e-4 on the New
+  Keynesian model with inflation observed.
 
 ### Changed
 
+- `posterior_mode` and `maximum_likelihood` use the analytic gradient only for an
+  `EstimationProblem`, so that they also accept a `MarkovSwitchingProblem`.
 - `time_iteration` and `value_iteration` share the construction of the product Markov chain and of
   the shocks' quadrature. `time_iteration`'s results are unchanged.
 

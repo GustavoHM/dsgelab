@@ -13,7 +13,8 @@
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
 # compare_time_iteration.py and compare_value_iteration.py, runs in a Python 3.11 environment of its
-# own that dolo/setup.sh creates with uv.
+# own that dolo/setup.sh creates with uv, and statsmodels, the reference of compare_kim.py, in a
+# Python 3.12 environment that statsmodels/setup.sh creates.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -119,6 +120,13 @@ else
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
 fi
+step "compare_switching.py"  "$PYTHON" compare_switching.py
+# without deleting it, a failed statsmodels run would let the comparison read an earlier result
+rm -f out_kim/statsmodels.json
+step "Kim: series"           "$PYTHON" compare_kim.py --prepare
+step "statsmodels: environment" bash statsmodels/setup.sh
+step "statsmodels: Hamilton filter" statsmodels/.venv/bin/python statsmodels/run_statsmodels.py
+step "compare_kim.py"        "$PYTHON" compare_kim.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

@@ -79,6 +79,8 @@ from .value_iteration import DynamicProgram, ValueIterationSolution, value_itera
 from .switching import (MarkovSwitchingError, MarkovSwitchingSolution, MSVSolution,
                         SwitchingSystem, mean_square_stability, msv_solutions,
                         solve_markov_switching, switching_system)
+from .kim import (KimFilterResult, MarkovSwitchingProblem, SwitchingStateSpace,
+                  enumerated_likelihood, kim_filter, switching_state_space)
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
                            sample_restrictions)
 from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
@@ -124,6 +126,8 @@ __all__ = [
     "solve_markov_switching", "MarkovSwitchingSolution", "MarkovSwitchingError",
     "switching_system", "SwitchingSystem", "msv_solutions", "MSVSolution",
     "mean_square_stability",
+    "switching_state_space", "SwitchingStateSpace", "kim_filter", "KimFilterResult",
+    "enumerated_likelihood", "MarkovSwitchingProblem",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",

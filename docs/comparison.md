@@ -38,8 +38,10 @@ iteration and the endogenous grid method. **gEconpy** estimates through PyMC and
 gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
 analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
 second and third order it estimates with a particle filter, and at second order also with an
-inversion filter. Dynare's reduced-form mapping and RMSE filtering still require **Dynare**, and
-Markov regime switching requires **RISE**.
+inversion filter. Dynare's reduced-form mapping and RMSE filtering still require **Dynare**.
+`dsgelab` solves Markov regime switching to first order, with exogenous transition probabilities,
+and estimates it with Kim's filter. Higher orders, endogenous transition probabilities and optimal
+policy under switching require **RISE**.
 
 | Capability | dsgelab | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
 |---|---|---|---|---|---|---|---|
@@ -54,6 +56,8 @@ Markov regime switching requires **RISE**.
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth | — | ✅ `time_iteration` | — | — | — | — |
 | Value function iteration, with Howard's improvement steps | ✅ ‡ on a Cartesian grid, over intervals or finite sets of choices; against QuantEcon's `DiscreteDP` within 6e-12, dolo 0.4.9.20's `value_iteration` on its Markov RBC within 1.3e-11 of the value, and the closed form of stochastic growth | — | ✅ `value_iteration` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
+| Markov regime switching, solution | ✅ ‡ first order, partition perturbation with every solution found kept and mean-square stability; the nine solutions that Foerster et al. (2013) print for a New Keynesian model, 106 of 108 entries within a unit of the last digit, and the RBC of Foerster et al. (2016) | — | 📄 discrete Markov chains as exogenous processes, in global methods | — | — | — | 📄 MS-SBVAR, for VARs only |
+| Markov regime switching, estimation | ✅ ‡ Kim's filter with filtered and smoothed regime probabilities, posterior mode and samplers; against statsmodels 0.14.4's Hamilton filter within 3e-14 and the exact likelihood over every regime path | — | — | — | — | — | 📄 MS-SBVAR, for VARs only |
 | Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
 | Unit root accepted (`qz_criterium`) | ✅ ‡ optional; strict by default | ? | ? | ? | ? | ? | ✅ by default |
@@ -157,8 +161,8 @@ constraints, the extended path, declared trends, the analytic steady state and m
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
-plots. Still absent are global methods beyond Chebyshev collocation, regime switching,
-heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
+plots. Still absent are global methods beyond Chebyshev collocation, regime switching beyond the
+first order, heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
@@ -248,7 +252,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
 | Global methods | 📄 dolo | Chebyshev collocation up to three states, time iteration and value function iteration; the endogenous grid method and sparse grids missing | 0.7.4–0.8 |
-| Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
+| Markov regime switching, solution and estimation | 📄 RISE | **done**: first-order partition perturbation with every solution found and mean-square stability, and Kim's filter; the nine solutions of Foerster et al. (2013), statsmodels' Hamilton filter and the exact likelihood over regime paths. RISE runs only in MATLAB, as P-code that Octave cannot execute | 0.9 |
+| Heterogeneous agents, BVAR and DSGE-VAR | ✅ Dynare, sequence-jacobian | missing | 0.9 |
 
 ---
 
