@@ -39,7 +39,9 @@ jobs:
       # uv creates the Python 3.11 environments in which dolo, the reference of
       # compare_time_iteration.py, compare_value_iteration.py and compare_egm.py, runs
       # (validation/dolo/setup.sh), and sequence-jacobian, the reference of
-      # compare_heterogeneous.py (validation/sequence_jacobian/setup.sh)
+      # compare_heterogeneous.py (validation/sequence_jacobian/setup.sh), and the Python 3.12 one
+      # in which Tasmanian, the reference of compare_smolyak.py, is built from source
+      # (validation/tasmanian/setup.sh)
       - run: python -m pip install "uv==0.12.5"
 
       - name: Octave and Dynare

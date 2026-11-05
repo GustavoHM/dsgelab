@@ -42,6 +42,18 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   square of the spacing, to 1.6e-4 with 80 points. `validation/dolo/run_dolo_egm.py` silences a
   debugging line in dolo's `egm` and reads its policy only at the points where dolo's resampled
   rule equals it, without editing dolo.
+- `SmolyakGrid`: Smolyak sparse grids with the nodes and the basis of Judd, Maliar, Maliar and
+  Valero (2014), nested Chebyshev extrema and disjoint sets of Chebyshev polynomials, isotropic or
+  with one level per axis (JMMV's anisotropic grid). It evaluates the basis, the interpolant and
+  the interpolation weights. `solve_projection(..., grid=SmolyakGrid(...))` collocates on it with
+  any number of states, by Newton's method with a Jacobian assembled from the residual's
+  derivatives at each node, and `time_iteration` takes it in place of a `CartesianGrid`.
+  `validation/compare_smolyak.py` checks the nodes and the interpolation weights against Tasmanian
+  8.2, built from source by `validation/tasmanian/setup.sh`, on 40 grids in one to six
+  dimensions, within 9e-16 and 2e-14. On stochastic growth with three to five capital stocks, log
+  utility and full depreciation, whose investment policy is a constant share of output in any
+  dimension, the error falls by a factor of 37 or more per level, to 2e-8 with four states and
+  3e-8 with six at level 4, and projection and time iteration agree within 2.3e-9.
 - The rest of Dynare's figures, each from an object the package already returns: `plot_priors`
   (`plot_priors`), `trace_plot` (`trace_plot`, with its moving average),
   `plot_mh_autocorrelation` (`mh_autocorrelation_function`), `plot_brooks_gelman` (the univariate
@@ -122,6 +134,9 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   cgelab's period equilibrium, used to fail without saying where on the path.
 - `time_iteration` and `value_iteration` share the construction of the product Markov chain and of
   the shocks' quadrature. `time_iteration`'s results are unchanged.
+- `time_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a `CartesianGrid`,
+  so that a `SmolyakGrid` can refuse a value. `solve_projection`'s `bounds` defaults to `None`,
+  for the call with `grid=`. Calls that worked before give the same results.
 
 ## 0.7.2 — 2026-10-31
 

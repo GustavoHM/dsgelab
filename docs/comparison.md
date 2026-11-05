@@ -33,9 +33,9 @@ I read only the documentation, so a **📄** cell may be wrong without the table
 
 `dsgelab` solves heterogeneous-agent models by the sequence-space Jacobian method, the subject of
 **sequence-jacobian**, against which it is validated, and of **econpizza**. Among global methods,
-`dsgelab` has polynomial projection up to three states, time and value function iteration on a
-grid and the endogenous grid method, and **dolo** also documents expectations iteration.
-**gEconpy** estimates through PyMC and its
+`dsgelab` has polynomial projection and time iteration, on a tensor grid or on a Smolyak sparse
+grid with any number of states, value function iteration on a grid and the endogenous grid method,
+and **dolo** also documents expectations iteration. **gEconpy** estimates through PyMC and its
 gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
 analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
 second and third order it estimates with a particle filter, and at second order also with an
@@ -51,8 +51,8 @@ Markov regime switching requires **RISE**.
 | **1st-order perturbation** | ✅ Klein/QZ | ✅ | 📄 | 📄 | — | 📄 Klein | ✅ |
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
 | 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
-| Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
-| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth | — | ✅ `time_iteration` | — | — | — | — |
+| Global methods / projection | ✅ ‡ Chebyshev collocation on a tensor grid up to three states, or on a Smolyak grid (isotropic or anisotropic) with any number; the Smolyak nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids, and the closed form of stochastic growth with up to five capital stocks (six states) within 3e-8 at level 4 | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
+| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, or on a Smolyak grid, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth, with one capital stock and with up to five | — | ✅ `time_iteration` | — | — | — | — |
 | Value function iteration, with Howard's improvement steps | ✅ ‡ on a Cartesian grid, over intervals or finite sets of choices; against QuantEcon's `DiscreteDP` within 6e-12, dolo 0.4.9.20's `value_iteration` on its Markov RBC within 1.3e-11 of the value, and the closed form of stochastic growth | — | ✅ `value_iteration` | — | — | — | — |
 | Endogenous grid method | ✅ ‡ one endogenous state, Markov or quadrature exogenous states, bounded controls; against dolo 0.4.9.20's `egm` on its consumption–savings model within 1.1e-11, against `time_iteration` and the closed form of stochastic growth | — | ✅ `egm` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
@@ -154,10 +154,11 @@ feature is that of the test that validates it.
   At first and second order, the inversion filter reproduces the shocks and the likelihood of
   Dynare's OccBin filter on that AR(1).
 * **Projection by Chebyshev collocation.** The residual used in the perturbation is collocated on a
-  tensor grid of up to three states. Rows without a future jump determine the next state for each
-  shock, and the others are integrated by Gauss–Hermite. For stochastic growth with a
-  closed-form solution, the policy reproduces ``c = (1-αβ) a k^α``. A sparse grid, value iteration
-  and more than two shocks in the tensor quadrature are outside this solver.
+  tensor grid of up to three states, or, since 0.7.5, on a Smolyak grid with any number. Rows
+  without a future jump determine the next state for each shock, and the others are integrated by
+  Gauss–Hermite. For stochastic growth with a closed-form solution, the policy reproduces
+  ``c = (1-αβ) a k^α``, and with five capital stocks the error at level 4 is 3e-8. More than two
+  shocks in the tensor quadrature are outside this solver.
 
 Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, occasionally binding
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
@@ -256,7 +257,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
 | Endogenous grid method | ✅ dolo | **done**: `egm` on an `EGMProgram`, against dolo's `egm` on its consumption–savings model, with iid and with Markov income, within 1.1e-11 | 0.7.4 |
-| Global methods | 📄 dolo | Chebyshev collocation up to three states, time iteration, value function iteration and the endogenous grid method; sparse grids missing | 0.7.5–0.8 |
+| Sparse grids | ✅ Tasmanian | **done**: `SmolyakGrid`, isotropic and anisotropic, for `solve_projection` and `time_iteration`; nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids in one to six dimensions, and the closed form of growth with three to five capital stocks | 0.7.5 |
+| Global methods | 📄 dolo | Chebyshev collocation and time iteration on tensor or Smolyak grids, value function iteration and the endogenous grid method; expectations iteration missing | — |
 | BVAR (Sims–Zha prior) and DSGE-VAR | ✅ Dynare (`+bvar`, `estimation(dsge_var=...)`) | **done**: `bvar`, `bvar_density` and `BVAR.forecast` against Dynare's `tests/bvar_a_la_sims` (posteriors within 1.8e-14, log marginal densities within 1.8e-12, forecast paths draw by draw within 2.1e-16), and `EstimationProblem(dsge_var=...)` against `tests/dsge-var` (log posterior within 4.9e-12, modes within 1e-4 posterior sd) with Dynare's count of `T`, which dsgelab does not use by default; IRFs missing | 0.9 |
 | Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; two endogenous states missing | 0.9 |
 | Regime switching | 📄 RISE | missing | 0.9 |

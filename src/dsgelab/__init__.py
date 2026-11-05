@@ -82,6 +82,7 @@ from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
                     posterior_irf, prior_density, trace_plot)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .smolyak import SmolyakGrid
 from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .egm import EGMProgram, EGMSolution, egm
@@ -129,7 +130,7 @@ __all__ = [
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart",
     "prior", "Prior",
-    "solve_projection", "Projection",
+    "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",

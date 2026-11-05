@@ -1119,7 +1119,52 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   are relative to consumption here, and largest in the same cell. The validation compares
   <code>egm</code> with dolo's <code>egm</code> on dolo's consumption-savings model, with an iid
   and with a Markov income, where the two agree to 1e-11.</p>
-  <h3>33. A BVAR, and the model as the prior of a VAR</h3>
+  <h3>33. Five states, on a Smolyak grid</h3>
+<pre><code>shares = np.array([0.12, 0.10, 0.08, 0.06])         # alpha_j, summing to 0.36
+caps, inv = [f"k{j}" for j in range(4)], [f"i{j}" for j in range(4)]
+
+def planner(nxt, cur, eps, p):
+    def output(x):                                   # output and consumption
+        y = x.a * np.prod([x[k] ** s for k, s in zip(caps, shares)], axis=0)
+        return y, y - sum(x[i] for i in inv)
+    y, c = output(cur)
+    y1, c1 = output(nxt)
+    return ([nxt[k] - cur[i] for k, i in zip(caps, inv)]                         # k_j' = i_j
+            + [1 - 0.96 * c / c1 * s * y1 / nxt[k] for k, s in zip(caps, shares)]  # Euler
+            + [np.log(nxt.a) - 0.9 * np.log(cur.a) - eps.e])
+
+stocks = dsg.Model(states=caps + ["a"], jumps=inv, shocks=["e"], equations=planner)
+k_ss = 0.96 * shares * np.exp(np.sum(shares * np.log(0.96 * shares)) / (1 - shares.sum()))
+box = {k: (0.75 * v, 1.25 * v) for k, v in zip(caps, k_ss)} | {"a": (0.97, 1.03)}
+start = dict(zip(caps, k_ss)) | dict(zip(inv, k_ss)) | {"a": 1.0}
+X = np.random.default_rng(0).uniform(*np.array(list(box.values())).T, (1000, 5))
+exact = 0.96 * shares * (X[:, 4] * np.prod(X[:, :4] ** shares, axis=1))[:, None]  # beta alpha_j y
+for level in (1, 2, 3):
+    sparse = dsg.SmolyakGrid(box, level)
+    proj = dsg.solve_projection(stocks, {}, grid=sparse, guess=start, cov={"e": 0.01}, n_quad=5)
+    print(level, sparse.n, f"{np.abs(proj.jumps(X) / exact - 1).max():.0e}")
+aniso = dsg.SmolyakGrid(box, dict.fromkeys(caps, 3) | {"a": 1})   # the policy is linear in a
+ti_sparse = dsg.time_iteration(stocks, {}, grid=aniso, cov={"e": 0.01}, guess=start)
+aniso.n, ti_sparse.iterations, f"{np.abs(ti_sparse.controls(X) / exact - 1).max():.0e}"</code></pre>
+<pre class="output" data-label="Output"><code>1 11 5e-03
+2 61 1e-04
+3 241 3e-06
+<span class="out-expr">aniso.n, ti_sparse.iterations, f"{np.abs(ti_sparse.controls(X) / exact - 1).max():.0e}"</span>
+(219, 7, '3e-06')</code></pre>
+  <p>A planner with four capital stocks, log utility and full depreciation invests a constant
+  share <code>beta alpha_j</code> of output in each stock, so the policy is known in any
+  dimension. <code>SmolyakGrid</code> builds the sparse grid of Judd, Maliar, Maliar and Valero
+  (2014): 11, 61 and 241 points at levels 1 to 3, where the tensor grid with the same nine nodes
+  along each axis would have 59049. <code>solve_projection</code> takes it in place of
+  <code>bounds</code> and <code>order</code>, and the error against the closed form, at 1000 points
+  drawn in the box, falls by a factor of 36 from level 1 to 2 and of 55 from level 2 to 3. The
+  policy is linear in productivity, so an anisotropic grid with level 1 along it and level 3 along
+  the capital stocks drops 22 of the 241 points and gives the same error to one digit.
+  <code>time_iteration</code> takes the same grid, and
+  its fixed point solves the same collocation equations as the projection. The validation compares
+  the grids' nodes and interpolation weights with Tasmanian's in one to six dimensions, and solves
+  this model with up to six states.</p>
+  <h3>34. A BVAR, and the model as the prior of a VAR</h3>
 <pre><code>data = {"y": series}                                  # the AR(1) data of example 14
 dens = dsg.bvar_density(data, 4, first_obs=5)         # Sims-Zha prior, Dynare's defaults
 {p: round(v, 1) for p, v in dens.items()}
@@ -1166,7 +1211,7 @@ dv = dsg.EstimationProblem(**common, dsge_var=0.5)
   <code>tests/bvar_a_la_sims</code> and <code>tests/dsge-var</code>, the simulated forecasts
   included, with the same random draws. Dynare counts the VAR's initial observations in
   <code>T</code>, and dsgelab does not.</p>
-  <h3>34. Krusell–Smith, by the sequence-space Jacobian</h3>
+  <h3>35. Krusell–Smith, by the sequence-space Jacobian</h3>
 <pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
     c_next = 1 / (beta * Va_p)                         # log utility: u'(c) = 1 / c
     coh = (1 + r) * a_grid + w * e_grid[:, None]       # cash on hand, by income state
@@ -1591,6 +1636,21 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
       <tr><td>against time iteration, Markov income, 100 points, largest</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
       <tr><td>against time iteration, Markov income, 1600 points up to 8, largest (mean 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
       <tr><td>stochastic growth against its closed form, consumption, 80 points, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+  <h3>Sparse grids against Tasmanian and a closed form</h3>
+  <p>Tasmanian 8.2's global grids on the Clenshaw–Curtis rule, 40 of them, isotropic in one to six
+  dimensions at levels 0 to 6 and anisotropic with a cap on each axis's level, give the reference
+  nodes and interpolation weights. Every grid has the same number of points as Tasmanian's. The
+  growth model of example 32, with three to five capital stocks, is solved by projection and by
+  time iteration on Smolyak grids. The error is the largest relative error of the investment
+  policy at 1000 points in the box.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nodes against Tasmanian, 40 grids with up to 1457 points</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>interpolation weights against Tasmanian, 40 points per grid</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>4 states against the closed form, level 4 (401 points)</td><td class="num">2e-8</td><td class="ok">OK</td></tr>
+      <tr><td>6 states against the closed form, level 4 (1457 points)</td><td class="num">3e-8</td><td class="ok">OK</td></tr>
+      <tr><td>projection against time iteration, every grid</td><td class="num">2e-9</td><td class="ok">OK</td></tr>
   <h3>Heterogeneous agents against sequence-jacobian</h3>
   <p>sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at
   the v1.0.0 tag, on 7 income states by 500 asset points, with the same calibration, unknowns and
@@ -1669,7 +1729,7 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
       <tr><td><strong>2nd order + risk corrections</strong></td><td><strong>yes</strong></td><td><strong>no</strong></td><td>yes</td><td>yes</td><td>—</td></tr>
       <tr><td>3rd order (deterministic block)</td><td class="ok">yes</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
       <tr><td>3rd order with risk in the slope</td><td>yes, with Dynare's full decision rule (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
-      <tr><td>Global / projection methods</td><td>partial (Chebyshev collocation, up to three states)</td><td>—</td><td>yes</td><td>—</td><td>partial</td></tr>
+      <tr><td>Global / projection methods</td><td>partial (Chebyshev collocation, on a tensor grid up to three states or on a Smolyak grid)</td><td>—</td><td>yes</td><td>—</td><td>partial</td></tr>
       <tr><td>Heterogeneous agents</td><td>—</td><td>—</td><td>—</td><td>—</td><td>yes</td></tr>
       <tr><td>Nonlinear perfect foresight</td><td>yes</td><td>yes</td><td>yes</td><td>?</td><td>yes</td></tr>
       <tr><td>Bayesian estimation</td><td>yes (mode, Metropolis–Hastings, SMC, HMC and NUTS, with the Kalman filter at first order, the particle filter up to third and the inversion filter up to second)</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
@@ -1688,12 +1748,12 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation, time iteration,
-  value function iteration and the endogenous grid method, such as expectations iteration,
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. For heterogeneous agents,
-  dsgelab has the sequence-space Jacobian method with one asset, validated against
-  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>, which also
-  solves models with two assets, as does
+  second-order solution. For global methods beyond Chebyshev collocation (on tensor or Smolyak
+  grids), time iteration, value function iteration and the endogenous grid method, such as
+  expectations iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more.
+  For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one asset,
+  validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
+  which also solves models with two assets, as does
   <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
   <p>In <code>dsgelab</code> a declared problem goes from the derived first-order conditions to a
   solution and to an export for Dynare or MacroModelling.jl, with the timing translated

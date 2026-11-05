@@ -382,7 +382,7 @@ existing tensor.
 
 ## Global solution
 
-### `solve_projection(model, params, *, bounds, guess, order=5, cov=None, n_quad=7, positive=(), steady=None) -> Projection`
+### `solve_projection(model, params, *, bounds=None, guess, order=5, cov=None, n_quad=7, positive=(), steady=None, grid=None) -> Projection`
 
 Chebyshev collocation. The jump policy is a tensor-product Chebyshev polynomial
 of degree `order` in each predetermined state, on the box `bounds` (one
@@ -390,15 +390,57 @@ of degree `order` in each predetermined state, on the box `bounds` (one
 state), with `order + 1` nodes a side. At each node the rows of the steady-state
 Jacobian with no next-period jump give the next state, and the other rows are
 integrated with a Gauss–Hermite rule of `n_quad` nodes per shock and set to zero.
-The first-order policy is the starting point. More than three states, or a model
-with no jump, is refused.
+The first-order policy is the starting point. More than three states on a tensor
+grid, or a model with no jump, is refused.
+
+With `grid`, a `SmolyakGrid` with one axis per predetermined state, named after it,
+the policy is the grid's polynomial in place of the tensor one, and `bounds` and
+`order` are not given. The collocation equations, one per node and jump, are solved by
+Newton's method from the first-order policy. Their Jacobian is assembled from the
+derivatives of the residual at each node and quadrature node with respect to today's
+jumps (through the next state as well) and to next period's, each taken by finite
+differences at all nodes at once. The Jacobian is dense, with `(n_nodes * n_u)^2`
+entries: 7285 by 7285 for six states at level 4, 425 MB in double precision.
 
 ### `Projection`
 
 `jumps(k)` evaluates the policy at one state vector (levels, state order) or at a
 row-stacked array of them and returns the jumps in levels. Fields
 `coefficients` `(n_u, n_basis)`, `nodes` (in levels), `bounds`, `order`,
-`residual` (the largest absolute residual at the nodes) and `success`.
+`residual` (the largest absolute residual at the nodes), `success` and `grid` (the
+`SmolyakGrid`, or `None` on a tensor grid). On a Smolyak grid `order` is the highest
+degree along any state, and `nodes` and `bounds` are in the model's state order.
+
+### `SmolyakGrid(axes, level)`
+
+A Smolyak sparse grid on a box, with the nodes and the basis of Judd, Maliar, Maliar
+and Valero (2014). `axes` maps each name to `(low, high)`. Along one axis, level `i`
+has `m(i)` nodes, the extrema of the Chebyshev polynomial of degree `m(i) - 1`, with
+`m(1) = 1` and `m(i) = 2^(i-1) + 1`, so the levels are nested. The nodes level `i`
+adds and the Chebyshev polynomials of degrees `m(i-1)` to `m(i) - 1` form disjoint
+sets of equal size, and a multi-index `(i_1, ..., i_d)` contributes the products of
+those sets to the grid and to the basis. With an integer `level` `mu` the grid takes
+the multi-indices with `i_1 + ... + i_d <= d + mu`: `2d + 1` points at level 1,
+`1 + 4d + 4d(d - 1)/2` at level 2, and 1457 for six axes at level 4. With one level
+`mu_j` per axis, as a sequence in the order of `axes` or as `{name: level}`, the grid
+is JMMV's anisotropic one, with `i_j <= mu_j + 1` and `i_1 + ... + i_d <= d + max(mu)`.
+Level 0 along an axis keeps only its centre.
+
+`points` lists the nodes in levels, `unit_points` the same on `[-1, 1]`, and
+`degrees` the Chebyshev degrees of each basis function along each axis, one row each.
+`n`, `d`, `levels`, `level` (the largest), `bounds` and `indices` (the multi-indices)
+describe the grid, `axes` lists the coordinates the nodes take along each axis, and
+`midpoints` the points the next level adds, which `TimeIterationSolution.euler_errors`
+uses in place of a `CartesianGrid`'s cell centres. `basis(points)` evaluates the basis,
+`coefficients(values)` solves for the interpolant's coefficients from one row of values
+per node (the matrix is factored once, when the grid is built), and
+`interpolate(values, points)` evaluates the interpolant. `interpolation_weights(points)`
+gives the weights that take the values at the nodes to the interpolant at `points`, one
+row per point and one column per node. On nested Chebyshev extrema the basis spans the
+space of Smolyak's combination of tensor interpolants, so the nodes and the weights are
+those of Tasmanian's global grid of type `level` on the Clenshaw–Curtis rule, with
+`liLevelLimits` for the anisotropic grid. Beyond the box the polynomial is evaluated as
+it is, with no linear extension.
 
 ### `tauchen(rho, sigma, n, *, mean=0.0, n_std=3.0) -> MarkovChain`
 
@@ -432,7 +474,7 @@ it, and `autocorrelation(lag=1)` their autocorrelation. `simulate(periods, *, st
 seed=None, indices=False)` draws a path of `periods` values, from node `start` or from the
 stationary distribution, and returns node indices instead of values with `indices=True`.
 
-### `time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation="linear", initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=1000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
+### `time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=1000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
 
 Time iteration (Coleman, 1990) on the model's own residual, the one the perturbation solves. Each
 iteration takes the current policy as the next period's and solves the equilibrium conditions for
@@ -450,12 +492,12 @@ from one evaluation, and otherwise from a Newton solve.
 
 | Argument | Meaning |
 |---|---|
-| `grid` | a `CartesianGrid` of the continuous states, or the mapping that builds one; every state without a Markov chain needs an axis |
+| `grid` | a `CartesianGrid` of the continuous states, or the mapping that builds one, or a `SmolyakGrid`; every state without a Markov chain needs an axis |
 | `markov` | `{state: MarkovChain}`, exogenous states given by chains whose nodes are the state's values in levels. Several chains are independent, and the product chain orders its nodes with the last chain fastest. The transition row of a Markov state (the row with that state at `t+1` and no endogenous state there) is left out |
 | `cov`, `n_quad` | the shocks are integrated by a tensor Gauss–Hermite rule with `n_quad` nodes per shock, scaled by `cov` (`None` is the identity, as elsewhere in the package) |
 | `quadrature` | `(nodes, weights)`, one row of shocks per node, in place of Gauss–Hermite. With a Markov chain and neither `cov` nor `quadrature`, the shocks are set to zero |
 | `bounds` | `{jump: (lower, upper)}`, each a number, `None`, or `bound(states, params)` with `states` a name-indexed view of today's states (`s.w`, `s["w"]`) |
-| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis. Both extrapolate linearly beyond the grid |
+| `interpolation` | on a `CartesianGrid`, `"linear"` (the default), or `"cubic"` for a natural cubic spline along each axis. Both extrapolate linearly beyond the grid. A `SmolyakGrid` interpolates by its own polynomial and takes no value here |
 | `initial` | the starting policy: a `TimeIterationSolution` (to refine on another grid), `initial(states, params)` returning the jumps in model order, or `{jump: number or function}`. With `None`, the first-order perturbation, which needs `guess` or `steady` |
 | `tol`, `max_iter` | the stopping rule of the iteration, on the largest change of a jump |
 | `inner_tol`, `inner_max_iter` | the Newton solve at each grid point, on the largest residual |
@@ -480,7 +522,7 @@ evaluation is slower.
 array of states, in levels and in the model's state order, or at a mapping from state names to
 values; a Markov state must take one of its chain's node values. `euler_errors(states=None)` gives
 the equilibrium conditions, integrated, at `states`, by default at the centres of the grid's cells
-and at every node of the chain. For a bounded jump the error is the natural residual
+(on a `SmolyakGrid`, at the points its next level adds) and at every node of the chain. For a bounded jump the error is the natural residual
 `mid(u - lower, F, u - upper)`, which is the condition itself between the bounds and only its
 wrong-signed part at a bound. The errors are in the units the condition is written in.
 `simulate(periods, *, start=None, seed=None, shocks=None)` returns `states`, `jumps` and `nodes`
@@ -488,7 +530,8 @@ wrong-signed part at a bound. The errors are in the units the condition is writt
 the solution was built with, or given in `shocks`. Between grid points the interpolated policy is
 not held within the bounds. The policy at the grid points is in `values`
 `(n_nodes, grid.n, n_jumps)`, and the bounds there in `lower` and `upper`. The other fields are
-`grid`, `chain` (the product chain if there are several), `markov_states`, `interpolation`,
+`grid`, `chain` (the product chain if there are several), `markov_states`, `interpolation`
+(`"smolyak"` on a `SmolyakGrid`),
 `iterations`, `converged`, `distance` (the last change) and `history` (every change).
 
 ### `CartesianGrid(axes)`
@@ -539,7 +582,7 @@ exclude, say, negative consumption that the bounds alone do not rule out.
 
 | Argument | Meaning |
 |---|---|
-| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid, the Markov states and the shocks' integration, as in `time_iteration` |
+| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid (a `CartesianGrid`), the Markov states and the shocks' integration, as in `time_iteration` |
 | `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly |
 | `choices` | `{control: values}` for every control, to choose among finitely many values, all combinations of which are tried. With next period's states among the grid points, this is the problem QuantEcon's `DiscreteDP` solves |
 | `initial` | the starting value: a number, `initial(states, params)` at a row-stacked array of states, or a `ValueIterationSolution` (to refine on another grid, whose policy also starts the maximization). With `None`, zero |

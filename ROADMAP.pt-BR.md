@@ -476,11 +476,21 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   crescimento estocástico com utilidade logarítmica e depreciação total, o erro relativo da
   política contra a forma fechada cai de 3,9 a 4,0 vezes quando o espaçamento cai à metade, até
   1,6e-4 com 80 pontos e interpolação linear e 5,4e-5 com a cúbica.
-- [ ] **0.7.5 — grades esparsas.** Colocação de Smolyak (Judd, Maliar, Maliar e Valero, 2014),
-  isotrópica e anisotrópica, para que a projeção e a iteração temporal rodem com mais de três
-  estados. Referência: os nós e os pesos de interpolação de Smolyak do Tasmanian, e a forma
-  fechada do crescimento estocástico com vários estoques de capital, um problema do planejador com
-  utilidade logarítmica e depreciação total, cuja política é conhecida em qualquer dimensão.
+- [x] **0.7.5 — grades esparsas.** `SmolyakGrid` constrói a grade de Smolyak de Judd, Maliar,
+  Maliar e Valero (2014), com extremos de Chebyshev aninhados e conjuntos disjuntos de polinômios
+  de Chebyshev, isotrópica ou com um nível por eixo, e `solve_projection` e `time_iteration` a
+  recebem no lugar das suas grades, com qualquer número de estados. A projeção resolve todos os
+  coeficientes pelo método de Newton, com uma jacobiana montada a partir das derivadas do resíduo
+  em cada nó. Contra as grades globais do Tasmanian 8.2 na regra de Clenshaw–Curtis e do tipo
+  `level`, compilado a partir do código-fonte num ambiente próprio, 40 grades em uma a seis
+  dimensões nos níveis 0 a 6, anisotrópicas incluídas, têm o mesmo número de pontos, e os nós
+  concordam dentro de 9e-16 e os pesos de interpolação dentro de 2e-14. No crescimento
+  estocástico com três a cinco estoques de capital, utilidade logarítmica e depreciação total, em
+  que o investimento em cada estoque é uma fração constante do produto, o erro da política cai por
+  um fator de pelo menos 37 a cada nível, até 2e-8 com quatro estados e 3e-8 com seis no nível 4
+  (1457 pontos), e a projeção e a iteração temporal concordam dentro de 2,3e-9. Com seis estados,
+  o nível 1 na produtividade, em que a política é linear, mantém o erro da grade isotrópica com
+  1283 pontos em vez de 1457.
 - [ ] **0.8.0** — o marco completo: a linha da comparação e o README atualizados, e o lançamento
   feito da mesma forma que o da 0.7.0.
 

@@ -6,6 +6,7 @@
 #         SKIP_JULIA=1 bash run_all.sh
 #         SKIP_DOLO=1 bash run_all.sh
 #         SKIP_SSJ=1 bash run_all.sh   (skips sequence-jacobian, the heterogeneous-agent reference)
+#         SKIP_TASMANIAN=1 bash run_all.sh   (skips Tasmanian, the sparse-grid reference)
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
@@ -15,7 +16,9 @@
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
 # compare_time_iteration.py, compare_value_iteration.py and compare_egm.py, runs in a Python 3.11
 # environment of its own that dolo/setup.sh creates with uv, and so does sequence-jacobian, the
-# reference of compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates.
+# reference of compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates. Tasmanian,
+# the reference of compare_smolyak.py, is built from source, with CMake and the system's C++
+# compiler, in a Python 3.12 environment that tasmanian/setup.sh creates with uv.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -133,6 +136,15 @@ else
   step "sequence-jacobian: environment" bash sequence_jacobian/setup.sh
   step "sequence-jacobian: Krusell-Smith and HANK" sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py
   step "compare_heterogeneous.py" "$PYTHON" compare_heterogeneous.py
+fi
+if [ -n "${SKIP_TASMANIAN:-}" ]; then
+  results+=("skipped  Tasmanian (SKIP_TASMANIAN)")
+else
+  # without deleting it, a failed Tasmanian run would let the comparison read an earlier result
+  rm -f out_smolyak/tasmanian.json
+  step "Tasmanian: environment" bash tasmanian/setup.sh
+  step "Tasmanian: Smolyak grids" tasmanian/.venv/bin/python tasmanian/run_tasmanian.py
+  step "compare_smolyak.py"  "$PYTHON" compare_smolyak.py
 fi
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py

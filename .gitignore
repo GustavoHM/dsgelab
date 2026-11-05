@@ -95,3 +95,4 @@ validation/out_value_iteration/
 validation/out_egm/
 validation/out_heterogeneous/
 validation/sequence_jacobian/notebooks/
+validation/out_smolyak/

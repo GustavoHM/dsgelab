@@ -1131,7 +1131,53 @@ f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
   consumo aqui, e maiores na mesma célula. A validação compara o <code>egm</code> com o
   <code>egm</code> do dolo no modelo de consumo e poupança do dolo, com renda iid e com renda
   markoviana, e os dois concordam a 1e-11.</p>
-  <h3>33. Um BVAR, e o modelo como priori de um VAR</h3>
+  <h3>33. Cinco estados, numa grade de Smolyak</h3>
+<pre><code>fatias = np.array([0.12, 0.10, 0.08, 0.06])         # alpha_j, que somam 0,36
+capitais, inv = [f"k{j}" for j in range(4)], [f"i{j}" for j in range(4)]
+
+def planejador(nxt, cur, eps, p):
+    def produto(x):                                  # produto e consumo
+        y = x.a * np.prod([x[k] ** s for k, s in zip(capitais, fatias)], axis=0)
+        return y, y - sum(x[i] for i in inv)
+    y, c = produto(cur)
+    y1, c1 = produto(nxt)
+    return ([nxt[k] - cur[i] for k, i in zip(capitais, inv)]                       # k_j' = i_j
+            + [1 - 0.96 * c / c1 * s * y1 / nxt[k] for k, s in zip(capitais, fatias)]  # Euler
+            + [np.log(nxt.a) - 0.9 * np.log(cur.a) - eps.e])
+
+estoques = dsg.Model(states=capitais + ["a"], jumps=inv, shocks=["e"], equations=planejador)
+k_ss = 0.96 * fatias * np.exp(np.sum(fatias * np.log(0.96 * fatias)) / (1 - fatias.sum()))
+caixa = {k: (0.75 * v, 1.25 * v) for k, v in zip(capitais, k_ss)} | {"a": (0.97, 1.03)}
+inicio = dict(zip(capitais, k_ss)) | dict(zip(inv, k_ss)) | {"a": 1.0}
+X = np.random.default_rng(0).uniform(*np.array(list(caixa.values())).T, (1000, 5))
+exata = 0.96 * fatias * (X[:, 4] * np.prod(X[:, :4] ** fatias, axis=1))[:, None]  # beta alpha_j y
+for nivel in (1, 2, 3):
+    esparsa = dsg.SmolyakGrid(caixa, nivel)
+    proj = dsg.solve_projection(estoques, {}, grid=esparsa, guess=inicio, cov={"e": 0.01},
+                                n_quad=5)
+    print(nivel, esparsa.n, f"{np.abs(proj.jumps(X) / exata - 1).max():.0e}")
+aniso = dsg.SmolyakGrid(caixa, dict.fromkeys(capitais, 3) | {"a": 1})  # política linear em a
+ti_esparsa = dsg.time_iteration(estoques, {}, grid=aniso, cov={"e": 0.01}, guess=inicio)
+aniso.n, ti_esparsa.iterations, f"{np.abs(ti_esparsa.controls(X) / exata - 1).max():.0e}"</code></pre>
+<pre class="output" data-label="Saída"><code>1 11 5e-03
+2 61 1e-04
+3 241 3e-06
+<span class="out-expr">aniso.n, ti_esparsa.iterations, f"{np.abs(ti_esparsa.controls(X) / exata - 1).max():.0e}"</span>
+(219, 7, '3e-06')</code></pre>
+  <p>Um planejador com quatro estoques de capital, utilidade logarítmica e depreciação total
+  investe em cada estoque uma fração constante <code>beta alpha_j</code> do produto, e por isso a
+  política é conhecida em qualquer dimensão. <code>SmolyakGrid</code> constrói a grade esparsa de
+  Judd, Maliar, Maliar e Valero (2014): 11, 61 e 241 pontos nos níveis 1 a 3, onde a grade
+  tensorial com os mesmos nove nós em cada eixo teria 59049. <code>solve_projection</code> a
+  recebe no lugar de <code>bounds</code> e <code>order</code>, e o erro contra a forma fechada, em
+  1000 pontos sorteados na caixa, cai por um fator de 36 do nível 1 para o 2 e de 55 do nível 2
+  para o 3. A política é linear na produtividade, e por isso uma grade anisotrópica com nível 1
+  nela e nível 3 nos estoques de capital elimina 22 dos 241 pontos e dá o mesmo erro com um
+  algarismo.
+  <code>time_iteration</code> recebe a mesma grade, e o seu ponto fixo resolve as mesmas equações
+  de colocação que a projeção. A validação compara os nós e os pesos de interpolação das grades com
+  os do Tasmanian em uma a seis dimensões, e resolve este modelo com até seis estados.</p>
+  <h3>34. Um BVAR, e o modelo como priori de um VAR</h3>
 <pre><code>dados = {"y": serie}                                  # os dados do AR(1) do exemplo 14
 dens = dsg.bvar_density(dados, 4, first_obs=5)        # priori de Sims-Zha, padrões do Dynare
 {p: round(v, 1) for p, v in dens.items()}
@@ -1178,7 +1224,7 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
   <code>tests/bvar_a_la_sims</code> e <code>tests/dsge-var</code> do Dynare, inclusive as previsões
   simuladas, com os mesmos sorteios. O Dynare conta as observações iniciais do VAR em
   <code>T</code>, e o dsgelab não.</p>
-  <h3>34. Krusell–Smith, pelo jacobiano no espaço das sequências</h3>
+  <h3>35. Krusell–Smith, pelo jacobiano no espaço das sequências</h3>
 <pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
     c_next = 1 / (beta * Va_p)                         # utilidade log: u'(c) = 1 / c
     coh = (1 + r) * a_grid + w * e_grid[:, None]       # recursos disponíveis, por estado de renda
@@ -1611,6 +1657,21 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
       <tr><td>contra a iteração temporal, renda markoviana, 100 pontos, maior</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
       <tr><td>contra a iteração temporal, renda markoviana, 1600 pontos até 8, maior (média 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
       <tr><td>crescimento estocástico contra a forma fechada, consumo, 80 pontos, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+  <h3>Grades esparsas comparadas com o Tasmanian e com uma forma fechada</h3>
+  <p>As grades globais do Tasmanian 8.2 na regra de Clenshaw–Curtis, 40 ao todo, isotrópicas em
+  uma a seis dimensões nos níveis 0 a 6 e anisotrópicas com um teto no nível de cada eixo, dão os
+  nós e os pesos de interpolação de referência. Todas as grades têm o mesmo número de pontos que as
+  do Tasmanian. O modelo de crescimento do exemplo 32, com três a cinco estoques de capital, é
+  resolvido por projeção e por iteração temporal em grades de Smolyak. O erro é o maior erro
+  relativo da política de investimento em 1000 pontos da caixa.</p>
+  <table>
+    <thead><tr><th>O que é comparado</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nós contra o Tasmanian, 40 grades com até 1457 pontos</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>pesos de interpolação contra o Tasmanian, 40 pontos por grade</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>4 estados contra a forma fechada, nível 4 (401 pontos)</td><td class="num">2e-8</td><td class="ok">OK</td></tr>
+      <tr><td>6 estados contra a forma fechada, nível 4 (1457 pontos)</td><td class="num">3e-8</td><td class="ok">OK</td></tr>
+      <tr><td>projeção contra iteração temporal, todas as grades</td><td class="num">2e-9</td><td class="ok">OK</td></tr>
   <h3>Agentes heterogêneos comparados com o sequence-jacobian</h3>
   <p>Os modelos de Krusell–Smith e HANK de um ativo do próprio sequence-jacobian 1.0.0, dos
   cadernos na tag v1.0.0, em 7 estados de renda por 500 pontos de ativos, com a mesma calibração,
@@ -1690,7 +1751,7 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
       <tr><td><strong>2ª ordem + correções de risco</strong></td><td><strong>sim</strong></td><td><strong>não</strong></td><td>sim</td><td>sim</td><td>—</td></tr>
       <tr><td>3ª ordem (bloco determinístico)</td><td class="ok">sim</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
       <tr><td>3ª ordem com risco na inclinação</td><td>sim, com a regra de decisão completa do Dynare (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>sim</td><td>—</td><td>—</td></tr>
-      <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, até três estados)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
+      <tr><td>Métodos globais / projeção</td><td>parcial (colocação de Chebyshev, numa grade tensorial até três estados ou numa grade de Smolyak)</td><td>—</td><td>sim</td><td>—</td><td>parcial</td></tr>
       <tr><td>Agentes heterogêneos</td><td>—</td><td>—</td><td>—</td><td>—</td><td>sim</td></tr>
       <tr><td>Previsão perfeita não linear</td><td>sim</td><td>sim</td><td>sim</td><td>?</td><td>sim</td></tr>
       <tr><td>Estimação bayesiana</td><td>sim (moda, Metropolis–Hastings, SMC, HMC e NUTS, com o filtro de Kalman na primeira ordem, o de partículas até a terceira e o de inversão até a segunda)</td><td>sim</td><td>—</td><td>—</td><td>—</td></tr>
@@ -1711,8 +1772,8 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
   Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev, da iteração temporal, da iteração da função valor e do método da grade
-  endógena, como a iteração das expectativas, o
+  colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal, da iteração da
+  função valor e do método da grade endógena, como a iteração das expectativas, o
   <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
   heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
   validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
