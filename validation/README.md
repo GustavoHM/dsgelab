@@ -946,11 +946,12 @@ and the posterior mode found by each program. The gradient check is internal: th
 gradient through the stacked state against central differences of the likelihood. The numbers
 come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
 
-## Densities of the posterior plots
+## Plots: the numbers Dynare's figures draw
 
 ```bash
 bash fetch.sh
-bash run_plots.sh                 # Dynare's draw_prior_density and posterior_moments
+bash run_plots.sh                 # densities: draw_prior_density and posterior_moments
+                                  # mcmc: fs2000 with mode_check, Metropolis and bayesian_irf (4 min)
 python compare_plots.py
 ```
 
@@ -958,15 +959,47 @@ python compare_plots.py
 prior densities of fs2000 (9 priors: beta, inv_gamma, normal): grid 4.3e-15, density 1.9e-12 (relative)
 posterior density, 6037 draws (3037 repeated): 6.5e-16 (grid and density, relative to its peak)
 posterior density, 5000 draws (0 repeated): 8.9e-16 (grid and density, relative to its peak)
+Brooks and Gelman, 2 chains of 2500 draws, 101 windows: windows 0, univariate (27 panels) 3.5e-14, multivariate 7.8e-14 (relative)
+trace_plot, moving average over 401 draws, alp and the log posterior: 4.1e-16 (relative)
+mh_autocorrelation, alp, lags 0 to 30: 2.3e-15
+mode_check, 9 parameters, 21 points each: grid 8.9e-16; log posterior and log-likelihood kernels 5.2e-11 (relative) for the 7 parameters with a bounded prior
+  gam (normal prior, Dynare's grid runs from -10 to 10): 1.4e-11 relative where both solve the model, and 0 of 21 points that only one of them solves
+  logmst (normal prior, Dynare's grid runs from -10 to 10): 1.9e-02 relative where both solve the model, and 10 of 21 points that only one of them solves
+posterior_irf, 1200 draws, 4 variables, 2 shocks, 20 periods: responses 2.5e-10, mean 2.1e-10, median 2.1e-10, lower 2.3e-10, upper 2.0e-10, deciles 2.3e-10 (relative to the largest response); the statistics of Dynare's own responses 3.6e-17
+posterior densities and modes of 'Priors and posteriors': 1.9e-15; smoothed shocks 2.6e-15 and observables 4.1e-16 at the posterior mean
 ```
 
-The plots draw what the package computes, except for the two densities of `plot_posterior`,
-which are compared here. The prior densities are those of the nine priors of `fs2000.mod`, read
-by `from_mod`, against `draw_prior_density`, grid and values. The posterior density is compared
-with the kernel estimate that `posterior_moments` returns, on draws made in Octave: 3000 normal
-draws each repeated one to three times, as a Metropolis chain repeats a draw when it rejects, so
-that Dynare's bandwidth correction for repeated draws is exercised, and 5000 lognormal draws.
-The numbers come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+The plots draw what the package computes. What they draw that it did not compute before is
+compared here, in two parts.
+
+The densities of `plot_posterior`: the nine priors of `fs2000.mod`, read by `from_mod`, against
+`draw_prior_density`, grid and values; and the kernel estimate that `posterior_moments` returns,
+on draws made in Octave, 3000 normal draws each repeated one to three times, as a Metropolis chain
+repeats a draw when it rejects, so that Dynare's bandwidth correction for repeated draws is
+exercised, and 5000 lognormal draws.
+
+The rest comes from an estimation of `fs2000.mod` in Dynare, with `mode_check`, two chains of
+2,500 draws and `bayesian_irf`, followed by `trace_plot` and `mh_autocorrelation_function` for
+`alp`. While Dynare draws its figures, `plots/dyn_saveas.m` stands in for Dynare's own and records
+the data of every line and bar in them instead of saving the file, and `plots/export_plots.m`
+gathers them with the draws of both chains, burn-in included, the mode, and the parameters and
+responses of the posterior IRFs. Each figure is then compared with the function that draws it here,
+on the same inputs: `brooks_gelman` with the 27 panels of the univariate figures and the 3 of the
+multivariate one, the moving average of `trace_plot` and `mh_autocorrelation` with theirs, the
+posterior densities, modes, smoothed shocks and smoothed observables with those of the "Priors and
+posteriors" and smoother figures, at the posterior mean that Dynare's smoother uses after
+Metropolis. `mode_check` is compared with the slices Dynare saves, at Dynare's mode, and
+`posterior_irf`, run on the 1,200 parameter vectors of Dynare's `PosteriorIRF`, with the responses
+at each and with `oo_.PosteriorIRF.dsge`.
+
+The grid of `mode_check` is Dynare's to rounding. For a parameter with a normal prior, whose
+bounds are infinite, Dynare's rule (reproduced as written) sends the grid to -10 and 10. At those
+values of `logmst`, the log of money growth, money grows by a factor of up to `e^10` a quarter,
+and the two programs part: Dynare finds no solution above 1, where dsgelab finds one, and at -10
+the two log posteriors, of order -2e7, differ by 2%. On the seven parameters with a bounded prior
+and on `gam` the kernels agree within 6e-11. The responses of the posterior IRFs at each draw agree
+within 3e-10 of the largest response, and their statistics within the same: computed on Dynare's own responses, they agree with Dynare's within 4e-17.
+The numbers come from a run on 3 November 2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Out-of-sample forecast evaluation
 

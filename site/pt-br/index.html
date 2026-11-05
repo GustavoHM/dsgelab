@@ -927,6 +927,46 @@ for name, fig in figs.items():
   Dynare: <code>prior_density</code> reproduz o seu <code>draw_prior_density</code> e
   <code>posterior_density</code> a estimativa de núcleo do seu <code>posterior_moments</code>, com a
   largura de banda corrigida para os sorteios que uma cadeia de Metropolis repete.</p>
+<pre><code>bg = dsg.brooks_gelman(cadeia, origin=200)                # cadeias de 750 sorteios, exemplo 14
+cortes = dsg.mode_check(pb, moda)
+irf_post = dsg.posterior_irf(pb, cadeia, n_draws=200, periods=20)
+mais = {
+    "priors.png": dsg.plot_priors(pb),
+    "trace.png": dsg.trace_plot(cadeia, posterior=True),
+    "brooks_gelman.png": dsg.plot_brooks_gelman(bg),
+    "mode_check.png": dsg.plot_mode_check(cortes),
+    "posterior_irf.png": dsg.plot_posterior_irf(irf_post, "e"),
+    "smoothed.png": dsg.plot_smoothed_observables(pb.smoother(moda.x), pb.Y),
+    "occbin.png": dsg.plot_occbin(ob, ["c", "b", "lam"]),                     # exemplo 15
+    "collinearity.png": dsg.plot_identification(bad),                         # exemplo 19
+    "filtering.png": dsg.plot_filtering(stab, scatter=False),                 # exemplo 26
+}
+for name, fig in mais.items():
+    fig.savefig(name, dpi=80)
+bg.iterations[[0, -1]], bg.univariate.shape
+cortes["rho"]["x"][[0, 10, 20]].round(3)
+irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">bg.iterations[[0, -1]], bg.univariate.shape</span>
+([200 746], (92, 6, 2))
+<span class="out-expr">cortes["rho"]["x"][[0, 10, 20]].round(3)</span>
+[0.501 0.75 1]
+<span class="out-expr">irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</span>
+(200, True)</code></pre>
+  <p>As demais figuras do Dynare seguem o mesmo padrão. <code>trace_plot</code>,
+  <code>plot_mh_autocorrelation</code> e <code>plot_brooks_gelman</code> são os diagnósticos de MCMC
+  do <code>estimation</code>: os sorteios com a sua média móvel, as suas autocorrelações e as medidas
+  de convergência de Brooks e Gelman (1998) nos sorteios agrupados e dentro de cada cadeia, que se
+  estabilizam no mesmo valor quando as cadeias convergiram. <code>mode_check</code> avalia a log
+  posteriori e a log verossimilhança através da moda na grade do Dynare, aqui de 0,501 a 1 para
+  <code>rho</code>, cuja moda é 0,75: a priori beta corta o lado direito em 1, e a grade é tornada simétrica.
+  <code>posterior_irf</code> resolve o modelo em sorteios da posteriori e dá a média, a mediana, o
+  intervalo HPD e os decis das respostas, como o <code>bayesian_irf</code> do Dynare. O suavizador
+  (<code>plot_smoothed_shocks</code>, <code>plot_smoothed_observables</code>), as trajetórias e os
+  regimes do OccBin, os padrões de colinearidade do <code>identification</code>, a filtragem de Monte
+  Carlo da sensibilidade global, as previsões condicionais e os grupos de choques na decomposição
+  também têm as suas figuras. As estatísticas que elas desenham são calculadas como o Dynare as
+  calcula e não precisam do matplotlib, e a validação as compara com os números das próprias
+  figuras do Dynare.</p>
   <h3>29. Um processo como cadeia de Markov</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log da produtividade, trimestral
 var = sigma ** 2 / (1 - rho ** 2)
@@ -1310,10 +1350,11 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
   explosiva: ela ordena os autovalores pelo valor com sinal quando todos são reais, e a regra dela
   não enxerga falhas de posto.</p>
 
-  <h3>Frequência mista e densidades dos gráficos comparadas com o Dynare</h3>
+  <h3>Frequência mista e gráficos comparados com o Dynare</h3>
   <p>O <code>fs2000.mod</code> com o crescimento do produto observado só como média anual, que o
-  Dynare lê por uma variável auxiliar; e as duas densidades que os gráficos da posteriori
-  desenham.</p>
+  Dynare lê por uma variável auxiliar; e os números que os gráficos desenham e que o pacote não
+  calculava antes, contra os das próprias figuras do Dynare depois de uma estimação do
+  <code>fs2000.mod</code> com <code>mode_check</code>, duas cadeias e <code>bayesian_irf</code>.</p>
   <table>
     <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
@@ -1322,6 +1363,10 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
       <tr><td>moda posterior, em desvios-padrão posteriores (kernel pelo menos o do Dynare)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
       <tr><td>densidades das nove prioris (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
       <tr><td>densidade de núcleo da posteriori (<code>posterior_moments</code>), sorteios com repetições</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>diagnósticos de Brooks e Gelman, univariados e multivariado (relativo)</td><td class="num">8e-14</td><td class="ok">OK</td></tr>
+      <tr><td>média móvel do <code>trace_plot</code>, autocorrelograma dos sorteios</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td><code>mode_check</code>: grade, e núcleos onde a priori é limitada (relativo)</td><td class="num">6e-11</td><td class="ok">OK</td></tr>
+      <tr><td>IRFs posteriores nos 1.200 sorteios do Dynare: média, mediana, intervalo HPD, decis</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 
