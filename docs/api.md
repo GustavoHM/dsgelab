@@ -642,6 +642,97 @@ fields are `program`, `params`, `grid`, `chain`, `markov_states`, `interpolation
 
 ---
 
+## Heterogeneous agents
+
+The sequence-space Jacobian method of Auclert, Bardóczy, Rognlie and Straub (2021), in
+`dsgelab.heterogeneous`. A model is a set of blocks joined by the names of their inputs and
+outputs, and each block maps paths of aggregates to paths of aggregates. `Model` and its `vec`
+remain the way to write a finite number of groups. A distribution over a grid is a different
+algorithm, with its own declaration. The timing and the conventions are those of
+sequence-jacobian, against which the module is validated (`validation/compare_heterogeneous.py`).
+
+### `HetBlock(step, outputs, *, backward, policy, init, markov="Pi", grid=None, hetinputs=(), hetoutputs=(), name=None, backward_tol=1e-10, backward_max_iter=10000, h=1e-4, twosided=True)`
+
+A continuum of agents on a grid of one asset by the nodes of one Markov chain. `step` is one step
+of the backward iteration, written by the user, for example by the endogenous grid method. Its
+arguments are read by name: `v_p`, for each backward variable `v`, is the expectation of `v` at
+`t + 1` conditional on today's income state, and every other argument is an aggregate input or an
+output of `hetinputs`. It returns, in the order of `outputs` or as a mapping, the backward
+variables at `t`, the policy and the other individual outcomes, each an `(n_e, n_a)` array.
+
+| Argument | Meaning |
+|---|---|
+| `backward` | the backward variables, such as the marginal value of assets `Va` |
+| `policy` | the asset policy, whose lottery (Young, 2010) moves the distribution |
+| `init` | the backward variables the steady-state iteration starts from, as a function of the inputs |
+| `markov`, `grid` | the names of the transition matrix `(n_e, n_e)` and of the asset grid, by default `policy + "_grid"`, among the inputs or the outputs of `hetinputs` |
+| `hetinputs` | pairs `(function, outputs)` run in order before each step, which make the grids and the arrays of income by node from aggregates |
+| `hetoutputs` | pairs `(function, outputs)` of the step's outcomes, which make further individual outcomes |
+| `backward_tol`, `backward_max_iter` | the steady state's backward iteration stops when one step moves the policy by less than `backward_tol` at every point |
+| `h`, `twosided` | the step of the finite differences of `step` in the fake-news algorithm, central by default and forward with `twosided=False` |
+
+Every outcome that is not a backward variable is aggregated under its name in capitals, as the
+mean under `D`: the policy `a` gives `A` and consumption `c` gives `C`. `inputs` and `outputs`
+list the block's aggregate inputs and outputs.
+
+`Dbeg_t` is the distribution over last period's income state and the assets carried into `t`.
+The income shock turns it into `D_t = Pi' Dbeg_t`, and the policy's lottery turns `D_t` into
+`Dbeg_{t+1}`. At the steady state, `Dbeg` is the null vector of the sparse transition matrix minus
+the identity, found by one sparse solve with the mass at one recurrent point set to one.
+`steady_state(values, start=None)` gives the aggregates and the internals, which `BlockModel`
+stores. `path(ss, paths, T)` gives the aggregates' paths after paths of some inputs, in levels,
+with the backward iteration from `T - 1`, where next period is the steady state, and the
+distribution from the steady state's `Dbeg`.
+
+`jacobian(ss, inputs, T, outputs=None, *, method="fake_news")` gives `J[O][i]`, `T x T`. The
+fake-news algorithm takes `T` backward steps per input, against the `T^2` of differentiating the
+path once for every date of the input, which `method="direct"` does to check it. The Markov
+matrix and the grid may depend on parameters but not on an input that moves along a path, which
+raises `NotImplementedError`. Several chains go into one by their Kronecker product, and a block
+has one endogenous state.
+
+### `SimpleBlock(f, outputs, name=None)` and `@simple(*outputs)`
+
+Equations in the aggregates. The arguments of `f` are the inputs by name, each a path over the
+periods, and `x(-1)` and `x(+1)` are a lag and a lead, which take the steady-state value beyond
+the ends. Only inputs can be shifted, so the lag of an expression is written with the lags of its
+inputs. At the steady state each path has one period. The Jacobian is exact up to rounding, by the
+complex step, and an output that `f` turns real is differentiated by central differences.
+
+### `SolvedBlock(blocks, unknowns, targets, name=None)`
+
+A model of blocks, solved for `unknowns` (`{name: guess}` or `{name: (lo, hi)}`) to hold `targets`
+at zero, used as one block. Its Jacobian is the inner model's `G`, and along a path it solves the
+inner model by the quasi-Newton iteration of `impulse_nonlinear`.
+
+### `BlockModel(blocks, name="model")`
+
+The graph of the blocks, ordered so that each comes after the blocks that make its inputs. An
+output made by two blocks and a cycle are refused. `inputs` lists the inputs no block makes.
+
+| Method | Result |
+|---|---|
+| `steady_state(calibration, unknowns=None, targets=None, *, solver=None, tol=1e-12, start=None)` | a `BlockSteadyState`. With `unknowns` and `targets` (`{name: value}`, or names held at zero), it solves for the unknowns, by `brentq` for one unknown with a bracket and by `scipy.optimize.root` (`"hybr"` by default) otherwise, and raises when a target is off by more than 1e-8. The backward iterations start from the previous evaluation's |
+| `jacobian(ss, inputs, outputs=None, T=300)` | the Jacobians of the outputs with respect to the inputs, by the chain rule along the graph |
+| `solve_jacobian(ss, unknowns, targets, inputs, outputs=None, T=300)` | `G[o][i]`, the general-equilibrium Jacobians, the unknowns among them: with `H_U` and `H_Z` the targets' Jacobians with respect to the unknowns and to the inputs, `G_U = -H_U^{-1} H_Z` |
+| `impulse_linear(ss, unknowns, targets, shocks, outputs=None)` | `G` times the paths in `shocks`, in deviations from the steady state; the horizon is their length |
+| `impulse_nonlinear(ss, unknowns, targets, shocks, *, tol=1e-10, max_iter=50, jacobian=None)` | the perfect-foresight transition, in deviations, by a quasi-Newton iteration on the paths of the unknowns with the fixed `H_U`, until every target is below `tol` |
+
+### `BlockSteadyState`
+
+A `dict` of the aggregates, with `internals[block]` holding what a `HetBlock` keeps on its grid:
+the policy and the other outcomes, the backward variables, the outputs of `hetinputs` and the
+distributions `D` and `Dbeg`.
+
+### `interpolate_rows(x, xq, y)` and `log_grid(lo, hi, n, *, pivot=None)`
+
+`interpolate_rows` interpolates `y(x)` linearly at `xq` along the last axis, row by row, and
+extrapolates linearly, which the endogenous grid method needs. `log_grid` gives `n` points from
+`lo` to `hi` evenly spaced in `log(a + pivot)`, with `pivot = |lo| + 0.25` by default, the grid of
+sequence-jacobian's `agrid`.
+
+---
+
 ## Transitions
 
 ### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`

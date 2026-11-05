@@ -494,10 +494,22 @@ projeto Julia já usado para o MacroModelling.jl.
 ### 0.9 — a fronteira
 
 - [ ] **Mudança de regime markoviana** na solução e na estimação. Validação contra o RISE.
-- [ ] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências, validados contra
+- [x] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências, validados contra
   o sequence-jacobian. *O requisito de projeto, herdado da exclusão anterior, é que* `vec`
   continue sendo a forma de escrever um número finito de grupos, e que uma distribuição seja outro
-  algoritmo, num módulo próprio.
+  algoritmo, num módulo próprio. O módulo é o `dsgelab.heterogeneous`: `HetBlock` para um contínuo
+  de agentes num ativo por uma cadeia de Markov, com a loteria de Young e o algoritmo das notícias
+  falsas, `SimpleBlock` e `SolvedBlock` para os agregados, e `BlockModel` para o estado
+  estacionário com calibração, os jacobianos de equilíbrio geral, as respostas a impulso lineares
+  e a transição não linear por quase-Newton. Nos modelos de Krusell–Smith e HANK de um ativo do
+  próprio sequence-jacobian 1.0.0, dos cadernos na tag v1.0.0, em 7 por 500 pontos, os estados
+  estacionários (incógnitas, políticas, distribuição, agregados) concordam até 7,6e-10, os
+  jacobianos da família até 2,5e-10, o `G` até 1,7e-10 e as respostas a impulso lineares e não
+  lineares até 1,9e-10, em relação ao maior valor comparado, com as iterações dos dois pacotes
+  apertadas para 1e-12. Os jacobianos das notícias falsas concordam com os de força bruta até
+  4,1e-8, e a transição não linear do Krusell–Smith se aproxima da resposta linear com o quadrado
+  do choque. Dois estados endógenos, como no HANK de dois ativos, e matrizes de Markov que se
+  movem ao longo da trajetória ficam de fora.
 - [x] **Os demais gráficos do Dynare**, acrescentados a pedido do autor: prioris, gráficos de
   traço, a autocorrelação dos sorteios, os diagnósticos de convergência de Brooks e Gelman, o
   `mode_check`, os choques e as variáveis do suavizador, IRFs a posteriori com bandas HPD,

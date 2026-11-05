@@ -1178,6 +1178,72 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
   <code>tests/bvar_a_la_sims</code> e <code>tests/dsge-var</code> do Dynare, inclusive as previsões
   simuladas, com os mesmos sorteios. O Dynare conta as observações iniciais do VAR em
   <code>T</code>, e o dsgelab não.</p>
+  <h3>34. Krusell–Smith, pelo jacobiano no espaço das sequências</h3>
+<pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
+    c_next = 1 / (beta * Va_p)                         # utilidade log: u'(c) = 1 / c
+    coh = (1 + r) * a_grid + w * e_grid[:, None]       # recursos disponíveis, por estado de renda
+    a = dsg.interpolate_rows(c_next + a_grid, coh, a_grid)   # o método da grade endógena
+    a = np.maximum(a, a_grid[0])                       # o limite de endividamento
+    c = coh - a
+    return (1 + r) / c, a, c
+
+def start(a_grid, e_grid, r, w):
+    return (1 + r) / (0.1 * ((1 + r) * a_grid + w * e_grid[:, None]))
+
+def grids(rho_e, sd_e, n_e, n_a):
+    chain = dsg.rouwenhorst(rho_e, sd_e * np.sqrt(1 - rho_e ** 2), n_e)
+    e = np.exp(chain.nodes)
+    return e / (chain.stationary @ e), chain.transition, dsg.log_grid(0.0, 200.0, n_a)
+
+hh = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                  hetinputs=[(grids, ["e_grid", "Pi", "a_grid"])])
+
+@dsg.simple("r", "w", "Y")
+def firm(K, Z, alpha, delta):
+    return (alpha * Z * K(-1) ** (alpha - 1) - delta, (1 - alpha) * Z * K(-1) ** alpha,
+            Z * K(-1) ** alpha)
+
+@dsg.simple("asset_mkt", "goods_mkt")
+def markets(A, K, Y, C, delta):
+    return A - K, Y - C - (K - (1 - delta) * K(-1))
+
+ks = dsg.BlockModel([hh, firm, markets])
+ss = ks.steady_state({"alpha": 0.11, "delta": 0.025, "rho_e": 0.966, "sd_e": 0.5, "n_e": 7,
+                      "n_a": 100},
+                     unknowns={"beta": 0.98, "Z": 0.85, "K": 3.0},
+                     targets={"r": 0.01, "Y": 1.0, "asset_mkt": 0.0})
+f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"
+T = 200
+dZ = 0.01 * 0.8 ** np.arange(T)                        # produtividade, 1 por cento
+linear = ks.impulse_linear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+nonlinear = ks.impulse_nonlinear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+hh.h = 1e-6
+J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # pelo algoritmo das notícias falsas
+direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
+('0.98191', '-3e-11')
+<span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('3.97 bp', '6e-07')
+<span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
+'1e-10'</code></pre>
+  <p>Um <code>HetBlock</code> contém um contínuo de famílias em 100 pontos de ativos por 7 estados
+  de renda, e <code>household</code> é um passo da iteração para trás delas pelo método da grade
+  endógena, que <code>interpolate_rows</code> faz linha a linha. A firma e os mercados são blocos
+  <code>simple</code>, em que <code>K(-1)</code> é o capital do período anterior, e o
+  <code>BlockModel</code> liga os três pelos nomes das entradas e saídas. O estado estacionário é
+  resolvido para o fator de desconto, a produtividade e o capital que dão juros de 1 por cento e
+  produto igual a um, como no caderno de Krusell–Smith do sequence-jacobian. A distribuição das
+  famílias é a estacionária da loteria de Young. O mercado de bens, que não é alvo, se equilibra
+  com erro de 3e-11 (lei de Walras), da ordem da tolerância de 1e-10 em que a iteração para trás
+  para. A resposta linear a um choque de produtividade é o
+  jacobiano de equilíbrio geral <code>G</code> vezes a trajetória do choque. A transição não
+  linear, resolvida por uma iteração quase-Newton com o mesmo jacobiano, difere dela em menos de
+  1e-6 nos juros. O algoritmo das notícias falsas monta o jacobiano 30 x 30 da família com 30
+  passos para trás, e derivar a trajetória inteira para um choque em cada data, a um custo 30
+  vezes maior, dá a mesma matriz. A validação resolve os modelos de Krusell–Smith e HANK de um
+  ativo do próprio sequence-jacobian em 7 por 500 pontos e concorda com ele até 2e-10.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1545,6 +1611,18 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
       <tr><td>contra a iteração temporal, renda markoviana, 100 pontos, maior</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
       <tr><td>contra a iteração temporal, renda markoviana, 1600 pontos até 8, maior (média 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
       <tr><td>crescimento estocástico contra a forma fechada, consumo, 80 pontos, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+  <h3>Agentes heterogêneos comparados com o sequence-jacobian</h3>
+  <p>Os modelos de Krusell–Smith e HANK de um ativo do próprio sequence-jacobian 1.0.0, dos
+  cadernos na tag v1.0.0, em 7 estados de renda por 500 pontos de ativos, com a mesma calibração,
+  as mesmas incógnitas e os mesmos alvos. As diferenças são relativas ao maior valor comparado.</p>
+  <table>
+    <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>estado estacionário: incógnitas, políticas, distribuição e agregados</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>jacobianos da família pelo algoritmo das notícias falsas, T = 300</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>jacobianos de equilíbrio geral G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>respostas a impulso lineares e não lineares</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>notícias falsas contra força bruta (o dsgelab contra ele mesmo)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 
@@ -1635,10 +1713,11 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
   Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
   colocação de Chebyshev, da iteração temporal, da iteração da função valor e do método da grade
   endógena, como a iteração das expectativas, o
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Agentes
-  heterogêneos ficam fora do dsgelab, e o
-  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> e o
-  <a href="https://github.com/gboehl/econpizza">econpizza</a> resolvem esses modelos.</p></div>
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
+  heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
+  validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
+  que também resolve modelos com dois ativos, assim como o
+  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
   <p>No <code>dsgelab</code>, um problema declarado vai das condições de primeira ordem derivadas a
   uma solução e a uma exportação para o Dynare ou o MacroModelling.jl, com a convenção temporal
   traduzida automaticamente. A mesma função de resíduos serve à perturbação e à transição

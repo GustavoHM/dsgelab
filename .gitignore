@@ -93,3 +93,5 @@ validation/dolo/models/
 validation/out_time_iteration/
 validation/out_value_iteration/
 validation/out_egm/
+validation/out_heterogeneous/
+validation/sequence_jacobian/notebooks/
