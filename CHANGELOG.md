@@ -24,6 +24,24 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   the controls, and against the closed-form value of stochastic growth. As published, dolo's
   `value_iteration` ends in NaN on that model, and `validation/dolo/run_dolo_vfi.py` makes four
   changes, listed there, without editing dolo.
+- `egm`: the endogenous grid method (Carroll, 2006), on an `EGMProgram`, a new declaration of a
+  problem with one endogenous state, its poststate, the expectation in the Euler equation, the
+  direct response that inverts it for the controls, the reverse map from the poststate to the
+  state, the half transition to next period's state and the bounds on the controls. These are
+  dolo's `expectation`, `direct_response_egm`, `reverse_state` and `half_transition` blocks, with
+  `post_decision`, the poststate given the state and the controls, added. The grid is on the
+  poststate, a `CartesianGrid` with one axis, and the other states follow Markov chains, with the
+  shocks integrated as in `time_iteration`. The policy is interpolated linearly or by natural cubic
+  splines between the points of the endogenous grid, one per node of the chain, and held within
+  the bounds, which gives a borrowing limit below the lowest point. `EGMSolution` evaluates and
+  simulates the policy and gives `euler_errors`, relative to the controls.
+  `validation/compare_egm.py` checks it against dolo 0.4.9.20's `egm` on its consumption–savings
+  model, within 9e-13 with iid income and 1.1e-11 with a three-state Markov chain, against
+  `time_iteration` on the same model, whose mean difference falls to 4e-7 and 2e-6 with 1600
+  points, and against the closed form of stochastic growth, whose relative error falls as the
+  square of the spacing, to 1.6e-4 with 80 points. `validation/dolo/run_dolo_egm.py` silences a
+  debugging line in dolo's `egm` and reads its policy only at the points where dolo's resampled
+  rule equals it, without editing dolo.
 
 ### Changed
 

@@ -1043,6 +1043,54 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
   <code>value_iteration</code> com o <code>DiscreteDP</code> do QuantEcon na versão discretizada
   deste modelo e com o <code>value_iteration</code> do dolo no RBC markoviano dele, que tem dois
   controles.</p>
+  <h3>32. Poupança com limite de endividamento, pelo método da grade endógena</h3>
+<pre><code>poupanca_egm = dsg.EGMProgram(
+    states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],
+    expectation=lambda s, x, e, p: p["beta"] * p["R"] * x.c ** -p["gamma"],
+    direct_response=lambda a, z, p: z.m ** (-1 / p["gamma"]),    # c = m^(-1/gamma)
+    reverse_state=lambda a, x, p: a.a + x.c,                      # w = a + c
+    half_transition=lambda a, e, p: p["R"] * a.a + e.y,           # w' = R a + y'
+    post_decision=lambda s, x, p: s.w - x.c,                      # a = w - c
+    bounds={"c": (0.0, lambda s, p: s.w)})
+eg = dsg.egm(poupanca_egm, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+             grid={"a": (0.0, 12.0, 80)}, markov={"y": renda},
+             initial={"c": lambda s, p: 0.5 * s.w})
+eg.converged, eg.iterations
+eg.endogenous[:, 0].round(3)              # recursos a partir dos quais o limite deixa de se impor
+eg.controls([[1.0, renda.nodes[0]], [1.0, renda.nodes[-1]], [6.0, renda.nodes[0]]]).round(4)
+dif = max(np.abs(eg.controls(np.column_stack([w, np.full(w.size, y)]))[:, 0]
+                 - ti.values[m, :, 0]).max() for m, y in enumerate(renda.nodes))
+f"{dif:.1e}"
+erros = np.abs(eg.euler_errors())
+f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">eg.converged, eg.iterations</span>
+(True, 184)
+<span class="out-expr">eg.endogenous[:, 0].round(3)</span>
+[0.429 0.641 0.891 1.154 1.437]
+<span class="out-expr">eg.controls([[1.0, renda.nodes[0]], [1.0, renda.nodes[-1]], [6.0, renda.nodes[0]]]).round(4)</span>
+[[0.5738]
+ [1]
+ [1.046]]
+<span class="out-expr">f"{dif:.1e}"</span>
+'4.0e-03'
+<span class="out-expr">f"{erros.mean():.1e}, {np.median(erros):.1e}"</span>
+'1.3e-04, 4.2e-06'</code></pre>
+  <p><code>egm</code> resolve o problema do exemplo 30 pelo método da grade endógena (Carroll,
+  2006). A grade fica na variável pós-decisão <code>a</code>, a poupança levada ao período
+  seguinte. Em cada nível de poupança, a expectativa da equação de Euler depende só de
+  <code>a</code>, e por isso o consumo sai dela em forma fechada, e os recursos disponíveis saem
+  do orçamento, <code>w = a + c</code>. Esses pontos dos recursos formam a grade endógena, uma por
+  estado da renda, e nenhuma equação é resolvida numericamente. Com poupança zero, o ponto é o
+  nível de recursos em que o limite de endividamento deixa de se impor, e abaixo dele o limite
+  mantém o consumo igual aos recursos. O limite se impõe até recursos maiores quanto maior a
+  renda, como no exemplo 30, e nos três estados mostrados ali a política fica a menos de 1e-4 da
+  obtida por iteração temporal. A maior diferença nos pontos da grade da iteração temporal está
+  no primeiro ponto acima da quina em que o limite deixa de se impor para a renda mais baixa. Essa
+  quina cai dentro de uma célula da grade da iteração temporal e sobre um ponto da grade endógena,
+  e por isso as duas interpolações diferem mais ali. Os erros da equação de Euler são relativos ao
+  consumo aqui, e maiores na mesma célula. A validação compara o <code>egm</code> com o
+  <code>egm</code> do dolo no modelo de consumo e poupança do dolo, com renda iid e com renda
+  markoviana, e os dois concordam a 1e-11.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1370,6 +1418,26 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
     </tbody>
   </table>
 
+  <h3>Método da grade endógena comparado com o dolo e a iteração temporal</h3>
+  <p>O <code>egm</code> do dolo 0.4.9.20 resolve o modelo de consumo e poupança dele, com a renda
+  iid do arquivo publicado e com o log da renda numa cadeia de Markov de três estados, na mesma
+  grade da poupança. Os dois interpolam da mesma forma e concordam em 199 pontos dos recursos
+  disponíveis. A iteração temporal resolve o mesmo modelo numa grade fixa dos recursos, e os dois
+  métodos diferem pelo erro de interpolação, maior junto da quina em que o limite de
+  endividamento deixa de se impor. Com as duas grades estendidas até recursos iguais a 8, além de
+  onde caem os recursos do período seguinte, a diferença diminui à medida que as grades são
+  refinadas.</p>
+  <table>
+    <thead><tr><th>O que é comparado</th><th>Desvio</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>consumo e poupança contra o dolo, renda iid, relativo</td><td class="num">9e-13</td><td class="ok">OK</td></tr>
+      <tr><td>consumo e poupança contra o dolo, renda markoviana, relativo</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>contra a iteração temporal, renda markoviana, 100 pontos, maior</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
+      <tr><td>contra a iteração temporal, renda markoviana, 1600 pontos até 8, maior (média 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
+      <tr><td>crescimento estocástico contra a forma fechada, consumo, 80 pontos, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
   <h3>Identificação local comparada com o Dynare</h3>
   <p>Três modelos na média da priori: <code>kim2</code> e <code>as2007</code>, de
   <code>tests/identification</code> do Dynare, e <code>fs2000</code>, dos seus exemplos. Em
@@ -1455,9 +1523,9 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # a forma f
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
   Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev, da iteração temporal e da iteração da função valor, como o método da
-  grade endógena, o <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais
-  recursos. Agentes
+  colocação de Chebyshev, da iteração temporal, da iteração da função valor e do método da grade
+  endógena, como a iteração das expectativas, o
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Agentes
   heterogêneos ficam fora do dsgelab, e o
   <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> e o
   <a href="https://github.com/gboehl/econpizza">econpizza</a> resolvem esses modelos.</p></div>

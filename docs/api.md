@@ -570,6 +570,76 @@ points is in `values` `(n_nodes, grid.n)` and the policy in `policy` `(n_nodes, 
 n_controls)`. The other fields are `program`, `params`, `grid`, `chain`, `markov_states`,
 `interpolation`, `discount`, `iterations`, `converged`, `distance` and `history`.
 
+### `EGMProgram(states, controls, poststate, expectations, expectation, direct_response, reverse_state, half_transition, post_decision, shocks=(), bounds=None, name="program")`
+
+The declaration of a problem for the endogenous grid method (Carroll, 2006). It has one
+endogenous state `s`, and the poststate `a` is that state at the end of the period, once the
+controls `x` are chosen. The Euler equation is written so that its expectation depends on today
+only through the poststate, `z(a) = E[h(s', x(s'), e')]` with `s' = half_transition(a, e')`, and
+inverts in closed form for the controls, `x = direct_response(a, z)`. The functions are those of
+dolo's `expectation`, `half_transition`, `direct_response_egm` and `reverse_state` blocks, and
+`post_decision` is added for the Euler errors and the simulation. For consumption and saving with
+cash on hand `w`, `a = w - c`, `w' = R a + y'`, `z = beta R E[c'^(-gamma)]` and
+`c = z^(-1/gamma)`.
+
+| Field | Meaning |
+|---|---|
+| `states`, `controls`, `shocks` | the names, which must all differ from each other and from the poststate and the expectations. The states are the endogenous one and those that follow a Markov chain |
+| `poststate`, `expectations` | the name of the poststate, and the names of the integrated terms |
+| `expectation` | `expectation(s, x, e, params)`, the terms integrated over the next period, at next period's states and controls: `{name: value}` or a sequence in the order of `expectations` |
+| `direct_response` | `direct_response(a, z, params)`, the controls that satisfy the Euler equation given the poststate and the integrated terms `z`, as `{control: value}` or a sequence |
+| `reverse_state` | `reverse_state(a, x, params)`, the endogenous state from which the controls `x` lead to the poststate `a` |
+| `half_transition` | `half_transition(a, e, params)`, next period's endogenous state |
+| `post_decision` | `post_decision(s, x, params)`, the poststate, the inverse of `reverse_state` in the state |
+| `bounds` | `{control: (lower, upper)}`, each a number, `None`, or `bound(states, params)` |
+
+`a` is a name-indexed view of the poststate and of today's values of the Markov states. `e` holds
+the shocks and, under their own names, the next values of the Markov states, as in
+`DynamicProgram`. `reverse_state`, `half_transition` and `post_decision` return a value, or
+`{name: value}`.
+
+### `egm(program, params, *, grid, initial, markov=None, cov=None, n_quad=5, quadrature=None, interpolation="linear", tol=1e-8, max_iter=1000) -> EGMSolution`
+
+The endogenous grid method on the grid of the poststate. Each iteration takes the policy found so
+far as the next period's and, at every poststate on the grid, integrates the expectation, inverts
+it for the controls with `direct_response` and finds the state from which they are chosen with
+`reverse_state`. Those states are the endogenous grid, one per node of the Markov chain, and the
+policy is interpolated between them and held within the bounds. No equation is solved
+numerically. The iteration stops when neither a control nor a point of the endogenous grid moves
+by more than `tol`.
+
+| Argument | Meaning |
+|---|---|
+| `grid` | a `CartesianGrid` with one axis, named after the poststate, or the mapping that builds one |
+| `initial` | the policy the first iteration takes as next period's: an `EGMSolution` (to refine on another grid), `initial(states, params)` returning the controls, or `{control: number or function}` |
+| `markov`, `cov`, `n_quad`, `quadrature` | the states other than the endogenous one, which must follow Markov chains, and the shocks' integration, as in `time_iteration` |
+| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline, between the points of the endogenous grid. Both extrapolate linearly |
+| `tol`, `max_iter` | the stopping rule, on the largest change of a control or of a point of the endogenous grid |
+
+A borrowing limit is given as a bound on the controls, `c <= w`. With the lowest poststate at
+the limit, the lowest endogenous point is the cash on hand at which the limit stops binding.
+Below it the linear extrapolation exceeds `w`, and the bound holds consumption at `w`, as dolo's
+`egm` does. The first iteration checks that `post_decision` inverts `reverse_state`. The call
+raises `ValueError` if the endogenous grid does not increase with the poststate at some node,
+which happens when the problem is not concave and needs an upper envelope (Iskhakov, Jørgensen,
+Rust and Schjerning, 2017) that `egm` does not compute. The functions are first called with
+every point at once and point by point if that fails, as in `time_iteration`.
+
+### `EGMSolution`
+
+`controls(states)`, also `solution(states)`, gives the policy at one state or at a row-stacked
+array of states in the program's order, or at a mapping from names to values; a Markov state must
+take one of its chain's node values. `euler_errors(states=None)` gives, at each state, the
+controls that `direct_response` calls for given the policy's poststate and next period's policy,
+held within the bounds, minus the policy, divided by the policy's absolute value. Where a bound
+binds and the direct response lies beyond it, the error is zero. By default the states are the
+centres between neighbouring points of the endogenous grid at every node of the chain.
+`simulate(periods, *, start=None, seed=None, shocks=None)` returns `states`, `controls`,
+`poststates` and `nodes`, one row per period. The endogenous grid is in `endogenous`
+`(n_nodes, grid.n)` and the controls there in `values` `(n_nodes, grid.n, n_controls)`. The other
+fields are `program`, `params`, `grid`, `chain`, `markov_states`, `interpolation`, `iterations`,
+`converged`, `distance` (the last change) and `history` (every change, from the second iteration).
+
 ---
 
 ## Transitions

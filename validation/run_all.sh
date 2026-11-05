@@ -12,8 +12,8 @@
 # in macromodelling/ pins the versions of MacroModelling.jl. The Python that runs the compare_*.py
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
-# compare_time_iteration.py and compare_value_iteration.py, runs in a Python 3.11 environment of its
-# own that dolo/setup.sh creates with uv.
+# compare_time_iteration.py, compare_value_iteration.py and compare_egm.py, runs in a Python 3.11
+# environment of its own that dolo/setup.sh creates with uv.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -112,12 +112,14 @@ if [ -n "${SKIP_DOLO:-}" ]; then
   results+=("skipped  dolo (SKIP_DOLO)")
 else
   # without deleting it, a failed dolo run would let the comparison read an earlier result
-  rm -f out_time_iteration/dolo.json out_value_iteration/dolo.json
+  rm -f out_time_iteration/dolo.json out_value_iteration/dolo.json out_egm/dolo.json
   step "dolo: environment"  bash dolo/setup.sh
   step "dolo: time iteration" dolo/.venv/bin/python dolo/run_dolo.py
   step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
+  step "dolo: endogenous grid method" dolo/.venv/bin/python dolo/run_dolo_egm.py
+  step "compare_egm.py"       "$PYTHON" compare_egm.py
 fi
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py

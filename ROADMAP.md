@@ -439,10 +439,21 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   changes to run it, without editing dolo. On stochastic growth with log utility and full
   depreciation, the value's error against the closed form falls by at least 3.4 when the spacing
   halves, to 1e-4 with 80 capital points and linear interpolation and 3e-9 with cubic.
-- [ ] **0.7.4 — the endogenous grid method** (Carroll, 2006), for problems whose Euler equation
-  inverts in closed form given the next period's policy, with the inverse supplied by the user.
-  Reference: dolo's `egm` on the consumption–savings model, and the time-iteration solution of
-  0.7.2 on the same grid.
+- [x] **0.7.4 — the endogenous grid method.** `egm` solves an `EGMProgram`, a new declaration
+  with one endogenous state, its poststate, the expectation in the Euler equation, the direct
+  response that inverts it for the controls and the reverse map from the poststate to the state,
+  by the endogenous grid method (Carroll, 2006). The grid is on the poststate, the other states
+  follow Markov chains, and the policy is held within its bounds, which gives a borrowing limit.
+  On dolo's consumption–savings model, with the same grid, dolo 0.4.9.20's `egm` and `dsgelab`'s
+  agree within 9e-13 with iid income and 1.1e-11 with income a three-state Markov chain. dolo
+  runs as published once a debugging line is silenced, and its policy is read where its resampled
+  rule equals it. Time iteration on the same model shares the solution but not the discretisation,
+  and on dolo's grids of 100 points the two differ by up to 3.4e-4 with iid income and 2.8e-3
+  with the chain, most near the kink where the borrowing limit stops binding. With both grids
+  extended to cash on hand 8, the mean difference falls to 4.3e-7 and 1.9e-6 with 1600 points. On
+  stochastic growth with log utility and full depreciation, the policy's relative error against
+  the closed form falls by 3.9 to 4.0 when the spacing halves, to 1.6e-4 with 80 points and
+  linear interpolation and 5.4e-5 with cubic.
 - [ ] **0.7.5 — sparse grids.** Smolyak collocation (Judd, Maliar, Maliar and Valero, 2014),
   isotropic and anisotropic, so that projection and time iteration run with more than three
   states. Reference: Tasmanian's Smolyak nodes and interpolation weights, and the closed form of
