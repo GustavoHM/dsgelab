@@ -41,7 +41,7 @@ from .estimation import unpack_point
 from .kalman import StateSpace, state_space
 from .model import Covariance, Model, Params, Point, get_param
 
-__all__ = ["Identification", "IdentificationCheck", "identification"]
+__all__ = ["Identification", "IdentificationCheck", "IdentificationStrength", "identification"]
 
 CRITERIA = ("moments", "spectrum", "minimal")
 
@@ -129,6 +129,7 @@ class Identification:
     minimal_states: int | None = None
     collinearity: dict[int, dict[str, tuple[tuple[str, ...], float]]] = field(
         default_factory=dict)
+    strength: IdentificationStrength | None = None
 
     @property
     def identified(self) -> bool:
@@ -162,6 +163,54 @@ class Identification:
         return "\n".join(out)
 
 
+@dataclass
+class IdentificationStrength:
+    """Identification strength from the information matrix, as Dynare's ``identification``.
+
+    See :func:`identification` with ``strength=True``. Every array is in the
+    order of :attr:`Identification.names`.
+
+    Attributes
+    ----------
+    information : the asymptotic information matrix of the Gaussian likelihood
+        on the sample :attr:`data`, Dynare's ``AHess``:
+        :math:`\\sum_t \\partial v_t' F_t^{-1} \\partial v_t + \\tfrac12
+        \\mathrm{tr}(F_t^{-1} \\partial F_t F_t^{-1} \\partial F_t)`, with
+        :math:`v_t` and :math:`F_t` the Kalman filter's prediction errors and their
+        variance and the derivatives taken with respect to two parameters.
+    data : the ``(T, n_obs)`` sample, given or simulated.
+    uncertainty : the asymptotic standard deviation of each parameter, the root of
+        the diagonal of the inverse information on the parameters that are not in
+        a dependent set (NaN for the others).
+    strength, strength_prior : Ratto and Iskrev's (2011) strength, the absolute
+        value of the parameter, or its prior standard deviation, over its
+        uncertainty (``ide_strength_dMOMENTS`` and ``..._prior``).
+    sensitivity, sensitivity_prior : the root of the diagonal of the information
+        times the absolute value of the parameter, or its prior standard
+        deviation (``deltaM`` and ``deltaM_prior``).
+    moments_sensitivity : the norm of each column of the moments' Jacobian, each
+        moment divided by its asymptotic standard deviation from the information,
+        times the prior standard deviation (``si_dMOMENTSnorm``). NaN without
+        priors, as in Dynare.
+    identified : the parameters in no dependent set of the information matrix.
+    singular_values, patterns : the singular values of the information, largest
+        first, and the right singular vectors as columns, Dynare's identification
+        patterns.
+    """
+
+    information: np.ndarray
+    data: np.ndarray
+    uncertainty: np.ndarray
+    strength: np.ndarray
+    strength_prior: np.ndarray
+    sensitivity: np.ndarray
+    sensitivity_prior: np.ndarray
+    moments_sensitivity: np.ndarray
+    identified: list[str]
+    singular_values: np.ndarray
+    patterns: np.ndarray
+
+
 # ======================================================================= entry
 def identification(model: Model, params: Params, *,
                    free: Sequence[str] | Mapping[str, float],
@@ -176,7 +225,9 @@ def identification(model: Model, params: Params, *,
                    criteria: Sequence[str] = CRITERIA,
                    tol_rank: float | str = "auto", tol_deriv: float = 1e-8,
                    tol_sv: float = 1e-3, step: float = 1e-2,
-                   levels: int = 8) -> Identification:
+                   levels: int = 8, strength: bool = False, data: Any = None,
+                   periods: int = 300, seed: int | None = 0,
+                   priors: Mapping[str, Any] | None = None) -> Identification:
     """Local identification of ``free`` at one point, from the observables' distribution.
 
     Parameters
@@ -216,6 +267,20 @@ def identification(model: Model, params: Params, *,
         estimates; the steps whose two estimates of the moments' derivatives agree
         best are kept for that parameter, and a step at which the model has no
         stationary solution is skipped.
+
+    strength : also compute the identification strength of Ratto and Iskrev
+        (2011) from the asymptotic information matrix, as Dynare's
+        ``identification`` does at first order (:class:`IdentificationStrength`,
+        in :attr:`Identification.strength`). The matrix is computed on ``data``
+        (a mapping of the observables or a ``(T, n_obs)`` array, in the units of
+        the observation equation), or, as in Dynare, on a sample of ``periods``
+        observations simulated from the model at the point, after 100 discarded
+        ones (``seed`` for the draws). The derivatives of the Kalman filter's
+        prediction errors and variances are differences at the steps chosen for
+        the moments. ``priors`` maps the free parameters to their priors (a
+        :class:`~dsgelab.Prior` or a tuple, as in
+        :class:`~dsgelab.EstimationProblem`), for the measures relative to the
+        prior standard deviation.
 
     Apart from ``tol_rank="auto"``, the tolerances and the reading of each matrix
     are Dynare's, so the verdicts can be compared with its ``identification``
@@ -334,10 +399,18 @@ def identification(model: Model, params: Params, *,
                            tol_sv).tolerance)
         collinearity = _brute_force(d_moments[rows], names, min(max_group, n_par - 1),
                                     tol_deriv, tol / np.linalg.norm(X, 2))
+    strength_result = None
+    if strength:
+        Y = _sample(space0, data, periods, seed)
+        prior_sd = _prior_sd(priors, names)
+        strength_result = _strength(_innovations(space0, Y), jac(lambda s: _innovations(s, Y)),
+                                    Y, d_moments, theta0, prior_sd, names, no, tol_rank,
+                                    tol_sv, tol_deriv)
     return Identification(names=names, point=dict(zip(names, map(float, theta0))),
                           observables=observables, lags=lags, moments=moments,
                           moment_labels=labels, checks=checks, skipped=skipped,
-                          minimal_states=minimal_states, collinearity=collinearity)
+                          minimal_states=minimal_states, collinearity=collinearity,
+                          strength=strength_result)
 
 
 def _richardson(trio, f):
@@ -349,6 +422,128 @@ def _richardson(trio, f):
     """
     d = [(f(p) - f(m)) / (2 * h) for h, p, m in trio]
     return (4 * d[1] - d[0]) / 3, (4 * d[2] - d[1]) / 3
+
+
+# ================================================================== strength
+def _sample(s: StateSpace, data, periods: int, seed) -> np.ndarray:
+    """The observed sample: ``data``, or ``periods`` draws after 100, from zero, as Dynare."""
+    if data is not None:
+        return s.data_matrix(data)
+    rng = np.random.default_rng(seed)
+    total = periods + 100
+    ne, no = s.R.shape[1], s.Z.shape[0]
+    L = linalg.cholesky(s.Sigma, lower=True) if np.any(s.Sigma) else np.zeros((ne, ne))
+    x = np.zeros(s.T.shape[0])
+    Y = np.empty((total, no))
+    for t in range(total):
+        x = s.T @ x + s.R @ (L @ rng.standard_normal(ne))
+        Y[t] = s.d + s.Z @ x
+    if np.any(s.H):
+        Y += rng.standard_normal((total, no)) @ linalg.cholesky(s.H, lower=True).T
+    return Y[100:]
+
+
+def _innovations(s: StateSpace, Y: np.ndarray) -> np.ndarray:
+    """The Kalman filter's ``v_t`` and ``F_t`` on ``Y``, from the unconditional distribution.
+
+    Stacked as ``[v_1, ..., v_T, vec F_1, ..., vec F_T]``, the quantities whose
+    derivatives give the asymptotic information matrix.
+    """
+    T, Z = s.T, s.Z
+    RQR = s.R @ s.Sigma @ s.R.T
+    a = np.zeros(T.shape[0])
+    P = linalg.solve_discrete_lyapunov(T, RQR)
+    n, no = Y.shape
+    v = np.empty((n, no))
+    F = np.empty((n, no, no))
+    for t in range(n):
+        v[t] = Y[t] - s.d - Z @ a
+        F[t] = Z @ P @ Z.T + s.H
+        K = np.linalg.solve(F[t], Z @ P).T
+        a = T @ (a + K @ v[t])
+        P = T @ (P - K @ Z @ P) @ T.T + RQR
+        P = (P + P.T) / 2
+    return np.concatenate([v.ravel(), F.ravel()])
+
+
+def _information(f: np.ndarray, d: np.ndarray, n: int, no: int) -> np.ndarray:
+    """``sum_t dv' F^{-1} dv + tr(F^{-1} dF_i F^{-1} dF_j) / 2`` from the stacked filter output."""
+    p = d.shape[1]
+    F = f[n * no:].reshape(n, no, no)
+    dv = d[:n * no].reshape(n, no, p)
+    dF = d[n * no:].reshape(n, no, no, p)
+    A = np.zeros((p, p))
+    for t in range(n):
+        iF = np.linalg.inv(F[t])
+        A += dv[t].T @ iF @ dv[t]
+        G = np.einsum("ij,jkp->ikp", iF, dF[t])            # F^{-1} dF_p
+        A += 0.5 * np.einsum("ijp,jiq->pq", G, G)
+    return (A + A.T) / 2
+
+
+def _prior_sd(priors, names) -> np.ndarray:
+    if not priors:
+        return np.full(len(names), np.nan)
+    from .priors import Prior, prior as make_prior
+    out = []
+    for n in names:
+        pr = priors.get(n)
+        if pr is None:
+            out.append(np.nan)
+            continue
+        p = pr if isinstance(pr, Prior) else make_prior(*pr)
+        out.append(float(p.sd))
+    return np.array(out)
+
+
+def _matlab_rank(X: np.ndarray) -> int:
+    return _rank(X, max(X.shape) * np.spacing(np.linalg.norm(X, 2))) if X.size else 0
+
+
+def _strength(f0, dfilter, Y, d_moments, theta, prior_sd, names, no, tol_rank, tol_sv,
+              tol_deriv) -> IdentificationStrength:
+    """Dynare's identification strength (``identification.analysis``) from the information.
+
+    ``f0`` is the filter output at the point and ``dfilter`` its two derivative
+    estimates. The information is read as Dynare reads it, normalised by its
+    diagonal when that keeps its rank; the parameters in no dependent set get an
+    uncertainty, and the moments' covariance is the Jacobian's quadratic form in
+    the inverse information over the parameters that move it.
+    """
+    n = Y.shape[0]
+    p = len(names)
+    A = _information(f0, dfilter[0], n, no)
+    E = A - _information(f0, dfilter[1], n, no)
+    delta = np.sqrt(np.diag(A))
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scale = np.outer(delta, delta)
+        tilde = A / scale
+    use_tilde = not (np.any(delta ** 2 == 0) or _matlab_rank(A) > _matlab_rank(tilde))
+    X, err = (tilde, _norm2(E / scale)) if use_tilde else (A, _norm2(E))
+    chk = _check("information", A, X, err, 0, names, tol_rank, tol_sv)
+    dependent = {m for group in chk.dependent for m in group}
+    ok = [i for i, m in enumerate(names) if m not in dependent]
+    uncertainty = np.full(p, np.nan)
+    if ok:
+        uncertainty[ok] = np.sqrt(np.diag(np.linalg.inv(A[np.ix_(ok, ok)])))
+    moving = [i for i, m in enumerate(names) if chk.sensitive[m]]
+    J = d_moments[np.max(np.abs(d_moments), axis=1) > tol_deriv]
+    cmm = J[:, moving] @ np.linalg.solve(A[np.ix_(moving, moving)], J[:, moving].T)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        strength = np.full(p, np.nan)
+        strength_prior = np.full(p, np.nan)
+        strength[ok] = 1 / (uncertainty[ok] / np.abs(theta[ok]))
+        strength_prior[ok] = 1 / (uncertainty[ok] / prior_sd[ok])
+        quant = J / np.sqrt(np.diag(cmm))[:, None]
+    norms = np.abs(quant[0]) if quant.shape[0] == 1 else np.sqrt(np.sum(quant ** 2, axis=0))
+    _, sv, Vt = np.linalg.svd(A)
+    return IdentificationStrength(information=A, data=Y, uncertainty=uncertainty,
+                                  strength=strength, strength_prior=strength_prior,
+                                  sensitivity=delta * np.abs(theta),
+                                  sensitivity_prior=delta * np.abs(prior_sd),
+                                  moments_sensitivity=norms * prior_sd,
+                                  identified=[names[i] for i in ok], singular_values=sv,
+                                  patterns=Vt.T)
 
 
 # ================================================================== the point
@@ -668,7 +863,8 @@ def _norm2(E: np.ndarray) -> float:
 
 
 def _check(name, J, X, error, kind, names, tol_rank, tol_sv) -> IdentificationCheck:
-    """Dynare's ``identification.checks``: kind 1 a Jacobian, 2 Komunjer and Ng's, 3 a Gram.
+    """Dynare's ``identification.checks``: kind 0 an information matrix, 1 a Jacobian, 2
+    Komunjer and Ng's, 3 a Gram.
 
     ``X`` is the normalised matrix and ``error`` the estimated 2-norm error of the
     Jacobian behind it: of ``X`` itself, or for a Gram matrix of the derivatives
@@ -725,7 +921,7 @@ def _check(name, J, X, error, kind, names, tol_rank, tol_sv) -> IdentificationCh
 
     mco = np.full(p, np.nan)
     Xnz = nonzero(ind1)
-    if kind == 3:
+    if kind in (0, 3):
         if ind1.size:
             sub = X[np.ix_(ind1, ind1)]
             delta = np.sqrt(np.diag(sub))
