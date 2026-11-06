@@ -73,6 +73,19 @@ tempo numa grade cartesiana, com limites sobre os controles impostos por complem
 concorda com o `time_iteration` do dolo em três modelos publicados com ele e com a forma fechada do
 crescimento estocástico.
 
+A versão 0.9.0, lançada em 5 de novembro de 2026, fecha o marco 0.8 e traz o marco 0.9. As versões
+0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem nela. Numa grade, o
+pacote agora também resolve por iteração da função valor com os passos de Howard, pelo método da
+grade endógena, e por colocação e iteração temporal em grades esparsas de Smolyak com qualquer
+número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o Tasmanian e a forma
+fechada do crescimento estocástico com até seis estoques de capital. A mudança de regime markoviana
+é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no MATLAB, e por isso a
+conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha publicam e contra o
+statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no espaço das
+sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O BVAR e o
+DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos do Dynare
+entraram a pedido do autor, e os números que eles desenham concordam com os do próprio Dynare.
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada
@@ -418,7 +431,8 @@ A colocação de Chebyshev com até três estados já existe e reproduz a soluç
 estocástico. Seus choques são i.i.d. e integrados por Gauss–Hermite, e a política não tem limites.
 O marco sai em partes, um recurso por versão de correção, da 0.7.1 à 0.7.5, cada uma publicada só
 depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma anterior. A versão
-0.8.0 fecha o marco, sem recurso novo próprio.
+0.8.0 fecha o marco, sem recurso novo próprio. Só a 0.7.1 e a 0.7.2 foram publicadas à parte. Os
+itens a partir da 0.7.3 saíram na 0.9.0.
 
 - [x] **0.7.1 — discretização de processos.** `tauchen` e `rouwenhorst` transformam um AR(1) em
   uma `MarkovChain` com nós, matriz de transição, distribuição estacionária, momentos e simulação.
@@ -491,8 +505,8 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   (1457 pontos), e a projeção e a iteração temporal concordam dentro de 2,3e-9. Com seis estados,
   o nível 1 na produtividade, em que a política é linear, mantém o erro da grade isotrópica com
   1283 pontos em vez de 1457.
-- [ ] **0.8.0** — o marco completo: a linha da comparação e o README atualizados, e o lançamento
-  feito da mesma forma que o da 0.7.0.
+- [x] **0.8.0** — o marco completo: a linha da comparação e o README atualizados. O lançamento é o
+  da 0.9.0, feito da mesma forma que o da 0.7.0, junto com o marco 0.9.
 
 O dolo 0.4.9.20 só se instala no Python 3.11, com pandas abaixo de 2.0. Em 30 de outubro de 2026,
 num ambiente assim, o seu `time_iteration` resolveu o crescimento estocástico com utilidade

@@ -2,10 +2,18 @@
 
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes bugs. The exception
-is the roadmap's milestone 0.8, released in parts: versions 0.7.1 to 0.7.5 each add one of its
-features, without changing the API of an earlier release, and 0.8.0 closes it.
+is the roadmap's milestone 0.8, planned in parts: versions 0.7.1 and 0.7.2 each added one of its
+features, without changing the API of an earlier release. The rest of the milestone, planned as
+0.7.3 to 0.7.5 and 0.8.0, was not published on its own and came out in 0.9.0.
 
 ## Unreleased
+
+## 0.9.0 — 2026-11-05
+
+The rest of the roadmap's milestone 0.8 (global methods): value function iteration, the
+endogenous grid method and Smolyak sparse grids. Milestone 0.9: Markov regime switching,
+heterogeneous agents by the sequence-space Jacobian, and the BVAR and the DSGE-VAR. Also the rest
+of Dynare's figures, at the author's request.
 
 ### Added
 

@@ -68,6 +68,19 @@ Cartesian grid, with bounds on the controls imposed by complementarity. It agree
 `time_iteration` on three models from the dolo repository and with the closed form of stochastic
 growth.
 
+Version 0.9.0, released on 5 November 2026, closes milestone 0.8 and brings milestone 0.9.
+Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features come out in
+it. On a grid, the package now also solves by value function iteration with Howard's steps, by the
+endogenous grid method, and by collocation and time iteration on Smolyak sparse grids with any
+number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed form of
+stochastic growth with up to six capital stocks. Markov regime switching is solved at first order
+and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the solutions
+Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous agents are
+solved by the sequence-space Jacobian method and agree with sequence-jacobian on its Krusell–Smith
+and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and `dsge_var`. The
+rest of Dynare's figures came in at the author's request, and the numbers they draw agree with
+Dynare's own.
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard
@@ -400,7 +413,8 @@ Chebyshev collocation with up to three states already exists and reproduces the 
 solution of stochastic growth. Its shocks are i.i.d. and integrated by Gauss–Hermite, and its
 policy has no bounds. The milestone is released in parts, one feature per patch version from
 0.7.1 to 0.7.5, each published only after it meets the six conditions above. No release changes the
-API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own.
+API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own. Only
+0.7.1 and 0.7.2 were published on their own. The items from 0.7.3 on came out in 0.9.0.
 
 - [x] **0.7.1 — process discretisation.** `tauchen` and `rouwenhorst` turn an AR(1) into a
   `MarkovChain` with nodes, transition matrix, stationary distribution, moments and simulation.
@@ -468,8 +482,8 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   3e-8 with six at level 4 (1457 points), and projection and time iteration agree within 2.3e-9.
   With six states, level 1 along productivity, in which the policy is linear, keeps the error of
   the isotropic grid with 1283 points instead of 1457.
-- [ ] **0.8.0** — the milestone complete: the comparison row and the README updated, and the
-  release made in the same way as 0.7.0.
+- [x] **0.8.0** — the milestone complete: the comparison row and the README updated. The release
+  is 0.9.0, made in the same way as 0.7.0, together with milestone 0.9.
 
 dolo 0.4.9.20 only installs on Python 3.11, with pandas below 2.0. On 30 October 2026, in such an
 environment, its `time_iteration` solved stochastic growth with log utility and full depreciation
