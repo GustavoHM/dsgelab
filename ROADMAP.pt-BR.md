@@ -592,6 +592,35 @@ projeto Julia já usado para o MacroModelling.jl.
   na suíte. Com ele a moda se desloca até 0,39 desvio-padrão posterior, e o `lambda` estimado
   passa de 0,533 a 0,568. As IRFs do `bvar_irf` e do DSGE-VAR (`bayesian_irf`) ficam de fora.
 
+### 0.10 — as lacunas que a 0.9 deixou, e a auditoria antes do congelamento
+
+Planejado em 5 de novembro de 2026, depois da 0.9.0. Cada item vem de uma limitação que a
+documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
+
+- [ ] **`value_iteration` numa `SmolyakGrid`**, como o `solve_projection` e o `time_iteration` já
+  aceitam. Referência: o valor em forma fechada do crescimento estocástico com vários estoques de
+  capital, e o `value_iteration` numa grade cartesiana.
+- [ ] **O BVAR na avaliação de previsões, e as IRFs do BVAR e do DSGE-VAR.** O
+  `forecast_evaluation` aceita um BVAR como referência de comparação, o que fecha a nota do item da
+  0.6. Referência: o `bvar_irf` e o `bayesian_irf` com `dsge_var` do Dynare.
+- [ ] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
+  tem e o `dsgelab` não. Referência: o `improved_time_iteration` do dolo 0.4.9.20 nos modelos dele,
+  e o `time_iteration` na mesma grade.
+- [ ] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
+  matriz de informação, as decomposições de choques anualizadas e por safra, e bandas para as
+  previsões condicionais. Referência: o `identification`, o `shock_decomposition` e o
+  `conditional_forecast` do Dynare.
+- [ ] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
+  `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4.
+- [ ] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
+  (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
+  dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
+  Markov que muda ao longo de uma trajetória de transição.
+- [ ] **Auditoria da API antes do congelamento.** Um inventário do `__all__`, com nomes, ordem dos
+  argumentos e valores padrão coerentes entre os módulos. Cada mudança vem com um aviso de
+  descontinuação que dura pelo menos uma versão menor, como exige a política de versões da 0.5, e
+  por isso a auditoria sai antes da 1.0.
+
 ### 1.0
 
 Tudo o que está na lista acima coberto, a API congelada e, a partir daí, versionamento semântico

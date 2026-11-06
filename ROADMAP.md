@@ -565,6 +565,35 @@ MacroModelling.jl.
   `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) are
   left out.
 
+### 0.10 — the gaps 0.9 left, and the audit before the freeze
+
+Planned on 5 November 2026, after 0.9.0. Each item comes from a limitation that the documentation
+of 0.9.0 records, and each keeps the six conditions above.
+
+- [ ] **`value_iteration` on a `SmolyakGrid`**, as `solve_projection` and `time_iteration` already
+  take one. Reference: the closed-form value of stochastic growth with several capital stocks, and
+  `value_iteration` on a Cartesian grid.
+- [ ] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
+  `forecast_evaluation` takes a BVAR as its benchmark, which closes the note in the 0.6 item.
+  Reference: Dynare's `bvar_irf` and `bayesian_irf` with `dsge_var`.
+- [ ] **Expectations iteration and improved time iteration**, the global methods dolo has and
+  `dsgelab` does not. Reference: dolo 0.4.9.20's `improved_time_iteration` on its own models, and
+  `time_iteration` on the same grid.
+- [ ] **The figures left out in 0.9**: identification strength and sensitivity, from the
+  information matrix, the annualised and vintage shock decompositions, and bands for conditional
+  forecasts. Reference: Dynare's `identification`, `shock_decomposition` and
+  `conditional_forecast`.
+- [ ] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
+  `deflator`. Reference: Dynare, as for the balanced growth path of 0.4.
+- [ ] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
+  Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
+  in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
+  along a transition path.
+- [ ] **API audit before the freeze.** An inventory of `__all__`, with the names, argument orders
+  and defaults made consistent across modules. Every change comes with a deprecation warning that
+  lasts at least one minor version, as the version policy of 0.5 requires, so the audit is
+  published before 1.0.
+
 ### 1.0
 
 Everything in the list above is covered, the API is frozen, and from then on versioning is strictly
