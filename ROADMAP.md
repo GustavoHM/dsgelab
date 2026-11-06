@@ -68,18 +68,19 @@ Cartesian grid, with bounds on the controls imposed by complementarity. It agree
 `time_iteration` on three models from the dolo repository and with the closed form of stochastic
 growth.
 
-Version 0.9.0, released on 5 November 2026, closes milestone 0.8 and brings milestone 0.9.
-Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features come out in
-it. On a grid, the package now also solves by value function iteration with Howard's steps, by the
-endogenous grid method, and by collocation and time iteration on Smolyak sparse grids with any
-number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed form of
-stochastic growth with up to six capital stocks. Markov regime switching is solved at first order
-and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the solutions
-Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous agents are
-solved by the sequence-space Jacobian method and agree with sequence-jacobian on its Krusell–Smith
-and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and `dsge_var`. The
-rest of Dynare's figures came in at the author's request, and the numbers they draw agree with
-Dynare's own.
+Version 0.9.0, released on 5 November 2026 on PyPI and on Zenodo (DOI
+[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), closes milestone 0.8 and brings
+milestone 0.9. Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features
+come out in it. On a grid, the package now also solves by value function iteration with Howard's
+steps, by the endogenous grid method, and by collocation and time iteration on Smolyak sparse grids
+with any number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed
+form of stochastic growth with up to six capital stocks. Markov regime switching is solved at first
+order and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the
+solutions Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous
+agents are solved by the sequence-space Jacobian method and agree with sequence-jacobian on its
+Krusell–Smith and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and
+`dsge_var`. The rest of Dynare's figures came in at the author's request, and the numbers they draw
+agree with Dynare's own.
 
 ## What counts as done
 
@@ -250,14 +251,15 @@ No new features. The items below are conditions for publishing.
 - [x] `python -m build`, `twine check`, publication by trusted publishing, TestPyPI first
   (`release.yml`, triggered by a `v*` tag). The workflow checks the tag against the version,
   publishes to TestPyPI, runs the suite against what TestPyPI serves, and publishes to PyPI only
-  after the required reviewer approves. Versions 0.5.0, 0.7.0, 0.7.1 and 0.7.2 went out this way,
-  the first on 18 October 2026, the next two on 30 October and 0.7.2 on 31 October.
+  after the required reviewer approves. Versions 0.5.0, 0.7.0, 0.7.1, 0.7.2 and 0.9.0 went out this
+  way, the first on 18 October 2026, the next two on 30 October, 0.7.2 on 31 October and 0.9.0 on
+  5 November.
 - [x] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
   change, with the links to `docs/` pointed at GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.7.2 is
-  10.5281/zenodo.23835374 (0.7.1 is 10.5281/zenodo.23827669, 0.7.0 is 10.5281/zenodo.23825088,
-  0.5.0 is 10.5281/zenodo.23456475), and the concept DOI 10.5281/zenodo.23456474, which resolves
-  to the latest release, is in `CITATION.cff`.
+- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.9.0 is
+  10.5281/zenodo.23992839 (0.7.2 is 10.5281/zenodo.23835374, 0.7.1 is 10.5281/zenodo.23827669, 0.7.0
+  is 10.5281/zenodo.23825088, 0.5.0 is 10.5281/zenodo.23456475), and the concept DOI
+  10.5281/zenodo.23456474, which resolves to the latest release, is in `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, code of conduct, issue and pull-request templates.
 - [x] `py.typed` and type annotations on the public API, with no public function or method left
   unannotated and no new error reported by `mypy`. The lazy-import wrappers in `__init__.py`

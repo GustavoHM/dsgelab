@@ -73,18 +73,20 @@ tempo numa grade cartesiana, com limites sobre os controles impostos por complem
 concorda com o `time_iteration` do dolo em três modelos publicados com ele e com a forma fechada do
 crescimento estocástico.
 
-A versão 0.9.0, lançada em 5 de novembro de 2026, fecha o marco 0.8 e traz o marco 0.9. As versões
-0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem nela. Numa grade, o
-pacote agora também resolve por iteração da função valor com os passos de Howard, pelo método da
-grade endógena, e por colocação e iteração temporal em grades esparsas de Smolyak com qualquer
-número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o Tasmanian e a forma
-fechada do crescimento estocástico com até seis estoques de capital. A mudança de regime markoviana
-é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no MATLAB, e por isso a
-conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha publicam e contra o
-statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no espaço das
-sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O BVAR e o
-DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos do Dynare
-entraram a pedido do autor, e os números que eles desenham concordam com os do próprio Dynare.
+A versão 0.9.0, lançada em 5 de novembro de 2026 no PyPI e no Zenodo (DOI
+[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), fecha o marco 0.8 e traz o
+marco 0.9. As versões 0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem
+nela. Numa grade, o pacote agora também resolve por iteração da função valor com os passos de
+Howard, pelo método da grade endógena, e por colocação e iteração temporal em grades esparsas de
+Smolyak com qualquer número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o
+Tasmanian e a forma fechada do crescimento estocástico com até seis estoques de capital. A mudança
+de regime markoviana é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no
+MATLAB, e por isso a conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha
+publicam e contra o statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no
+espaço das sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O
+BVAR e o DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos
+do Dynare entraram a pedido do autor, e os números que eles desenham concordam com os do próprio
+Dynare.
 
 ## O que conta como pronto
 
@@ -263,14 +265,15 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
 - [x] `python -m build`, `twine check`, publicação por *trusted publishing*, TestPyPI antes
   (`release.yml`, disparado por uma tag `v*`). O fluxo confere a tag contra a versão, publica no
   TestPyPI, roda a suíte contra o que o TestPyPI serve e só publica no PyPI depois da aprovação do
-  revisor obrigatório. As versões 0.5.0, 0.7.0, 0.7.1 e 0.7.2 saíram assim, a primeira em 18 de
-  outubro de 2026, as duas seguintes em 30 de outubro e a 0.7.2 em 31 de outubro.
+  revisor obrigatório. As versões 0.5.0, 0.7.0, 0.7.1, 0.7.2 e 0.9.0 saíram assim, a primeira em
+  18 de outubro de 2026, as duas seguintes em 30 de outubro, a 0.7.2 em 31 de outubro e a 0.9.0 em
+  5 de novembro.
 - [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
   mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.7.2 é
-  10.5281/zenodo.23835374 (a 0.7.1 é 10.5281/zenodo.23827669, a 0.7.0 é 10.5281/zenodo.23825088,
-  a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual 10.5281/zenodo.23456474, que leva sempre
-  à versão mais recente, está no `CITATION.cff`.
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.9.0 é
+  10.5281/zenodo.23992839 (a 0.7.2 é 10.5281/zenodo.23835374, a 0.7.1 é 10.5281/zenodo.23827669, a
+  0.7.0 é 10.5281/zenodo.23825088, a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual
+  10.5281/zenodo.23456474, que leva sempre à versão mais recente, está no `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
 - [x] `py.typed` e anotações de tipo na API pública, sem nenhuma função ou método público sem
   anotação e sem erro novo acusado pelo `mypy`. Os wrappers de importação preguiçosa (*lazy*) de
