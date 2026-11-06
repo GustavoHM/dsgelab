@@ -952,6 +952,8 @@ come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
 bash fetch.sh
 bash run_plots.sh                 # densities: draw_prior_density and posterior_moments
                                   # mcmc: fs2000 with mode_check, Metropolis and bayesian_irf (4 min)
+                                  # identification: fs2000's identification with advanced=1
+                                  # decomposition: real-time decompositions, conditional forecast
 python compare_plots.py
 ```
 
@@ -967,10 +969,14 @@ mode_check, 9 parameters, 21 points each: grid 8.9e-16; log posterior and log-li
   logmst (normal prior, Dynare's grid runs from -10 to 10): 1.9e-02 relative where both solve the model, and 10 of 21 points that only one of them solves
 posterior_irf, 1200 draws, 4 variables, 2 shocks, 20 periods: responses 2.5e-10, mean 2.1e-10, median 2.1e-10, lower 2.3e-10, upper 2.0e-10, deciles 2.3e-10 (relative to the largest response); the statistics of Dynare's own responses 3.6e-17
 posterior densities and modes of 'Priors and posteriors': 1.9e-15; smoothed shocks 2.6e-15 and observables 4.1e-16 at the posterior mean
+identification strength, fs2000 at the prior mean, 9 parameters, on Dynare's 300 simulated observations: information matrix 1.2e-08 (relative to the root of its diagonal), strength 2.7e-07, strength_prior 4.4e-08, sensitivity 5.8e-09, sensitivity_prior 5.8e-09, moments_sensitivity 4.9e-09 (relative); the bars drawn 2.7e-07, the patterns 2.4e-09 and their singular values 5.2e-06 (relative, as Dynare prints them); identified parameters the same
+real-time decompositions of fs2000 at the prior mean, 4 variables, 192 observations, forecast 4: realtime pool 3.4e-15, one-step conditional pool 3.4e-15, one-step forecast pool 3.2e-15; vintages 40, 80, 120 (realtime, forecast and 4-step conditional) 4.6e-15; what plot_shock_decomposition draws with realtime 1, 2 and 3, rolling and at vintage 80, 4.0e-15
+annualised decompositions, type=yoy 1.9e-14 and type=aoa 4.8e-15; initial condition decomposition, 14 of Dynare's 15 columns (the other is an auxiliary variable named otherwise), 5.1e-15
+conditional forecast with bands, gp_obs on a path for 4 periods by e_m, 12 periods, 2000 of Dynare's draws, 14 variables: mean 6.7e-15, bands 4.0e-15, unconditional mean 6.7e-15, unconditional bands 4.4e-15, controlled shock 8.0e-16 (the widest 80% band is 0.25)
 ```
 
 The plots draw what the package computes. What they draw that it did not compute before is
-compared here, in two parts.
+compared here, in four parts.
 
 The densities of `plot_posterior`: the nine priors of `fs2000.mod`, read by `from_mod`, against
 `draw_prior_density`, grid and values; and the kernel estimate that `posterior_moments` returns,
@@ -1000,6 +1006,38 @@ the two log posteriors, of order -2e7, differ by 2%. On the seven parameters wit
 and on `gam` the kernels agree within 6e-11. The responses of the posterior IRFs at each draw agree
 within 3e-10 of the largest response, and their statistics within the same: computed on Dynare's own responses, they agree with Dynare's within 4e-17.
 The numbers come from a run on 3 November 2026, with Dynare 7.2 and Octave 11.3.0.
+
+The figures left out in 0.9 come from two more runs. The first is Dynare's `identification` of
+`fs2000.mod` at the prior mean with `advanced=1`, which draws the identification strength, the
+sensitivity bars, the collinearity patterns and the identification patterns. Dynare computes the
+information matrix behind the strength on a sample of 300 observations that it simulates, so a copy
+of its `dsge_likelihood.m`, put first on the path, keeps the sample it receives for the asymptotic
+Hessian, and `plots/export_identification.m` saves it with Dynare's measures and figures.
+`identification(strength=True)` on that sample gives the information matrix within 1.2e-8 of the
+root of its diagonal, and the strength, the sensitivity component and the moments' sensitivity
+within 2.7e-7, relative. The strength divides by the asymptotic standard deviation, the root of
+the diagonal of the inverse information, whose smallest singular value is 4.6e-5 against a largest
+of 7.6e6, and that ratio amplifies the difference between Dynare's analytic derivatives and the
+differences of dsgelab. The bars of the strength figure agree within the same, the identification
+patterns within 2.4e-9, and the singular values in their titles within the five digits Dynare
+prints. The sensitivity figure is compared through the moments' sensitivity only: its bars divide
+by the largest value, which is infinite for the two shock standard deviations, whose inverse gamma
+priors have an infinite standard deviation, so Dynare's moments bars are all minus infinity.
+`plot_identification_sensitivity` divides by the largest finite value. Its "Model" and "LRE model"
+bars come from derivatives of Dynare's own reduced form and dynamic Jacobian, whose rows differ
+from dsgelab's state space, and are not drawn.
+
+The second run estimates nothing: `fs2000.mod` at the prior mean (`mode_compute=0`), with
+`initial_condition_decomposition`, `shock_decomposition`, `realtime_shock_decomposition` with
+`forecast=4` and `save_realtime=[40 80 120]`, and a `conditional_forecast` of 12 periods on 2,000
+draws in which `gp_obs` follows a path for 4 periods and `e_m` is the controlled shock.
+`plots/export_decomposition.m` saves the pools and vintages, what `plot_shock_decomposition`
+returns (its `get_decomp_only`) with `type=yoy`, `type=aoa` and `realtime` 1, 2 and 3, rolling and
+at vintage 80, and the conditional forecast with the normal draws behind it, drawn again in Octave
+from the state of `randn` recorded just before the command. Everything agrees within 2e-14. The
+initial condition decomposition is compared on 14 of Dynare's 15 columns: the fifteenth is
+Dynare's auxiliary variable for `c(+1)`, which dsgelab calls `LEAD1_c`, and contributes only to
+itself at the first date. These numbers come from a run on 6 November 2026, with the same versions.
 
 ## Out-of-sample forecast evaluation
 

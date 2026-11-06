@@ -545,7 +545,8 @@ MacroModelling.jl.
   autocorrelations within 3e-15, the `mode_check` kernels within 6e-11 where the prior is bounded,
   and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
   The identification-strength bars, which need the information matrix, the annualised and vintage
-  shock decompositions and the bands of conditional forecasts are left out.
+  shock decompositions and the bands of conditional forecasts were left out, and came in 0.10
+  (below).
 - [x] **BVAR and DSGE-VAR**, checked against Dynare's `+bvar` and `dsge_var`. `bvar` and
   `bvar_density` build the VAR with the Sims–Zha (1998) dummy-observation prior as Dynare's
   `bvar_density` does, with its hyperparameters and training sample, and `BVAR.forecast` draws
@@ -582,10 +583,16 @@ of 0.9.0 records, and each keeps the six conditions above.
 - [ ] **Expectations iteration and improved time iteration**, the global methods dolo has and
   `dsgelab` does not. Reference: dolo 0.4.9.20's `improved_time_iteration` on its own models, and
   `time_iteration` on the same grid.
-- [ ] **The figures left out in 0.9**: identification strength and sensitivity, from the
+- [x] **The figures left out in 0.9**: identification strength and sensitivity, from the
   information matrix, the annualised and vintage shock decompositions, and bands for conditional
   forecasts. Reference: Dynare's `identification`, `shock_decomposition` and
-  `conditional_forecast`.
+  `conditional_forecast`. On `fs2000.mod` at the prior mean, on the 300 observations Dynare
+  simulates for its information matrix, the matrix agrees with Dynare's within 1.2e-8 of the root
+  of its diagonal and the strength and sensitivity measures within 2.7e-7. The real-time pools,
+  the forecast and conditional vintages, the `yoy` and `aoa` decompositions and the initial
+  condition decomposition agree within 2e-14, and the conditional forecast with its 80% bands,
+  on Dynare's 2,000 draws, within 7e-15. Dynare's `q2a` annualisation and the sensitivity bars of
+  its reduced form and dynamic model are left out (6 November 2026).
 - [ ] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
   `deflator`. Reference: Dynare, as for the balanced growth path of 0.4.
 - [ ] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,

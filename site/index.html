@@ -958,6 +958,52 @@ irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"
   global sensitivity, conditional forecasts and shock groups in the decomposition have their
   figures too. The statistics they draw are computed as Dynare computes them and need no
   matplotlib, and the validation compares them with the numbers in Dynare's own figures.</p>
+<pre><code>strong = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"], observables=["y"],
+                            cov={"e": 0.1}, guess=dict(a=0, y=1), strength=True,
+                            data={"y": series}, priors=pb.priors)
+rt = dsg.realtime_shock_decomposition(pb.solve(mode.x)[1], pb.Y, forecast=4, vintages=[200])
+cf = dsg.conditional_forecast_bands(s_nk3, {"i": [0.01] * 4}, controlled=["eps_v"], periods=12,
+                                    cov=cov_nk3, replic=1000)                 # example 24
+last = {
+    "strength.png": dsg.plot_identification_strength(strong),
+    "patterns.png": dsg.plot_identification_patterns(strong, count=2),
+    "forecast_vintage.png": dsg.plot_decomposition(rt, "y", realtime=3, vintage=200),
+    "yoy.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(mode.x)), "y",
+                                      frequency="yoy"),
+    "conditional.png": dsg.plot_conditional_forecast(cf, ["i", "pi", "x"],
+                                                     conditions={"i": [0.01] * 4}),
+}
+for name, fig in last.items():
+    fig.savefig(name, dpi=80)
+strong.strength.identified
+len(rt["forecast_vintages"][200]["total"]["y"])
+np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)
+bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">strong.strength.identified</span>
+['rho', 'stderr e']
+<span class="out-expr">len(rt["forecast_vintages"][200]["total"]["y"])</span>
+5
+<span class="out-expr">np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)</span>
+(True, True)
+<span class="out-expr">bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</span>
+True</code></pre>
+  <p>The figures that 0.9 left out follow. With <code>strength=True</code>,
+  <code>identification</code> computes the identification strength of Ratto and Iskrev (2011) from
+  the asymptotic information matrix of the likelihood, on the data or on a sample simulated from the
+  model, as Dynare's <code>identification</code> does. The strength of a parameter is its value, or
+  its prior standard deviation, over its asymptotic standard deviation, and
+  <code>plot_identification_strength</code> draws both on a log scale, with the sensitivity
+  component below. <code>plot_identification_patterns</code> draws the singular vectors of the
+  information matrix for its smallest singular values. With <code>forecast</code> and
+  <code>vintages</code>, <code>realtime_shock_decomposition</code> also returns Dynare's forecast
+  and conditional decompositions of each cut, here the 4-quarter forecast made with the first 200
+  observations, which <code>plot_decomposition</code> draws with Dynare's <code>realtime</code> and
+  <code>vintage</code>. Its <code>frequency</code> draws the year-on-year and annual decompositions.
+  <code>conditional_forecast_bands</code> draws the shocks left free, the technology shock while the
+  monetary shock keeps the interest rate on its path for four quarters, and its bands, as those of
+  Dynare's <code>conditional_forecast</code>, close on the conditioned dates and open after them. On
+  <code>fs2000.mod</code>, on Dynare's sample and draws, the strength agrees with Dynare's within
+  3e-7 and the decompositions and the bands within 2e-14.</p>
   <h3>29. A process as a Markov chain</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log productivity, quarterly
 var = sigma ** 2 / (1 - rho ** 2)

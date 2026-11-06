@@ -967,6 +967,46 @@ irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"
   também têm as suas figuras. As estatísticas que elas desenham são calculadas como o Dynare as
   calcula e não precisam do matplotlib, e a validação as compara com os números das próprias
   figuras do Dynare.</p>
+<pre><code>strong = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"], observables=["y"],
+                            cov={"e": 0.1}, guess=dict(a=0, y=1), strength=True,
+                            data={"y": serie}, priors=pb.priors)
+rt = dsg.realtime_shock_decomposition(pb.solve(moda.x)[1], pb.Y, forecast=4, vintages=[200])
+cf = dsg.conditional_forecast_bands(s_nk3, {"i": [0.01] * 4}, controlled=["eps_v"], periods=12,
+                                    cov=cov_nk3, replic=1000)                 # example 24
+last = {
+    "strength.png": dsg.plot_identification_strength(strong),
+    "patterns.png": dsg.plot_identification_patterns(strong, count=2),
+    "forecast_vintage.png": dsg.plot_decomposition(rt, "y", realtime=3, vintage=200),
+    "yoy.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(moda.x)), "y",
+                                      frequency="yoy"),
+    "conditional.png": dsg.plot_conditional_forecast(cf, ["i", "pi", "x"],
+                                                     conditions={"i": [0.01] * 4}),
+}
+for name, fig in last.items():
+    fig.savefig(name, dpi=80)
+strong.strength.identified
+len(rt["forecast_vintages"][200]["total"]["y"])
+np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)
+bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</code></pre>
+<pre class="output" data-label="Saída"><code></code></pre>
+  <p>Seguem as figuras que a 0.9 deixou de fora. Com <code>strength=True</code>, o
+  <code>identification</code> calcula a força de identificação de Ratto e Iskrev (2011) a partir da
+  matriz de informação assintótica da verossimilhança, nos dados ou numa amostra simulada do modelo,
+  como faz o <code>identification</code> do Dynare. A força de um parâmetro é o seu valor, ou o seu
+  desvio-padrão a priori, dividido pelo seu desvio-padrão assintótico, e
+  <code>plot_identification_strength</code> desenha as duas em escala logarítmica, com a componente
+  de sensibilidade abaixo. <code>plot_identification_patterns</code> desenha os vetores singulares
+  da matriz de informação para os seus menores valores singulares. Com <code>forecast</code> e
+  <code>vintages</code>, o <code>realtime_shock_decomposition</code> devolve também as decomposições
+  de previsão e condicional de cada corte do Dynare, aqui a previsão de 4 trimestres feita com as
+  200 primeiras observações, que o <code>plot_decomposition</code> desenha com o
+  <code>realtime</code> e o <code>vintage</code> do Dynare. O seu <code>frequency</code> desenha as
+  decomposições interanuais e anuais. <code>conditional_forecast_bands</code> sorteia os choques
+  deixados livres, o choque de tecnologia enquanto o choque monetário mantém a taxa de juros na sua
+  trajetória por quatro trimestres, e as suas bandas, como as do <code>conditional_forecast</code>
+  do Dynare, se fecham nas datas condicionadas e se abrem depois delas. No <code>fs2000.mod</code>,
+  na amostra e nos sorteios do Dynare, a força coincide com a do Dynare a menos de 3e-7, e as
+  decomposições e as bandas a menos de 2e-14.</p>
   <h3>29. Um processo como cadeia de Markov</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log da produtividade, trimestral
 var = sigma ** 2 / (1 - rho ** 2)

@@ -571,9 +571,9 @@ projeto Julia já usado para o MacroModelling.jl.
   figuras do próprio Dynare registradas enquanto são desenhadas e comparadas nos mesmos sorteios,
   as estatísticas de Brooks e Gelman concordam até 8e-14, as autocorrelações até 3e-15, os núcleos
   do `mode_check` até 6e-11 onde a priori é limitada, e as IRFs a posteriori nos 1.200 sorteios de
-  parâmetros do Dynare até 3e-10 da maior resposta. Ficam de fora as barras de força da
+  parâmetros do Dynare até 3e-10 da maior resposta. Ficaram de fora as barras de força da
   identificação, que exigem a matriz de informação, as decomposições de choques anualizadas e por
-  safra e as bandas das previsões condicionais.
+  safra e as bandas das previsões condicionais, que vieram na 0.10 (abaixo).
 - [x] **BVAR e DSGE-VAR**, conferidos contra o `+bvar` e o `dsge_var` do Dynare. `bvar` e
   `bvar_density` montam o VAR com a priori de observações artificiais de Sims e Zha (1998) como o
   `bvar_density` do Dynare, com os hiperparâmetros e a amostra de treino dele, e
@@ -609,10 +609,16 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 - [ ] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
   tem e o `dsgelab` não. Referência: o `improved_time_iteration` do dolo 0.4.9.20 nos modelos dele,
   e o `time_iteration` na mesma grade.
-- [ ] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
+- [x] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
   matriz de informação, as decomposições de choques anualizadas e por safra, e bandas para as
   previsões condicionais. Referência: o `identification`, o `shock_decomposition` e o
-  `conditional_forecast` do Dynare.
+  `conditional_forecast` do Dynare. No `fs2000.mod` na média a priori, nas 300 observações que o
+  Dynare simula para a sua matriz de informação, a matriz concorda com a do Dynare até 1,2e-8 da
+  raiz da sua diagonal, e as medidas de força e de sensibilidade até 2,7e-7. Os conjuntos em tempo
+  real, as safras de previsão e condicionais, as decomposições `yoy` e `aoa` e a decomposição das
+  condições iniciais concordam até 2e-14, e a previsão condicional com as suas bandas de 80%, nos
+  2.000 sorteios do Dynare, até 7e-15. Ficam de fora a anualização `q2a` do Dynare e as barras de
+  sensibilidade da sua forma reduzida e do seu modelo dinâmico (6 de novembro de 2026).
 - [ ] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
   `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4.
 - [ ] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
