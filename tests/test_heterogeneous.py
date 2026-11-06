@@ -269,19 +269,129 @@ def test_a_cycle_and_two_makers_of_one_output_are_refused():
         BlockModel([a, c])
 
 
-def test_an_input_that_moves_the_markov_matrix_is_refused(ks):
+def test_an_input_that_moves_the_asset_grid_is_refused(ks):
     _, _, ss = ks
 
     def grid_with(rho_e, sd_e, nE, amin, amax, nA, w):
         e, Pi, a = make_grid(rho_e, sd_e, nE, amin, amax, nA)
-        return e, (1 - 0.01 * w) * Pi + 0.01 * w * np.eye(int(nE)), a
+        return e, Pi, a * w
 
     hh = HetBlock(household_step, ["Va", "a", "c"], backward="Va", policy="a",
                   init=household_init, hetinputs=[(grid_with, ["e_grid", "Pi", "a_grid"])])
     ss2 = BlockModel([hh]).steady_state(ss)
-    with pytest.raises(NotImplementedError, match="Pi"):
+    with pytest.raises(NotImplementedError, match="a_grid"):
         hh.jacobian(ss2, ["w"], 5)
     assert "C" in hh.jacobian(ss2, ["r"], 5)
+
+
+# -- a Markov matrix that moves along a path, and an initial distribution -------------------------
+
+def risky_grid(rho_e, sd_e, nE, amin, amax, nA, u):
+    """The income chain mixed with independent draws, with weight u^2 / 2: u moves the risk."""
+    e, Pi, a = make_grid(rho_e, sd_e, nE, amin, amax, nA)
+    q = 0.5 * u ** 2
+    return e, (1 - q) * Pi + q * np.full_like(Pi, 1.0 / Pi.shape[0]), a
+
+
+@pytest.fixture(scope="module")
+def risky(ks):
+    _, _, ss = ks
+    hh = HetBlock(household_step, ["Va", "a", "c"], backward="Va", policy="a",
+                  init=household_init, hetinputs=[(risky_grid, ["e_grid", "Pi", "a_grid"])],
+                  backward_tol=1e-12, name="household")
+    return hh, BlockModel([hh]).steady_state({**ss, "u": 0.4})
+
+
+def simulate(ss, hh, Pis, Dbeg, T):
+    """The path of C by hand, with the Markov matrix of period t in Pis[t] and the others fixed."""
+    x = {k: v for k, v in ss.internals["household"].items()}
+    x.update({k: ss[k] for k in ("r", "w", "beta", "eis")})
+    Pi_ss = x["Pi"]
+    Va, a, c = x["Va"], [None] * T, [None] * T
+    for t in reversed(range(T)):
+        Pi_next = Pis[t + 1] if t + 1 < T else Pi_ss
+        Va, a[t], c[t] = household_step(Pi_next @ Va, x["a_grid"], x["e_grid"], x["r"], x["w"],
+                                        x["beta"], x["eis"])
+    C = np.empty(T)
+    for t in range(T):
+        D = Pis[t].T @ Dbeg
+        C[t] = np.vdot(D, c[t])
+        Dbeg = _Lottery(a[t], x["a_grid"]).forward(D)
+    return C
+
+
+def test_a_markov_matrix_that_moves_enters_the_expectation_and_the_distribution(risky):
+    hh, ss = risky
+    T = 12
+    u = np.full(T, ss["u"])
+    u[4] += 0.1
+    C = hh.path(ss, {"u": u}, T)["C"]
+    Pis = [risky_grid(*[ss[k] for k in ("rho_e", "sd_e", "nE", "amin", "amax", "nA")], ut)[1]
+           for ut in u]
+    assert np.abs(C - simulate(ss, hh, Pis, ss.internals["household"]["Dbeg"], T)).max() < 1e-14
+    # the news moves consumption before the period in which the risk rises
+    assert abs(C[2] - ss["C"]) > 1e-6
+
+
+def test_fake_news_matches_the_direct_jacobian_when_the_markov_matrix_moves(risky):
+    hh, ss = risky
+    hh = HetBlock(household_step, ["Va", "a", "c"], backward="Va", policy="a",
+                  init=household_init, hetinputs=[(risky_grid, ["e_grid", "Pi", "a_grid"])],
+                  backward_tol=1e-12, name="household", h=1e-6)
+    T = 25
+    J = hh.jacobian(ss, ["u", "r"], T)
+    Jd = hh.jacobian(ss, ["u", "r"], T, method="direct")
+    for O in ("A", "C"):
+        for i in ("u", "r"):
+            scale = np.abs(Jd[O][i]).max()
+            assert np.abs(J[O][i] - Jd[O][i]).max() < 1e-6 * scale, (O, i)
+    one = HetBlock(household_step, ["Va", "a", "c"], backward="Va", policy="a",
+                   init=household_init, hetinputs=[(risky_grid, ["e_grid", "Pi", "a_grid"])],
+                   name="household", twosided=False).jacobian(ss, ["u"], T)["C"]["u"]
+    assert np.abs(one - J["C"]["u"]).max() < 1e-3 * np.abs(J["C"]["u"]).max()
+
+
+def test_a_path_from_an_initial_distribution_matches_forward_simulation(risky, ks):
+    hh, ss = risky
+    T = 30
+    internals = ss.internals["household"]
+    # the stationary distribution of the chain without the extra risk, a distribution that is not
+    # the steady state's
+    D0 = ks[2].internals["household"]["Dbeg"]
+    path = hh.path(ss, {}, T, Dbeg=D0)
+    assert np.abs(path["C"] - simulate(ss, hh, [internals["Pi"]] * T, D0, T)).max() < 1e-14
+    assert abs(path["A"][0] - ss["A"]) > 1e-3
+    # with a moving matrix as well
+    u = np.full(T, ss["u"]) + 0.05 * 0.7 ** np.arange(T)
+    Pis = [risky_grid(*[ss[k] for k in ("rho_e", "sd_e", "nE", "amin", "amax", "nA")], ut)[1]
+           for ut in u]
+    C = hh.path(ss, {"u": u}, T, Dbeg=D0)["C"]
+    assert np.abs(C - simulate(ss, hh, Pis, D0, T)).max() < 1e-14
+    with pytest.raises(ValueError, match="sum to one"):
+        hh.path(ss, {}, T, Dbeg=2 * D0)
+    with pytest.raises(ValueError, match="shape"):
+        hh.path(ss, {}, T, Dbeg=D0[:, :-1])
+
+
+def test_a_transition_from_an_initial_distribution_returns_to_the_steady_state(ks):
+    hh, model, ss = ks
+    T = 200
+    # the household's distribution with a lower discount factor at the same prices
+    D0 = model.steady_state({**ss, "beta": ss["beta"] - 0.005}).internals["household"]["Dbeg"]
+    zero = {"Z": np.zeros(T)}
+    same = model.impulse_nonlinear(ss, ["K"], ["asset_mkt"], zero,
+                                   initial={"household": ss.internals["household"]["Dbeg"]})
+    assert np.abs(same["K"]).max() < 1e-12
+    dev = model.impulse_nonlinear(ss, ["K"], ["asset_mkt"], zero, tol=1e-12,
+                                  initial={"household": D0})
+    assert np.abs(dev["asset_mkt"]).max() < 1e-12
+    assert dev["K"][0] < -0.05 and abs(dev["K"][-1]) < 1e-3 * abs(dev["K"][0])
+    # the same transition through a solved block
+    solved = SolvedBlock([hh, firm, mkt_clearing], {"K": 3.0}, ["asset_mkt"], name="ks")
+    inner = solved.path(ss, {}, T, initial={"household": D0, "other": None})
+    assert np.abs(inner["K"] - ss["K"] - dev["K"]).max() < 1e-10
+    with pytest.raises(ValueError, match="not heterogeneous"):
+        model.impulse_nonlinear(ss, ["K"], ["asset_mkt"], zero, initial={"firm": D0})
 
 
 def test_a_step_that_misses_the_backward_expectation_is_refused():

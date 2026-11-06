@@ -17,8 +17,10 @@ and the posteriors of ``estimation``, its MCMC diagnostics (``trace_plot``,
 ``mh_autocorrelation_function`` and the convergence diagnostics of Brooks and
 Gelman, 1998), ``mode_check``, the smoothed shocks and variables, posterior
 impulse responses with their HPD intervals, the OccBin paths and regimes, the
-collinearity patterns of ``identification`` and the distributions compared by
-Monte Carlo filtering.
+collinearity patterns, strength, sensitivity and identification patterns of
+``identification``, and the distributions compared by Monte Carlo filtering.
+Shock decompositions are drawn in real time, by vintage and at annual frequency,
+and conditional forecasts with their bands.
 
 The numbers a figure draws that the package does not compute elsewhere are
 computed as Dynare computes them, and are available without matplotlib:
@@ -47,7 +49,9 @@ __all__ = ["prior_density", "posterior_density", "brooks_gelman", "BrooksGelman"
            "plot_priors", "trace_plot", "plot_mh_autocorrelation", "plot_brooks_gelman",
            "plot_mode_check", "plot_smoothed_shocks", "plot_smoothed_observables",
            "plot_posterior_irf", "plot_conditional_forecast", "plot_occbin",
-           "plot_occbin_regimes", "plot_identification", "plot_filtering"]
+           "plot_occbin_regimes", "plot_identification", "plot_filtering",
+           "plot_identification_strength", "plot_identification_sensitivity",
+           "plot_identification_patterns"]
 
 
 # ================================================================ densities
@@ -540,7 +544,9 @@ def plot_paths(paths: Mapping, variables: Sequence[str] | None = None, *, column
 
 def plot_decomposition(decomposition: Mapping, variable: str, *, start: int = 1, ax=None,
                        title: str | None = None, groups: Mapping[str, Sequence[str]] | None = None,
-                       steady_state: float | None = None, detail: bool = False):
+                       steady_state: float | None = None, detail: bool = False,
+                       realtime: int = 0, vintage: int = 0, frequency: str = "qoq",
+                       quarter: int = 1):
     """A shock decomposition as stacked bars, with the total as a line.
 
     ``decomposition`` is what :func:`~dsgelab.shock_decomposition` (or
@@ -555,7 +561,23 @@ def plot_decomposition(decomposition: Mapping, variable: str, *, start: int = 1,
     deviations plus the steady state, with a dashed line at the steady state.
     ``detail`` (``detail_plot``) draws each contribution in a panel of its own,
     with the total and a common scale.
+
+    ``realtime`` and ``vintage`` choose, in what
+    :func:`~dsgelab.realtime_shock_decomposition` returns, the decomposition
+    Dynare draws with the same options: 1 the real-time pool, 2 the one-step
+    conditional pool, 3 the one-step forecast pool, and with a ``vintage`` (a cut
+    in its ``vintages``) the decomposition of that cut, of its ``forecast``-step
+    conditional forecast and of its forecast. ``frequency`` is Dynare's
+    ``type``: ``"yoy"`` and ``"aoa"`` redraw a quarterly decomposition as
+    :func:`~dsgelab.annualise_decomposition` changes it, with ``quarter`` the
+    quarter of the first date; ``start`` then numbers the first quarter, or for
+    ``"aoa"`` the first year, and ``steady_state`` is multiplied by four for
+    ``"yoy"``, as Dynare does.
     """
+    decomposition, start, label, steady_state = _choose_decomposition(
+        decomposition, start, realtime, vintage, frequency, quarter, steady_state)
+    if label and title is None:
+        title = f"{variable} {label}"
     pieces = {e: np.asarray(d[variable], dtype=float) for e, d in decomposition["shocks"].items()}
     initial = np.asarray(decomposition["initial"][variable], dtype=float)
     total = np.asarray(decomposition["total"][variable], dtype=float)
@@ -958,7 +980,16 @@ def plot_conditional_forecast(forecast: Mapping, variables: Sequence[str] | None
     conditions over the same dates, in the same units. Each panel has the
     conditional path (solid) and the unconditional one (dashed); ``conditions``,
     the paths imposed over dates ``1..H``, are marked in red.
+
+    ``forecast`` may instead be a :class:`~dsgelab.ConditionalForecast`, from
+    :func:`~dsgelab.conditional_forecast_bands` or
+    :func:`~dsgelab.posterior_conditional_forecast`. Each panel then is Dynare's:
+    the band of the conditional paths in grey, their mean (solid), and the mean
+    of the unconditional paths (dashed) between their bounds (thin dashed).
     """
+    if hasattr(forecast, "unconditional_mean"):
+        return _plot_conditional_bands(forecast, variables, conditions=conditions,
+                                       columns=columns, title=title, figsize=figsize)
     names = list(variables) if variables is not None else [k for k in forecast if k != "eps"]
     fig, axes = _figure(len(names), columns, figsize)
     for ax, v in zip(axes, names):
@@ -1151,3 +1182,205 @@ def plot_filtering(result: Any, names: Sequence[str] | None = None, *, kind: str
     return fig
 
 
+
+# ------------------------------------- real-time and annualised decompositions
+def _choose_decomposition(decomposition, start, realtime, vintage, frequency, quarter,
+                          steady_state):
+    """The decomposition Dynare's ``plot_shock_decomposition`` draws, its first date and label."""
+    label = ""
+    if realtime not in (0, 1, 2, 3):
+        raise ValueError("realtime must be 0, 1, 2 or 3")
+    if vintage and not realtime:
+        raise ValueError("a vintage needs realtime 1, 2 or 3")
+    if realtime:
+        h = 0
+        if vintage:
+            key = {1: "vintages", 2: "conditional_vintages", 3: "forecast_vintages"}[realtime]
+            if key not in decomposition or vintage not in decomposition[key]:
+                raise ValueError(f"vintage {vintage} is not in the {key!r} of this decomposition: "
+                                 f"pass it in realtime_shock_decomposition's vintages")
+            chosen = decomposition[key][vintage]
+            if realtime > 1:
+                h = len(next(iter(chosen["total"].values()))) - 1
+                start = start + vintage - 1
+            label = {1: f"realtime (vintage {vintage})",
+                     2: f"{h}-step ahead conditional forecast (given {vintage})",
+                     3: f"{h}-step ahead forecast (given {vintage})"}[realtime]
+        else:
+            key = {1: None, 2: "conditional", 3: "forecast"}[realtime]
+            if key is not None and key not in decomposition:
+                raise ValueError(f"no {key!r} pool in this decomposition"
+                                 + (": pass forecast= to realtime_shock_decomposition"
+                                    if key == "forecast" else ""))
+            chosen = decomposition if key is None else decomposition[key]
+            label = {1: "realtime (rolling)", 2: "1-step ahead conditional forecast (rolling)",
+                     3: "1-step ahead forecast (rolling)"}[realtime]
+        decomposition = {k: chosen[k] for k in ("shocks", "initial", "total")}
+    if frequency != "qoq":
+        from .kalman import annualise_decomposition
+        decomposition = annualise_decomposition(
+            {k: decomposition[k] for k in ("shocks", "initial", "total")}, frequency,
+            quarter=quarter)
+        if frequency == "yoy":
+            start = start + 3
+            steady_state = None if steady_state is None else 4 * steady_state
+        label = f"{label} {frequency}".strip()
+    return decomposition, start, label, steady_state
+
+
+def _plot_conditional_bands(forecast, variables, *, conditions, columns, title, figsize):
+    """Dynare's figure of a conditional forecast with bands, one panel per variable."""
+    names = list(variables) if variables is not None else list(forecast.mean)
+    fig, axes = _figure(len(names), columns, figsize)
+    for ax, v in zip(axes, names):
+        m = np.asarray(forecast.mean[v], dtype=float)
+        t = np.arange(m.size)
+        ax.fill_between(t, forecast.lower[v], forecast.upper[v], color="0.85", lw=0,
+                        label=f"{forecast.coverage:.0%} band")
+        ax.plot(t, m, color="black", lw=2, label="conditional")
+        ax.plot(t, forecast.unconditional_mean[v], color="black", ls="--", lw=2,
+                label="unconditional")
+        ax.plot(t, forecast.unconditional_lower[v], color="black", ls="--", lw=0.8)
+        ax.plot(t, forecast.unconditional_upper[v], color="black", ls="--", lw=0.8)
+        if conditions is not None and v in conditions:
+            c = np.asarray(conditions[v], dtype=float)
+            ax.plot(np.arange(1, c.size + 1), c, "o", color="red", ms=4, label="imposed")
+        ax.set_xlim(t[0], t[-1])
+        ax.set_title(v)
+    axes[0].legend(fontsize="small")
+    if title:
+        fig.suptitle(title)
+    return fig
+
+
+# ---------------------------------------------------- identification strength
+def _strength_of(ident: Any):
+    s = getattr(ident, "strength", None)
+    if s is None:
+        raise ValueError("no identification strength: call identification(..., strength=True)")
+    return s
+
+
+def _log_bars(ax, order, columns, labels):
+    """Dynare's bars of ``log`` values, grouped by parameter, with markers for infinite ones.
+
+    A dot marks each finite value, as Dynare draws them over the bars; an infinite
+    logarithm is marked at zero, red for a value of zero and white for an infinite
+    value.
+    """
+    n = len(order)
+    x = np.arange(1, n + 1)
+    width = 0.8 / len(columns)
+    for k, (values, label) in enumerate(zip(columns, labels)):
+        with np.errstate(divide="ignore", invalid="ignore"):
+            y = np.log(np.asarray(values, dtype=float)[order])
+        shift = (k - (len(columns) - 1) / 2) * width
+        finite = np.isfinite(y)
+        ax.bar(x[finite] + shift, y[finite], width=width, color=f"C{k}", label=label)
+        ax.plot(x[finite] + shift, y[finite], "o", color="black", ms=4)
+        for flag, face in ((np.isneginf(y), "red"), (np.isposinf(y), "white")):
+            if flag.any():
+                ax.plot(x[flag] + shift, np.zeros(flag.sum()), "o", ms=6, mfc=face, mec="black")
+    ax.axhline(0.0, color="0.6", lw=0.8)
+    ax.set_xlim(0, n + 1)
+
+
+def plot_identification_strength(ident: Any, *, prior: bool = True, title: str | None = None,
+                                 figsize=None):
+    """Identification strength and its sensitivity component, as Dynare's ``identification``.
+
+    ``ident`` is an :class:`~dsgelab.Identification` computed with
+    ``strength=True``. The upper panel has the logarithm of the strength of each
+    parameter (:attr:`~dsgelab.IdentificationStrength.strength`, its value over its
+    asymptotic standard deviation) and the lower one that of its sensitivity
+    component (``sensitivity``), the parameters sorted by strength, from the
+    weakest. With ``prior`` and the priors given, each parameter has a second bar
+    relative to the prior standard deviation. An infinite logarithm is marked at
+    zero, red for a strength of zero and white for an infinite one.
+    """
+    s = _strength_of(ident)
+    names = list(ident.names)
+    order = np.argsort(s.strength, kind="stable")
+    with_prior = prior and not np.all(np.isnan(s.strength_prior))
+    labels = ["relative to param value"] + (["relative to prior std"] if with_prior else [])
+    fig, axes = _figure(2, 1, figsize or (max(6.0, 0.6 * len(names) + 2), 7))
+    panels = ((s.strength, s.strength_prior, "Identification strength"),
+              (s.sensitivity, s.sensitivity_prior, "Sensitivity component"))
+    for ax, (own, rel, what) in zip(axes, panels):
+        _log_bars(ax, order, [own, rel][:len(labels)], labels)
+        ax.set_xticks(np.arange(1, len(names) + 1), [names[i] for i in order], rotation=90)
+        ax.set_title(f"{what} with asymptotic Information matrix (log-scale)")
+        ax.legend(fontsize="small")
+    if title:
+        fig.suptitle(title)
+    return fig
+
+
+def plot_identification_sensitivity(ident: Any, *, title: str | None = None, figsize=None):
+    """The sensitivity of the moments to each parameter, as Dynare's sensitivity bars.
+
+    ``ident`` is an :class:`~dsgelab.Identification` computed with
+    ``strength=True`` and priors. The bars are the logarithm of 100 times
+    :attr:`~dsgelab.IdentificationStrength.moments_sensitivity` over its largest
+    value, the parameters sorted by strength as in
+    :func:`plot_identification_strength`: Dynare's "Moments" bars, normalised by
+    the largest finite value, so that a parameter whose prior has an infinite
+    standard deviation is left out instead of leaving every other bar at minus
+    infinity. Dynare's "Model" and "LRE model" bars, from the derivatives of its
+    own reduced form and of its dynamic model's Jacobian, are not drawn.
+    """
+    s = _strength_of(ident)
+    si = np.asarray(s.moments_sensitivity, dtype=float)
+    finite = np.isfinite(si)
+    if not finite.any():
+        raise ValueError("no finite sensitivity: give the priors, whose standard deviations "
+                         "scale it")
+    names = list(ident.names)
+    order = np.argsort(s.strength, kind="stable")
+    rel = np.where(finite, si / np.max(si[finite]) * 100, np.nan)
+    fig, (ax,) = _figure(1, 1, figsize or (max(6.0, 0.6 * len(names) + 2), 4))
+    with np.errstate(divide="ignore"):
+        y = np.log(rel[order])
+    x = np.arange(1, len(names) + 1)
+    ax.bar(x[np.isfinite(y)], y[np.isfinite(y)], width=0.8, color="C0", label="Moments")
+    ax.axhline(0.0, color="0.6", lw=0.8)
+    ax.set_xlim(0, len(names) + 1)
+    ax.set_xticks(x, [names[i] for i in order], rotation=90)
+    ax.set_title("Sensitivity bars using derivatives (log-scale)")
+    ax.legend(fontsize="small")
+    if title:
+        fig.suptitle(title)
+    return fig
+
+
+def plot_identification_patterns(ident: Any, *, largest: bool = False, count: int = 4,
+                                 title: str | None = None, figsize=None):
+    """Identification patterns, as Dynare's ``identification`` with ``advanced`` draws them.
+
+    ``ident`` is an :class:`~dsgelab.Identification` computed with
+    ``strength=True``. Each panel has the absolute values of the entries of a
+    right singular vector of the information matrix
+    (:attr:`~dsgelab.IdentificationStrength.patterns`), one bar per parameter, in
+    the order of :attr:`~dsgelab.Identification.names`. The ``count`` smallest
+    singular values come first, from the smallest, the direction of the
+    parameters that the data identify worst; with ``largest`` the ``count``
+    largest, from the largest.
+    """
+    s = _strength_of(ident)
+    names = list(ident.names)
+    k = min(count, len(names))
+    cols = list(range(k)) if largest else [len(names) - 1 - j for j in range(k)]
+    fig, axes = _figure(k, 1, figsize or (max(6.0, 0.6 * len(names) + 2), 1.6 * k + 1.4))
+    x = np.arange(1, len(names) + 1)
+    for j, (ax, c) in enumerate(zip(axes, cols)):
+        ax.bar(x, np.abs(s.patterns[:, c]), width=0.8, color="C0")
+        ax.set_xlim(0, len(names) + 1)
+        ax.set_title(f"Singular value {s.singular_values[c]:.5g}")
+        if j == k - 1:
+            ax.set_xticks(x, names, rotation=90)
+        else:
+            ax.set_xticks(x, [])
+    which = "HIGHEST" if largest else "SMALLEST"
+    fig.suptitle(title if title is not None else
+                 f"Identification patterns (Information matrix): {which} SV")
+    return fig

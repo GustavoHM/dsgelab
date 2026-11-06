@@ -23,6 +23,19 @@ each is compared with the function that draws it here, on the same draws, mode a
   8. the posterior densities of the "Priors and posteriors" figure, and the smoothed shocks and
      observables of the smoother's figures, at the posterior mean.
 
+Then the figures left out in 0.9 (run_plots.sh identification decomposition):
+
+  9. identification(strength=True) against Dynare's identification of fs2000 at the prior mean
+     with advanced=1, on the sample Dynare simulated for its information matrix: the matrix, the
+     strength and sensitivity measures, relative to the parameter and to the prior standard
+     deviation, the sensitivity of the moments, the bars of the strength figure and the
+     identification patterns with their singular values;
+ 10. realtime_shock_decomposition with forecast=4 and three vintages, against Dynare's pools
+     and vintages and what plot_shock_decomposition draws with realtime 1, 2 and 3;
+     annualise_decomposition against type=yoy and type=aoa; initial_condition_decomposition;
+ 11. conditional_forecast_bands, from the smoothed state at the prior mean, against Dynare's
+     conditional_forecast with one controlled shock, on Dynare's 2,000 draws of the other.
+
 Prerequisites:
     bash fetch.sh
     bash run_plots.sh
@@ -238,9 +251,185 @@ def mcmc(ex) -> bool:
     return bool(ok)
 
 
+def strength(ex) -> bool:
+    """9. Identification strength, sensitivity and patterns, on Dynare's simulated sample."""
+    import warnings
+    sys.path.insert(0, str(HERE / "identification"))
+    from working_copy import working_copy
+    figs = {str(f.name): list(np.atleast_1d(f.panels)) for f in np.atleast_1d(ex.figures)}
+    exo, par = _names(ex.exo_names), _names(ex.param_names)
+    dn = ([f"stderr {exo[int(i) - 1]}" for i in np.atleast_1d(ex.stderr_index)]
+          + [par[int(i) - 1] for i in np.atleast_1d(ex.param_index)])
+    mf = from_mod(working_copy((HERE / "mods" / "examples" / "fs2000.mod").read_text(), ""))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r = mf.identification(strength=True, data=np.asarray(ex.data), max_group=0,
+                              tol_rank="robust")
+    o = [r.names.index(n) for n in dn]
+    s = r.strength
+    A, Ad = s.information[np.ix_(o, o)], np.asarray(ex.hess.AHess)
+    d_A = float(np.max(np.abs(A - Ad) / np.sqrt(np.outer(np.diag(Ad), np.diag(Ad)))))
+    d = {}
+    for key, field in (("strength", "ide_strength_dMOMENTS"),
+                       ("strength_prior", "ide_strength_dMOMENTS_prior"),
+                       ("sensitivity", "deltaM"), ("sensitivity_prior", "deltaM_prior"),
+                       ("moments_sensitivity", None)):
+        ours = getattr(s, key)[o]
+        theirs = np.atleast_1d(ex.si_dMOMENTSnorm if field is None
+                               else getattr(ex.hess, field)).astype(float)
+        fin = np.isfinite(theirs)
+        d[key] = (_rel(ours[fin], theirs[fin]) if np.array_equal(np.isfinite(ours), fin)
+                  else np.inf)
+    same_ok = sorted(s.identified) == sorted(dn[int(i) - 1] for i in
+                                             np.atleast_1d(ex.hess.identified_parameter_indices))
+    # the figures: bars of the log measures, sorted by strength, and the patterns
+    page = figs["fs2000_ident_strength_prior_mean"]
+    order = np.argsort(s.strength[o], kind="stable")
+    d_bar = 0.0
+    for panel, keys in ((page[0], ("strength", "strength_prior")),
+                        (page[2], ("sensitivity", "sensitivity_prior"))):
+        lines = _lines(panel)
+        for (_, y), key in zip(lines[:2], keys):
+            ours = np.log(getattr(s, key)[o][order])
+            fin = np.isfinite(y)
+            d_bar = max(d_bar, float(np.max(np.abs(ours[fin] - y[fin])))
+                        if np.array_equal(fin, np.isfinite(ours)) else np.inf)
+    d_pat, d_sv = 0.0, 0.0
+    sv = s.singular_values
+    p = len(dn)
+    for name, cols in (("fs2000_ident_pattern_prior_mean_1", [p - 1 - j for j in range(4)]),
+                       ("fs2000_ident_pattern_prior_mean_2", list(range(4)))):
+        for panel, c in zip(figs[name], cols):
+            (_, bars), = _lines(panel)
+            d_pat = max(d_pat, float(np.max(np.abs(np.abs(s.patterns[o, c]) - bars))))
+            drawn = float(str(panel.title).split()[-1])
+            d_sv = max(d_sv, abs(sv[c] - drawn) / abs(drawn))
+    print(f"identification strength, fs2000 at the prior mean, {len(dn)} parameters, on Dynare's "
+          f"{np.asarray(ex.data).shape[0]} simulated observations: information matrix {d_A:.1e} "
+          f"(relative to the root of its diagonal), " +
+          ", ".join(f"{k} {v:.1e}" for k, v in d.items()) + " (relative); the bars drawn "
+          f"{d_bar:.1e}, the patterns {d_pat:.1e} and their singular values {d_sv:.1e} "
+          f"(relative, as Dynare prints them); identified parameters "
+          f"{'the same' if same_ok else 'DIFFERENT'}")
+    return bool(d_A < 1e-7 and max(d.values()) < 1e-6 and d_bar < 1e-6 and d_pat < 1e-6
+                and d_sv < 1e-4 and same_ok)
+
+
+def _decomposition_diff(dec, z, rows, look, exo, skip=0):
+    d = 0.0
+    for v, i in zip(look, rows):
+        pairs = [(dec["shocks"][e][v], z[i, m]) for m, e in enumerate(exo)]
+        pairs += [(dec["initial"][v], z[i, len(exo)]), (dec["total"][v], z[i, len(exo) + 1])]
+        for a, b in pairs:
+            d = max(d, float(np.max(np.abs(np.asarray(a)[skip:] - np.asarray(b)[skip:]))))
+    return d
+
+
+def decompositions(ex) -> bool:
+    """10. Real-time, annualised and initial condition decompositions; 11. the conditional
+    forecast with bands, on Dynare's draws."""
+    from dsgelab.kalman import (annualise_decomposition, conditional_forecast_bands,
+                                initial_condition_decomposition, realtime_shock_decomposition,
+                                shock_decomposition)
+    varobs = _names(ex.varobs)
+    data = {v: np.asarray(ex.data)[:, i] for i, v in enumerate(varobs)}
+    mf = from_mod(HERE / "mods" / "examples" / "fs2000.mod")
+    pb = mf.estimation_problem(data)
+    point = dict(zip(_names(ex.estim_names), np.atleast_1d(ex.point)))
+    th = np.array([point[n] for n in pb.names])
+    sol, space = pb.solve(th)
+    sm = pb.smoother(th)
+    endo, exo, look = _names(ex.endo_names), _names(ex.exo_names), _names(ex.varlist)
+    h = int(ex.forecast)
+    vintages = [int(v) for v in np.atleast_1d(ex.save_realtime)]
+    rt = realtime_shock_decomposition(space, pb.Y, variables=look, forecast=h, vintages=vintages)
+    rows, sub = [endo.index(v) for v in look], list(range(len(look)))
+    d_rt = {
+        "realtime": _decomposition_diff(rt, ex.realtime_pool, rows, look, exo),
+        "one-step conditional": _decomposition_diff(rt["conditional"], ex.conditional_pool,
+                                                    rows, look, exo, skip=1),
+        "one-step forecast": _decomposition_diff(rt["forecast"], ex.forecast_pool, rows, look,
+                                                 exo, skip=2)}
+    d_v = 0.0
+    for v in vintages:
+        for key, field in (("vintages", "realtime"), ("forecast_vintages", "realtime_forecast"),
+                           ("conditional_vintages", "realtime_conditional")):
+            d_v = max(d_v, _decomposition_diff(rt[key][v], getattr(getattr(ex, field),
+                                                                   f"time_{v}"),
+                                               rows, look, exo))
+    vv = int(ex.vintage)
+    d_plot = max(
+        _decomposition_diff(rt["vintages"][vv], ex.realtime_1, sub, look, exo),
+        _decomposition_diff(rt, ex.realtime_1_pool, sub, look, exo),
+        _decomposition_diff(rt["conditional_vintages"][vv], ex.realtime_2, sub, look, exo),
+        _decomposition_diff(rt["conditional"], ex.realtime_2_pool, sub, look, exo, skip=1),
+        _decomposition_diff(rt["forecast_vintages"][vv], ex.realtime_3, sub, look, exo),
+        _decomposition_diff(rt["forecast"], ex.realtime_3_pool, sub, look, exo, skip=2))
+    dec = shock_decomposition(sm, variables=look, initial_shock_states=mf.shock_states)
+    d_yoy = _decomposition_diff(annualise_decomposition(dec, "yoy"), ex.type_yoy, sub, look, exo)
+    d_aoa = _decomposition_diff(annualise_decomposition(dec, "aoa"), ex.type_aoa, sub, look, exo)
+    ic = initial_condition_decomposition(sm, variables=look, initial_shock_states=mf.shock_states)
+    z = np.asarray(ex.initval)
+    common = [c for c in ic["initial"] if c in endo]
+    d_ic = max(float(np.max(np.abs(ic["initial"][c][v] - z[endo.index(v), endo.index(c)])))
+               for c in common for v in look)
+    d_ic = max(d_ic, max(float(np.max(np.abs(ic["shocks"][v] - z[endo.index(v), len(endo)])))
+                         for v in look))
+    print(f"real-time decompositions of fs2000 at the prior mean, {len(look)} variables, "
+          f"{len(data[varobs[0]])} observations, forecast {h}: " +
+          ", ".join(f"{k} pool {v:.1e}" for k, v in d_rt.items()) +
+          f"; vintages {', '.join(map(str, vintages))} (realtime, forecast and {h}-step "
+          f"conditional) {d_v:.1e}; what plot_shock_decomposition draws with realtime 1, 2 and 3, "
+          f"rolling and at vintage {vv}, {d_plot:.1e}")
+    print(f"annualised decompositions, type=yoy {d_yoy:.1e} and type=aoa {d_aoa:.1e}; initial "
+          f"condition decomposition, {len(common)} of Dynare's {len(endo)} columns (the other is "
+          f"an auxiliary variable named otherwise), {d_ic:.1e}")
+    ok = max(d_rt.values()) < 1e-12 and d_v < 1e-12 and d_plot < 1e-12
+    ok &= d_yoy < 1e-12 and d_aoa < 1e-12 and d_ic < 1e-12 and len(common) == len(endo) - 1
+
+    # 11. the conditional forecast, from the smoothed state at the prior mean, on Dynare's draws
+    cf_dy = ex.cf
+    H = int(ex.cf_periods)
+    logc = {v: np.log(sol.coords.center[sol.model.position(v)]) for v in endo
+            if v in sol.model.names}
+    path = np.asarray(cf_dy.cond.Mean.gp_obs)[1:5]
+    Z1 = np.transpose(np.asarray(ex.cf_normals), (2, 1, 0))
+    Z2 = np.transpose(np.asarray(ex.cf_normals_uncond), (2, 1, 0))
+    cf = conditional_forecast_bands(sol, {"gp_obs": path - logc["gp_obs"]}, controlled=["e_m"],
+                                    periods=H, initial=sm.states[-1, :space.n_model_states],
+                                    cov=space.Sigma, normals=(Z1, Z2))
+    d_cf = dict.fromkeys(("mean", "bands", "unconditional mean", "unconditional bands"), 0.0)
+    width = 0.0
+    for v in logc:
+        c = logc[v]
+        ci, uci = (np.asarray(getattr(x.ci, v)) for x in (cf_dy.cond, cf_dy.uncond))
+        width = max(width, float(np.max(ci[1] - ci[0])))
+        d_cf["mean"] = max(d_cf["mean"], float(np.max(np.abs(
+            cf.mean[v] + c - np.asarray(getattr(cf_dy.cond.Mean, v))))))
+        d_cf["bands"] = max(d_cf["bands"], float(np.max(np.abs(cf.lower[v] + c - ci[0]))),
+                            float(np.max(np.abs(cf.upper[v] + c - ci[1]))))
+        d_cf["unconditional mean"] = max(d_cf["unconditional mean"], float(np.max(np.abs(
+            cf.unconditional_mean[v] + c - np.asarray(getattr(cf_dy.uncond.Mean, v))))))
+        d_cf["unconditional bands"] = max(
+            d_cf["unconditional bands"],
+            float(np.max(np.abs(cf.unconditional_lower[v] + c - uci[0]))),
+            float(np.max(np.abs(cf.unconditional_upper[v] + c - uci[1]))))
+    sh = cf_dy.controlled_exo_variables
+    d_cf["controlled shock"] = max(
+        float(np.max(np.abs(cf.shocks["e_m"]["mean"] - sh.Mean.e_m))),
+        float(np.max(np.abs(cf.shocks["e_m"]["lower"] - sh.ci.e_m[0]))),
+        float(np.max(np.abs(cf.shocks["e_m"]["upper"] - sh.ci.e_m[1]))))
+    print(f"conditional forecast with bands, gp_obs on a path for 4 periods by e_m, {H} periods, "
+          f"{cf.replic} of Dynare's draws, {len(logc)} variables: " +
+          ", ".join(f"{k} {v:.1e}" for k, v in d_cf.items()) +
+          f" (the widest 80% band is {width:.2f})")
+    return bool(ok and max(d_cf.values()) < 1e-12)
+
+
 def main() -> bool:
     ok = True
-    for name, check in (("densities", densities), ("mcmc", mcmc)):
+    for name, check in (("densities", densities), ("mcmc", mcmc), ("identification", strength),
+                        ("decomposition", decompositions)):
         ex = _load(name)
         if ex is None:
             print(f"out_plots/{name}.mat is missing: run run_plots.sh {name}")

@@ -14,11 +14,24 @@ sequence-jacobian and against brute force.
      its Jacobians differ from the derivative by some 1e-5 of their size. The comparison runs
      dsgelab with the same differences (twosided=False, h=1e-4), and compares the central
      differences that dsgelab uses by default with sequence-jacobian's own (twosided=True).
-  2. dsgelab against itself. The fake-news Jacobian against the direct one, the nonlinear path
+  2. The household of labor_search.ipynb, at the same tag, whose employment chain is a hetinput
+     of the job-finding rate f and the separation rate s, so that its Markov matrix moves along a
+     path. sequence-jacobian keeps employment and productivity on two axes with two Markov
+     matrices, and dsgelab on one chain of 10 nodes with their Kronecker product. The notebook
+     stops at the household, and run_ssj.py closes it with a fixed supply of bonds and the
+     interest rate as the unknown, written identically here. Compared as in 1, with the
+     Jacobians with respect to f and s, the notebook's linear response to s, and the return to
+     the steady state from the distribution of the steady state with s = 0.12, which
+     sequence-jacobian computes with ss_initial and dsgelab with initial.
+  3. dsgelab against itself. The fake-news Jacobian against the direct one, the nonlinear path
      differentiated by central differences for a shock in each period, on ten of the 300 columns
-     and with steps of 1e-5, 1e-6 and 1e-7 in both. And Krusell-Smith's linear impulse response against the
-     nonlinear transition, for shocks to productivity of 1, 0.1 and 0.01 per cent: the
-     difference must fall as the square of the shock.
+     and with steps of 1e-5, 1e-6 and 1e-7 in both (1e-3, 1e-4 and 1e-5 for the labor-search
+     household, with respect to f and s). The linear impulse responses of Krusell-Smith and of
+     labor search against the nonlinear transitions, for shocks of 1, 0.1 and 0.01 per cent to
+     productivity and of 1, 0.1 and 0.01 points to s: the difference must fall as the square of
+     the shock. And the labor-search household's path from the distribution with s = 0.12, at
+     the steady state's prices, against the steady state's transition matrix applied period by
+     period.
 
 Prerequisites:
     bash validation/sequence_jacobian/setup.sh
@@ -32,9 +45,11 @@ import time
 from pathlib import Path
 
 import numpy as np
+import scipy.sparse as sp
 
 import dsgelab as dsg
 from dsgelab import BlockModel, HetBlock, interpolate_rows, log_grid, simple
+from dsgelab.heterogeneous import _Lottery
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "out_heterogeneous"
@@ -221,6 +236,51 @@ def hank():
             BlockModel(blocks + [nkpc], name="One-Asset HANK"))
 
 
+def labor_search():
+    """labor_search.ipynb's household, whose employment chain moves with f and s, closed by a
+    fixed supply of bonds as in run_ssj.py. sequence-jacobian keeps the employment status and the
+    productivity on two axes, each with its Markov matrix; here they are one chain of 2 nE nodes,
+    employed first, whose matrix is the Kronecker product of the two."""
+    def make_grid(rho_e, sd_e, nE, amin, amax, nA):
+        e_grid, _, Pi_e = income_chain(rho_e, sd_e, nE)
+        return e_grid, Pi_e, log_grid(amin, amax, nA)
+
+    def search_frictions(f, s, Pi_e):
+        Pi_s = np.vstack(([1 - s, s], [f, 1 - f]))
+        return Pi_s, np.kron(Pi_s, Pi_e)
+
+    def labor_income(e_grid, w, b):
+        return np.concatenate((w * e_grid, b * e_grid))
+
+    def household_init(a_grid, y, r, eis):
+        c = np.maximum(1e-8, y[:, np.newaxis] + np.maximum(r, 0.04) * a_grid)
+        return (1 + r) * (c ** (-1 / eis))
+
+    def household(Va_p, a_grid, y, r, beta, eis):
+        c_nextgrid = (beta * Va_p) ** (-eis)
+        coh = (1 + r) * a_grid + y[:, np.newaxis]
+        a = np.maximum(interpolate_rows(c_nextgrid + a_grid, coh, a_grid), a_grid[0])
+        c = coh - a
+        Va = (1 + r) * c ** (-1 / eis)
+        return Va, a, c
+
+    def unemployment(c):
+        u = np.zeros_like(c)
+        u[c.shape[0] // 2:] = 1.0
+        return u
+
+    hh = HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=household_init,
+                  hetinputs=[(make_grid, ["e_grid", "Pi_e", "a_grid"]),
+                             (search_frictions, ["Pi_s", "Pi"]), (labor_income, "y")],
+                  hetoutputs=[(unemployment, "u")], backward_tol=BACKWARD_TOL)
+
+    @simple("asset_mkt")
+    def bond_market(A, B):
+        return A - B
+
+    return hh, BlockModel([hh, bond_market], name="Labor search")
+
+
 # --- comparisons -----------------------------------------------------------------------------
 
 def compare_grids(ss, ref, prefix, names):
@@ -376,7 +436,77 @@ def main() -> None:
           f"{meta['seconds']['hank nonlinear']:.1f}")
     hank_hh, hank_steady = hh, ss
 
-    print("3. dsgelab against itself")
+    print("3. Labor search (labor_search.ipynb), 2 employment states by 5 productivity states by "
+          "100 asset points, with the Markov matrix moved by f and s")
+    hh, ls = labor_search()
+    nA = 100
+    calibration = {"beta": 0.95, "r": 0.01, "eis": 0.5, "f": 0.4, "s": 0.1, "w": 1.0, "b": 0.5,
+                   "rho_e": 0.95, "sd_e": 0.5, "nE": 5, "amin": 0.0, "amax": 50, "nA": nA}
+    t0 = time.perf_counter()
+    A = BlockModel([hh]).steady_state(calibration)["A"]
+    calibration["B"] = A
+    ss = ls.steady_state(calibration)
+    t_ss = time.perf_counter() - t0
+    internals = ss.internals["household"]
+
+    def flat(key):
+        """sequence-jacobian's array on (s, e, a) or (s, e), on the chain of (s, e)."""
+        x = np.asarray(ref[key], dtype=float)
+        if x.ndim == 3:
+            return x.reshape(-1, nA)
+        return x.reshape(-1) if key.endswith("/y") else x
+
+    value, name = worst((k, internals[k], flat(f"ls/internals/{k}"))
+                        for k in ["a_grid", "e_grid", "Pi_e", "Pi_s", "y"])
+    check(f"grids, income and the employment chain (largest: {name})", value, 1e-9)
+    check("Markov matrix: Kronecker product of sequence-jacobian's two",
+          rel(internals["Pi"], np.kron(ref["ls/internals/Pi_s"], ref["ls/internals/Pi_e"])), 1e-9)
+    value, name = worst((k, internals[k], flat(f"ls/internals/{k}")) for k in ["a", "c", "Va"])
+    check(f"steady state: policies (largest: {name})", value, 1e-9)
+    check("steady state: distribution D, relative to its largest mass",
+          rel(internals["D"], flat("ls/internals/D")), 1e-7)
+    value, name = worst((k, ss[k], ref[f"ls/ss/{k}"]) for k in ["A", "C", "U", "B"])
+    check(f"steady state: aggregates (largest: {name})", value, 1e-9)
+    hh.twosided = False
+    inputs = ["s", "f", "r", "w"]
+    t0 = time.perf_counter()
+    J = hh.jacobian(ss, inputs, T)
+    t_j = time.perf_counter() - t0
+    compare_jacobians(J, ref, "ls/J", "household Jacobians, forward differences", 1e-7)
+    J50 = hh.jacobian(ss, ["s"], 50)
+    ds = 0.6 ** np.arange(50)
+    compare_impulses({O: J50[O]["s"] @ ds for O in ("A", "C", "U")}, ref, "ls/td",
+                     "household's linear response to s, the notebook's", 1e-7)
+    t0 = time.perf_counter()
+    G = ls.solve_jacobian(ss, ["r"], ["asset_mkt"], ["s", "f"], T=T)
+    t_g = time.perf_counter() - t0
+    compare_jacobians(G, ref, "ls/G", "general-equilibrium Jacobians G", 1e-7)
+    shock = {"s": 0.02 * 0.8 ** np.arange(T)}
+    compare_impulses(ls.impulse_linear(ss, ["r"], ["asset_mkt"], shock), ref, "ls/linear",
+                     "linear impulse responses to s", 1e-7)
+    t0 = time.perf_counter()
+    nonlin = ls.impulse_nonlinear(ss, ["r"], ["asset_mkt"], shock, tol=NONLINEAR_TOL)
+    t_nl = time.perf_counter() - t0
+    compare_impulses(nonlin, ref, "ls/nonlinear", "nonlinear transition after s", 1e-8)
+    hh.twosided = True
+    compare_jacobians(hh.jacobian(ss, inputs, T), ref, "ls/J2",
+                      "household Jacobians, central differences", 1e-7)
+    ss_initial = ls.steady_state({**calibration, "s": 0.12})
+    D0 = ss_initial.internals["household"]["Dbeg"]
+    check("distribution of the steady state with s = 0.12, relative to its largest mass",
+          rel(D0, flat("ls/initial/Dbeg")), 1e-7)
+    back = ls.impulse_nonlinear(ss, ["r"], ["asset_mkt"], {"s": np.zeros(T)},
+                                tol=NONLINEAR_TOL, initial={"household": D0})
+    compare_impulses(back, ref, "ls/from_initial",
+                     "transition from the distribution with s = 0.12", 1e-8)
+    print(f"       seconds, dsgelab / sequence-jacobian: steady state {t_ss:.1f} / "
+          f"{meta['seconds']['ls steady state']:.1f}, household Jacobians {t_j:.1f} / "
+          f"{meta['seconds']['ls household Jacobians']:.1f}, G {t_g:.1f} / "
+          f"{meta['seconds']['ls G']:.1f}, nonlinear {t_nl:.1f} / "
+          f"{meta['seconds']['ls nonlinear']:.1f}")
+    ls_hh, ls_model, ls_steady, ls_D0 = hh, ls, ss, D0
+
+    print("4. dsgelab against itself")
     hh, ks = krusell_smith()
     ss = ks.steady_state({**calibration_ks(), "beta": float(ref["ks/ss/beta"]),
                           "Z": float(ref["ks/ss/Z"]), "K": float(ref["ks/ss/K"])})
@@ -392,6 +522,36 @@ def main() -> None:
           "shocks of 1, 0.1, 0.01 per cent: " + ", ".join(f"{g:.2e}" for g in gaps))
     check_at_least("Krusell-Smith: smallest ratio of the gaps, shock / 10",
                    min(gaps[0] / gaps[1], gaps[1] / gaps[2]), 90)
+
+    # with steps of 1e-6 and 1e-7 the gap is 1.7e-8 and 1.6e-7: rounding sets it below 1e-5, where
+    # it is smallest
+    fake_news_vs_direct(ls_hh, ls_steady, ["s", "f"], "labor-search household (moving Markov)",
+                        steps=(1e-3, 1e-4, 1e-5))
+    gaps = []
+    for size in (1e-2, 1e-3, 1e-4):
+        shock = {"s": size * 0.8 ** np.arange(T)}
+        lin = ls_model.impulse_linear(ls_steady, ["r"], ["asset_mkt"], shock)
+        nonlin = ls_model.impulse_nonlinear(ls_steady, ["r"], ["asset_mkt"], shock, tol=1e-13)
+        gaps.append(max(float(np.max(np.abs(nonlin[k] - lin[k]))) for k in ("r", "C", "U")))
+    print("       labor search, largest gap between the nonlinear and the linear response, for "
+          "shocks to s of 1, 0.1, 0.01 points: " + ", ".join(f"{g:.2e}" for g in gaps))
+    check_at_least("labor search: smallest ratio of the gaps, shock / 10",
+                   min(gaps[0] / gaps[1], gaps[1] / gaps[2]), 90)
+    # the household's path from the distribution with s = 0.12, at the steady state's prices,
+    # against the steady state's transition matrix applied period by period
+    internals = ls_steady.internals["household"]
+    path = ls_hh.path(ls_steady, {}, T, Dbeg=ls_D0)
+    n_a = internals["a_grid"].size
+    M = (_Lottery(internals["a"], internals["a_grid"]).matrix()
+         @ sp.kron(sp.csr_matrix(internals["Pi"].T), sp.identity(n_a)))
+    Dbeg, largest = ls_D0.ravel(), 0.0
+    for t in range(T):
+        D = (internals["Pi"].T @ Dbeg.reshape(-1, n_a)).ravel()
+        for O, o in (("A", "a"), ("C", "c"), ("U", "u")):
+            largest = max(largest, abs(path[O][t] - D @ internals[o].ravel()) / abs(ls_steady[O]))
+        Dbeg = M @ Dbeg
+    check("labor search: path from an initial distribution against forward simulation",
+          largest, 1e-12)
 
     if failures:
         print(f"\n{len(failures)} checks failed: {failures}")

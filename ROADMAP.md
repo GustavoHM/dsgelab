@@ -545,7 +545,8 @@ MacroModelling.jl.
   autocorrelations within 3e-15, the `mode_check` kernels within 6e-11 where the prior is bounded,
   and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
   The identification-strength bars, which need the information matrix, the annualised and vintage
-  shock decompositions and the bands of conditional forecasts are left out.
+  shock decompositions and the bands of conditional forecasts were left out, and came in 0.10
+  (below).
 - [x] **BVAR and DSGE-VAR**, checked against Dynare's `+bvar` and `dsge_var`. `bvar` and
   `bvar_density` build the VAR with the Sims–Zha (1998) dummy-observation prior as Dynare's
   `bvar_density` does, with its hyperparameters and training sample, and `BVAR.forecast` draws
@@ -601,16 +602,29 @@ of 0.9.0 records, and each keeps the six conditions above.
   depreciation it agrees with time iteration within 5e-12 and has the closed form's errors, in a
   third of time iteration's time, with a damping of 0.5, without which it diverges (6 November
   2026).
-- [ ] **The figures left out in 0.9**: identification strength and sensitivity, from the
+- [x] **The figures left out in 0.9**: identification strength and sensitivity, from the
   information matrix, the annualised and vintage shock decompositions, and bands for conditional
   forecasts. Reference: Dynare's `identification`, `shock_decomposition` and
-  `conditional_forecast`.
+  `conditional_forecast`. On `fs2000.mod` at the prior mean, on the 300 observations Dynare
+  simulates for its information matrix, the matrix agrees with Dynare's within 1.2e-8 of the root
+  of its diagonal and the strength and sensitivity measures within 2.7e-7. The real-time pools,
+  the forecast and conditional vintages, the `yoy` and `aoa` decompositions and the initial
+  condition decomposition agree within 2e-14, and the conditional forecast with its 80% bands,
+  on Dynare's 2,000 draws, within 7e-15. Dynare's `q2a` annualisation and the sensitivity bars of
+  its reduced form and dynamic model are left out (6 November 2026).
 - [ ] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
   `deflator`. Reference: Dynare, as for the balanced growth path of 0.4.
 - [ ] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
   Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
   in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
   along a transition path.
+  - [x] *The Markov matrix that moves along a path* (6 November 2026), with transitions from a
+    given distribution (`initial`). On the household of sequence-jacobian 1.0.0's
+    `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates,
+    closed by a bond market, the steady state agrees within 8.1e-10, the Jacobians within 2.9e-10,
+    `G` within 8.3e-11, the linear and nonlinear responses within 2.2e-10 and the return from
+    another steady state's distribution within 6.0e-10. The fake-news Jacobians agree with the
+    brute-force ones within 1.6e-9. The asset grid stays fixed along a path.
 - [ ] **API audit before the freeze.** An inventory of `__all__`, with the names, argument orders
   and defaults made consistent across modules. Every change comes with a deprecation warning that
   lasts at least one minor version, as the version policy of 0.5 requires, so the audit is

@@ -571,9 +571,9 @@ projeto Julia já usado para o MacroModelling.jl.
   figuras do próprio Dynare registradas enquanto são desenhadas e comparadas nos mesmos sorteios,
   as estatísticas de Brooks e Gelman concordam até 8e-14, as autocorrelações até 3e-15, os núcleos
   do `mode_check` até 6e-11 onde a priori é limitada, e as IRFs a posteriori nos 1.200 sorteios de
-  parâmetros do Dynare até 3e-10 da maior resposta. Ficam de fora as barras de força da
+  parâmetros do Dynare até 3e-10 da maior resposta. Ficaram de fora as barras de força da
   identificação, que exigem a matriz de informação, as decomposições de choques anualizadas e por
-  safra e as bandas das previsões condicionais.
+  safra e as bandas das previsões condicionais, que vieram na 0.10 (abaixo).
 - [x] **BVAR e DSGE-VAR**, conferidos contra o `+bvar` e o `dsge_var` do Dynare. `bvar` e
   `bvar_density` montam o VAR com a priori de observações artificiais de Sims e Zha (1998) como o
   `bvar_density` do Dynare, com os hiperparâmetros e a amostra de treino dele, e
@@ -629,16 +629,29 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   crescimento estocástico com utilidade logarítmica e depreciação total, concorda com a iteração
   temporal até 5e-12 e tem os erros da forma fechada, em um terço do tempo da iteração temporal,
   com amortecimento de 0,5, sem o qual diverge (6 de novembro de 2026).
-- [ ] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
+- [x] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
   matriz de informação, as decomposições de choques anualizadas e por safra, e bandas para as
   previsões condicionais. Referência: o `identification`, o `shock_decomposition` e o
-  `conditional_forecast` do Dynare.
+  `conditional_forecast` do Dynare. No `fs2000.mod` na média a priori, nas 300 observações que o
+  Dynare simula para a sua matriz de informação, a matriz concorda com a do Dynare até 1,2e-8 da
+  raiz da sua diagonal, e as medidas de força e de sensibilidade até 2,7e-7. Os conjuntos em tempo
+  real, as safras de previsão e condicionais, as decomposições `yoy` e `aoa` e a decomposição das
+  condições iniciais concordam até 2e-14, e a previsão condicional com as suas bandas de 80%, nos
+  2.000 sorteios do Dynare, até 7e-15. Ficam de fora a anualização `q2a` do Dynare e as barras de
+  sensibilidade da sua forma reduzida e do seu modelo dinâmico (6 de novembro de 2026).
 - [ ] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
   `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4.
 - [ ] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
   (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
   dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
   Markov que muda ao longo de uma trajetória de transição.
+  - [x] *A matriz de Markov que muda ao longo da trajetória* (6 de novembro de 2026), com
+    transições a partir de uma distribuição dada (`initial`). No domicílio do `labor_search.ipynb`
+    do sequence-jacobian 1.0.0, cuja cadeia de emprego muda com as taxas de obtenção e de perda de
+    emprego, fechado por um mercado de títulos, o estado estacionário concorda em 8,1e-10, os
+    jacobianos em 2,9e-10, `G` em 8,3e-11, as respostas linear e não linear em 2,2e-10 e o retorno
+    a partir da distribuição de outro estado estacionário em 6,0e-10. Os jacobianos do fake news
+    concordam com os de força bruta em 1,6e-9. A grade de ativos fica fixa ao longo da trajetória.
 - [ ] **Auditoria da API antes do congelamento.** Um inventário do `__all__`, com nomes, ordem dos
   argumentos e valores padrão coerentes entre os módulos. Cada mudança vem com um aviso de
   descontinuação que dura pelo menos uma versão menor, como exige a política de versões da 0.5, e

@@ -58,7 +58,9 @@ if TYPE_CHECKING:
 
 __all__ = ["StateSpace", "FilterResult", "SmootherResult", "Forecast", "state_space",
            "kalman_filter", "kalman_smoother", "shock_decomposition",
-           "realtime_shock_decomposition", "forecast", "low_frequency"]
+           "realtime_shock_decomposition", "forecast", "low_frequency",
+           "initial_condition_decomposition", "annualise_decomposition",
+           "ConditionalForecast", "conditional_forecast_bands"]
 
 _LOG2PI = np.log(2.0 * np.pi)
 
@@ -615,7 +617,8 @@ def shock_decomposition(smoothed: SmootherResult, *, variables: Sequence[str] | 
 def realtime_shock_decomposition(space: StateSpace, data: Data, *, init: str = "auto",
                                  variables: Sequence[str] | None = None,
                                  initial_shock_states: Mapping[str, str] | None = None,
-                                 first: int = 2) -> dict:
+                                 first: int = 2, forecast: int = 0,
+                                 vintages: Sequence[int] = ()) -> dict:
     """The shock decomposition each date would have shown with the data up to it.
 
     For every date ``t`` the sample is cut at ``t``, smoothed and decomposed,
@@ -630,25 +633,145 @@ def realtime_shock_decomposition(space: StateSpace, data: Data, *, init: str = "
     ``shock_decomposition`` counts it as a shock. Both are reproduced:
     ``initial_shock_states`` is None here by default and set by
     :meth:`dsgelab.ModFile.shock_states` for the full sample.
+
+    Beside ``"shocks"``, ``"initial"`` and ``"total"`` (the pool), the result has
+    the other decompositions of Dynare's command, each a mapping of the same
+    form. ``"conditional"`` is its one-step conditional pool: at each date, the
+    contribution of that date's innovations, with the rest in ``"initial"`` (NaN
+    before the first sample). With ``forecast`` (Dynare's ``forecast``) the pool
+    runs ``forecast`` dates past the sample, as the last cut forecasts them, and
+    ``"forecast"`` is the pool of one-step forecasts: at date ``t + 1``, what the
+    cut at ``t`` forecasts, each contribution carried by the solution without new
+    shocks (NaN up to the first sample). ``vintages`` lists cuts, each by the
+    number of observations in it (Dynare's ``save_realtime``). For each,
+    ``"vintages"`` holds the decomposition of that cut over its dates and the
+    ``forecast`` after them, ``"forecast_vintages"`` the decomposition of its
+    forecast, from its last date on, and ``"conditional_vintages"`` the
+    ``forecast``-step conditional decomposition of the pool from that date on:
+    the contributions the cut did not forecast, with the forecast itself counted
+    in ``"initial"``. These are what Dynare's ``plot_shock_decomposition`` draws
+    with ``realtime`` 1, 3 and 2 and a ``vintage``, and
+    :func:`~dsgelab.plots.plot_decomposition` draws them with the same options.
     """
     Y = space.data_matrix(data)
     Tn = Y.shape[0]
-    names = list(variables) if variables is not None else list(space.solution.model.names)
-    shocks = {e: {v: np.full(Tn, np.nan) for v in names} for e in space.shocks}
-    initial = {v: np.full(Tn, np.nan) for v in names}
-    total = {v: np.full(Tn, np.nan) for v in names}
+    h = max(0, int(forecast))
+    sol = space.solution
+    assert sol is not None
+    names = list(variables) if variables is not None else list(sol.model.names)
+    shocks = list(space.shocks)
+
+    def empty(n):
+        return {"shocks": {e: {v: np.full(n, np.nan) for v in names} for e in shocks},
+                "initial": {v: np.full(n, np.nan) for v in names},
+                "total": {v: np.full(n, np.nan) for v in names}}
+
+    def put(out, dec, src, dst):
+        for v in names:
+            out["total"][v][dst] = dec["total"][v][src]
+            out["initial"][v][dst] = dec["initial"][v][src]
+            for e in shocks:
+                out["shocks"][e][v][dst] = dec["shocks"][e][v][src]
+
+    pool, cond = empty(Tn + h), empty(Tn)
+    fpool = empty(Tn + 1)
+    saved: dict[int, dict] = {}
+    fsaved: dict[int, dict] = {}
+    want = {int(v) for v in vintages}
     first = max(1, min(first, Tn))
+    nk = space.n_model_states
     for cut in range(first, Tn + 1):
         sm = kalman_smoother(space, Y[:cut], init=init)
         dec = shock_decomposition(sm, variables=names, initial_shock_states=initial_shock_states)
-        dates = range(cut) if cut == first else [cut - 1]
-        for t in dates:
-            for v in names:
-                total[v][t] = dec["total"][v][t]
-                initial[v][t] = dec["initial"][v][t]
-                for e in space.shocks:
-                    shocks[e][v][t] = dec["shocks"][e][v][t]
-    return {"shocks": shocks, "initial": initial, "total": total}
+        if h:
+            dec = _extend_decomposition(sm, dec, names, h, initial_shock_states)
+        if cut == first:
+            put(pool, dec, slice(0, cut), slice(0, cut))
+        elif cut < Tn:
+            put(pool, dec, cut - 1, cut - 1)
+        else:
+            put(pool, dec, slice(cut - 1, cut + h), slice(cut - 1, cut + h))
+        # the one-step conditional decomposition: the impact of this date's innovations
+        last = cut - 1
+        impact = {e: sol.variables((space.R[:nk, m] * sm.shocks[last, m])[None])
+                  for m, e in enumerate(shocks)}
+        for v in names:
+            cond["total"][v][last] = dec["total"][v][last]
+            for e in shocks:
+                cond["shocks"][e][v][last] = impact[e][v][0]
+            cond["initial"][v][last] = dec["total"][v][last] - sum(impact[e][v][0]
+                                                                   for e in shocks)
+        if h:
+            put(fpool, dec, cut, cut)
+        if cut in want:
+            saved[cut] = _slice_decomposition(dec, slice(0, cut + h))
+            if h:
+                fsaved[cut] = _slice_decomposition(dec, slice(cut - 1, cut + h))
+    out = dict(pool)
+    out["conditional"] = cond
+    if h:
+        out["forecast"] = fpool
+        out["forecast_vintages"] = fsaved
+        csaved = {}
+        for cut, fc in fsaved.items():
+            end = min(cut + h, Tn)
+            n = end - cut + 1
+            got = _slice_decomposition(pool, slice(cut - 1, end))
+            got["initial"] = {v: got["initial"][v] - fc["initial"][v][:n] + fc["total"][v][:n]
+                              for v in names}
+            got["shocks"] = {e: {v: got["shocks"][e][v] - fc["shocks"][e][v][:n] for v in names}
+                             for e in shocks}
+            csaved[cut] = got
+        out["conditional_vintages"] = csaved
+    if want:
+        out["vintages"] = saved
+    return out
+
+
+def _slice_decomposition(dec: Mapping, span: slice) -> dict:
+    return {"shocks": {e: {v: np.array(p[span]) for v, p in d.items()}
+                       for e, d in dec["shocks"].items()},
+            "initial": {v: np.array(p[span]) for v, p in dec["initial"].items()},
+            "total": {v: np.array(p[span]) for v, p in dec["total"].items()}}
+
+
+def _extend_decomposition(sm: SmootherResult, dec: Mapping, names, h: int,
+                          initial_shock_states) -> dict:
+    """``dec`` carried ``h`` dates past the sample by the solution, without new shocks.
+
+    Each shock's contribution and the total follow ``k' = T k``, and the initial
+    condition is what is left, as in Dynare's forecast decomposition.
+    """
+    ss = sm.space
+    sol = ss.solution
+    assert sol is not None
+    nk = ss.n_model_states
+    Tn, n = sm.states.shape
+
+    def ahead(k):
+        out = np.zeros((h, n))
+        for j in range(h):
+            k = ss.T @ k
+            out[j] = k
+        return sol.variables(out[:, :nk])
+
+    tot = ahead(sm.states[-1])
+    init_map = dict(initial_shock_states or {})
+    out: dict = {"shocks": {}, "total": {}, "initial": {}}
+    for m, e in enumerate(ss.shocks):
+        piece = np.zeros(n)
+        for st, sh in init_map.items():
+            if sh == e:
+                i = ss.states.index(st)
+                piece[i] = sm.states[0, i]
+        for t in range(1, Tn):
+            piece = ss.T @ piece + ss.R[:, m] * sm.shocks[t, m]
+        more = ahead(piece)
+        out["shocks"][e] = {v: np.r_[dec["shocks"][e][v], more[v]] for v in names}
+    for v in names:
+        out["total"][v] = np.r_[dec["total"][v], tot[v]]
+        out["initial"][v] = out["total"][v] - sum(out["shocks"][e][v] for e in ss.shocks)
+    return out
 
 
 @dataclass
@@ -710,3 +833,257 @@ def forecast(space: StateSpace, data: Data, horizon: int, *, init: str = "auto",
     upper = {v: mean[v] + z * sd[v] for v in names}
     return Forecast(mean=mean, std=sd, lower=lower, upper=upper, horizon=horizon,
                     coverage=coverage)
+
+
+def initial_condition_decomposition(smoothed: SmootherResult, *,
+                                    variables: Sequence[str] | None = None,
+                                    initial_shock_states: Mapping[str, str] | None = None) -> dict:
+    """The initial condition of a shock decomposition, split by the variables' first values.
+
+    Dynare's ``initial_condition_decomposition``. At the first date each variable
+    is its own contribution. From the second on, the first value of each
+    variable that the solution carries in a state is carried alone, and the
+    other variables contribute nothing. What the first values do not explain is
+    what the shocks did after the first date. A state ``LAG1_x``, which a model
+    read from a ``.mod`` file or declared by equations keeps for the lag of
+    ``x``, holds the first value of ``x`` at the second date, and a state of a
+    model declared in Python holds its own first value at the first date. The
+    states in ``initial_shock_states`` (:attr:`dsgelab.ModFile.shock_states`)
+    carry a shock and count with the shocks.
+
+    Returns ``{"initial": {variable: {var: path}}, "shocks": {var: path},
+    "total": {var: path}}``, the first level keyed by the variable whose first
+    value contributes, one per variable of the model that is not such a state.
+    """
+    ss = smoothed.space
+    sol = ss.solution
+    assert sol is not None
+    k = smoothed.states
+    Tn, n = k.shape
+    nk = ss.n_model_states
+    names = list(variables) if variables is not None else list(sol.model.names)
+    carriers = set(initial_shock_states or {})
+    model_names = list(sol.model.names)
+    total = sol.variables(k[:, :nk])
+    lags = {st: st[5:] for st in ss.states[:nk]
+            if st.startswith("LAG1_") and st[5:] in model_names}
+    columns = [v for v in model_names if v not in carriers and v not in lags]
+    carried = {lags.get(st, st): (i, 1 if st in lags else 0)
+               for i, st in enumerate(ss.states[:nk]) if st not in carriers}
+    out: dict = {"initial": {}, "total": {v: total[v] for v in names}}
+    for c in columns:
+        paths = {v: np.zeros(Tn) for v in names}
+        if c in carried and Tn > 1:
+            i, start = carried[c]
+            piece = np.zeros((Tn, n))
+            piece[start, i] = k[start, i]
+            for t in range(start + 1, Tn):
+                piece[t] = ss.T @ piece[t - 1]
+            moved = sol.variables(piece[:, :nk])
+            for v in names:
+                paths[v][1:] = moved[v][1:]
+        if c in paths:
+            paths[c][0] = total[c][0]
+        out["initial"][c] = paths
+    out["shocks"] = {v: total[v] - sum(out["initial"][c][v] for c in columns) for v in names}
+    return out
+
+
+def annualise_decomposition(decomposition: Mapping, kind: str = "yoy", *,
+                            quarter: int = 1) -> dict:
+    """A quarterly decomposition at another frequency, as ``plot_shock_decomposition``'s ``type``.
+
+    ``decomposition`` maps ``"shocks"``, ``"initial"`` and ``"total"`` (and any
+    other entry with the same form, such as the ``"states"`` of
+    :func:`initial_condition_decomposition`'s ``"initial"``) to paths.
+    ``kind="qoq"`` leaves it as it is, ``"yoy"`` sums each contribution over four
+    consecutive quarters, the year-on-year change of a variable in quarterly
+    changes, from the fourth quarter of the sample on, and ``"aoa"`` keeps the
+    fourth quarter of each year. ``quarter`` is the quarter of the first date
+    (Dynare's ``initial_date``). Without Dynare's ``q2a`` structure, this is what
+    its ``type=yoy`` and ``type=aoa`` draw. The result has the same form.
+    """
+    if kind not in ("qoq", "yoy", "aoa"):
+        raise ValueError(f"kind must be 'qoq', 'yoy' or 'aoa', not {kind!r}")
+    if not 1 <= quarter <= 4:
+        raise ValueError("quarter must be 1, 2, 3 or 4")
+
+    def change(y):
+        y = np.asarray(y, dtype=float)
+        if kind == "yoy":
+            return y[:-3] + y[1:-2] + y[2:-1] + y[3:]
+        if kind == "aoa":
+            return y[4 - quarter::4]
+        return y.copy()
+
+    def walk(node):
+        if isinstance(node, Mapping):
+            return {key: walk(value) for key, value in node.items()}
+        return change(node)
+
+    return walk(decomposition)
+
+
+@dataclass
+class ConditionalForecast:
+    """A conditional forecast with bands, as Dynare's ``conditional_forecast``.
+
+    See :func:`conditional_forecast_bands`. Every path runs over dates ``0..H``,
+    date 0 the starting point.
+
+    Attributes
+    ----------
+    mean, lower, upper : the mean of the conditional paths over the draws and the
+        bounds of the interval holding ``coverage`` of them, by variable
+        (Dynare's ``cond.Mean`` and ``cond.ci``).
+    unconditional_mean, unconditional_lower, unconditional_upper : the same
+        without conditions (``uncond``).
+    shocks : the controlled shocks over dates ``1..H``, ``{shock: {"mean": ...,
+        "lower": ..., "upper": ...}}`` (``controlled_exo_variables``).
+    coverage, replic : the share in the bands and the number of draws.
+    """
+
+    mean: dict
+    lower: dict
+    upper: dict
+    unconditional_mean: dict
+    unconditional_lower: dict
+    unconditional_upper: dict
+    shocks: dict
+    coverage: float
+    replic: int
+
+
+def _order_bands(X: np.ndarray, coverage: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Mean and Dynare's interval of the draws along the first axis: ranks ``round(n tt)``."""
+    from .plots import _round
+    n = X.shape[0]
+    tt = (1 - coverage) / 2
+    t1, t2 = max(1, _round(n * tt)), min(n, _round(n * (1 - tt)))
+    xs = np.sort(X, axis=0)
+    return X.mean(axis=0), xs[t1 - 1], xs[t2 - 1]
+
+
+def _conditional_paths(sol: FirstOrderSolution, targets: np.ndarray, rows: list[int],
+                       ctrl: list[int], k0: np.ndarray, shocks: np.ndarray):
+    """Dynare's ``get_shock_paths``, for draws at once.
+
+    ``targets`` ``(H, n_cond)`` in deviations (NaN where free), ``shocks``
+    ``(replic, H, n_shocks)`` with the controlled ones ignored. At each date the
+    controlled shocks paired with the constrained variables in force, condition
+    ``i`` with shock ``i``, put them on their paths; with more or fewer controlled
+    shocks than conditions, least squares on all of them. Returns the state paths
+    ``(replic, H + 1, n_k)`` and the controlled shocks ``(replic, H, n_ctrl)``.
+    """
+    replic, H, ne = shocks.shape
+    nk = sol.klein.n_k
+    Q = sol.Q if sol.Q is not None else np.zeros((nk, ne))
+    J = sol._J()
+    u = shocks.copy()
+    u[:, :, ctrl] = 0.0
+    k = np.zeros((replic, H + 1, nk))
+    k[:, 0] = k0
+    e = np.zeros((replic, H, len(ctrl)))
+    paired = len(ctrl) == len(rows)
+    for t in range(H):
+        base = k[:, t] @ sol.P.T + u[:, t] @ Q.T
+        live = [i for i in range(len(rows)) if np.isfinite(targets[t, i])]
+        if live:
+            r = [rows[i] for i in live]
+            use = [ctrl[i] for i in live] if paired else ctrl
+            M = J[r] @ Q[:, use]
+            gap = targets[t, live][None] - base @ J[r].T
+            sol_e = (np.linalg.solve(M, gap.T).T if paired
+                     else np.linalg.lstsq(M, gap.T, rcond=None)[0].T)
+            base = base + sol_e @ Q[:, use].T
+            cols = live if paired else list(range(len(ctrl)))
+            e[:, t, cols] = sol_e
+        k[:, t + 1] = base
+    return k, e
+
+
+def conditional_forecast_bands(solution: FirstOrderSolution, conditions: Mapping[str, ArrayLike],
+                               *, controlled: Sequence[str] | None = None,
+                               periods: int | None = None, initial: ArrayLike | None = None,
+                               cov: Covariance = None, levels: bool = False,
+                               replic: int = 5000, coverage: float = 0.8, seed: int | None = 0,
+                               normals: ArrayLike | tuple[ArrayLike, ArrayLike] | None = None
+                               ) -> ConditionalForecast:
+    """A conditional forecast with bands from the shocks left free, as Dynare's.
+
+    ``conditions`` maps variables to their paths over dates ``1..cL`` (a NaN
+    leaves that date free) and ``controlled`` names the shocks that put them on
+    their paths, one per condition and in the same order, as Dynare's
+    ``controlled_varexo`` (all the shocks by default). The forecast runs over
+    ``periods`` dates (``cL`` by default) from ``initial`` (hat-deviations of the
+    states, the steady state by default). For each of ``replic`` draws, the other
+    shocks are drawn over the ``periods`` dates from the covariance ``cov``
+    (scaled by its Cholesky factor, Dynare's square root of a diagonal), and the
+    controlled ones are chosen date by date to meet the conditions in force at
+    that date, as Dynare's ``conditional_forecasts.get_shock_paths``; after
+    ``cL`` they are zero. The unconditional paths draw the same shocks with the
+    controlled ones at zero. The bands hold ``coverage`` of the draws, ranked as
+    Dynare ranks them (its ``conf_sig``, 0.8 by default).
+
+    ``normals``, standard normal draws ``(replic, periods, n_shocks)``, or two
+    such arrays for the conditional and the unconditional paths, replace the
+    draws of ``seed``, so that the forecast can be compared with Dynare's on the
+    same draws. With ``levels`` the paths are in levels in and out, otherwise in
+    the rescaled deviations, as for
+    :meth:`~dsgelab.FirstOrderSolution.conditional_forecast`.
+    """
+    from .solution import shock_covariance
+    sol = solution
+    names = list(conditions)
+    series = [np.asarray(conditions[n], dtype=float).ravel() for n in names]
+    cl = series[0].size
+    if any(s.size != cl for s in series):
+        raise ValueError("every conditioned path must have the same length")
+    H = cl if periods is None else int(periods)
+    if H < cl:
+        raise ValueError(f"periods={H} is shorter than the conditions ({cl} dates)")
+    if levels:
+        series = [(s - sol.coords.center[sol.model.position(n)])
+                  / sol.coords.scale[sol.model.position(n)] for n, s in zip(names, series)]
+    targets = np.full((H, len(names)), np.nan)
+    targets[:cl] = np.column_stack(series)
+    shocks_ = list(sol.model.shocks)
+    ne = len(shocks_)
+    ctrl = list(range(ne)) if controlled is None else [shocks_.index(c) for c in controlled]
+    rows = [sol.model.position(n) for n in names]
+    k0 = np.zeros(sol.klein.n_k) if initial is None else np.asarray(initial, dtype=float)
+    Sigma = shock_covariance(shocks_, cov)
+    L = (np.diag(np.sqrt(np.diag(Sigma))) if np.allclose(Sigma, np.diag(np.diag(Sigma)))
+         else np.linalg.cholesky(Sigma))
+    if normals is None:
+        rng = np.random.default_rng(seed)
+        Z1 = rng.standard_normal((replic, H, ne))
+        Z2 = rng.standard_normal((replic, H, ne))
+    elif isinstance(normals, tuple):
+        Z1, Z2 = (np.asarray(z, dtype=float) for z in normals)
+    else:
+        Z1 = Z2 = np.asarray(normals, dtype=float)
+    if Z1.shape != (Z1.shape[0], H, ne) or Z2.shape != Z1.shape:
+        raise ValueError(f"normals must be (replic, {H}, {ne})")
+    k_c, e_c = _conditional_paths(sol, targets, rows, ctrl, k0, Z1 @ L.T)
+    k_u, _ = _conditional_paths(sol, np.full_like(targets, np.nan), rows, ctrl, k0, Z2 @ L.T)
+
+    def paths(k):
+        flat = sol.variables(k.reshape(-1, k.shape[-1]))
+        out = {v: x.reshape(k.shape[0], -1) for v, x in flat.items()}
+        return sol.to_levels(out) if levels else out
+
+    pc, pu = paths(k_c), paths(k_u)
+    bands_c = {v: _order_bands(x, coverage) for v, x in pc.items()}
+    bands_u = {v: _order_bands(x, coverage) for v, x in pu.items()}
+    shock_bands = {}
+    for j, i in enumerate(ctrl):
+        m, lo, hi = _order_bands(e_c[:, :cl, j], coverage)
+        shock_bands[shocks_[i]] = {"mean": m, "lower": lo, "upper": hi}
+    return ConditionalForecast(
+        mean={v: b[0] for v, b in bands_c.items()}, lower={v: b[1] for v, b in bands_c.items()},
+        upper={v: b[2] for v, b in bands_c.items()},
+        unconditional_mean={v: b[0] for v, b in bands_u.items()},
+        unconditional_lower={v: b[1] for v, b in bands_u.items()},
+        unconditional_upper={v: b[2] for v, b in bands_u.items()},
+        shocks=shock_bands, coverage=coverage, replic=int(Z1.shape[0]))

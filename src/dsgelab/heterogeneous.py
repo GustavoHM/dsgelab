@@ -21,9 +21,13 @@ grid points goes to each with the probability that keeps the mean of assets. The
 distribution is the null vector of the sparse transition matrix, found by one sparse solve.
 
 The timing is sequence-jacobian's. ``Dbeg_t`` is the distribution over last period's income state
-and the assets carried into ``t``; the income shock turns it into ``D_t = Pi' Dbeg_t``, over
+and the assets carried into ``t``; the income shock turns it into ``D_t = Pi_t' Dbeg_t``, over
 today's income state, and the policy turns ``D_t`` into ``Dbeg_{t+1}``. An aggregate output is the
-mean of an individual outcome under ``D_t``, and its name is the outcome's in capitals.
+mean of an individual outcome under ``D_t``, and its name is the outcome's in capitals. The Markov
+matrix may be an output of the hetinputs and move with the inputs along a path: ``Pi_t`` moves the
+distribution at ``t``, and the expectation the step takes at ``t`` is ``Pi_{t+1}`` times the
+backward variables at ``t + 1``. A transition may start from a distribution ``Dbeg_0`` other than
+the steady state's.
 
 The fake-news algorithm
 -----------------------
@@ -37,6 +41,9 @@ first row and ``curlyE_{t-1}' curlyD_s`` below it, and ``J`` follows from it by 
 ``J[t, s] = F[t, s] + J[t - 1, s - 1]``. Each column costs one backward step, so the whole
 ``T x T`` Jacobian costs ``T`` steps instead of the ``T^2`` of differentiating a path for every
 ``s``. The derivative of one step is a finite difference, two-sided by default, with step ``h``.
+An input that moves the Markov matrix at ``s`` adds three terms, with ``dPi`` the derivative of
+the matrix, as in sequence-jacobian 1.0.0: ``Dbeg' dPi y`` to ``curlyY_0``, the lottery of
+``dPi' Dbeg`` to ``curlyD_0``, and ``dPi V`` to the expectation the step takes a period earlier.
 
 General equilibrium
 -------------------
@@ -68,6 +75,7 @@ __all__ = ["HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyS
 Jacobians = dict[str, dict[str, np.ndarray]]
 
 _COMPLEX_STEP = 1e-20
+_MARKOV = "\0markov"        # the key of the Markov matrix's derivative among a step's outcomes
 _ComplexWarning = getattr(np, "exceptions", np).ComplexWarning
 
 
@@ -490,9 +498,11 @@ class HetBlock:
 
     Notes
     -----
-    The block has one endogenous state, the asset, and one Markov chain, whose transition matrix
-    and grid do not depend on the inputs that move along a path. Several chains go into one by
-    their Kronecker product.
+    The block has one endogenous state, the asset, and one Markov chain. Several chains go into one
+    by their Kronecker product. The transition matrix, and the income at each node, may be outputs
+    of ``hetinputs`` that move with the inputs along a path, as when the risk of unemployment
+    rises in a recession. The asset grid must stay fixed along a path: the lottery at ``t`` puts
+    the policy on the grid of ``t + 1``, which one step does not see.
     """
 
     def __init__(self, step: Callable, outputs: Sequence[str], *, backward: str | Sequence[str],
@@ -666,21 +676,35 @@ class HetBlock:
         return changed
 
     def _check_fixed(self, x, x0, moved) -> None:
-        """Raises if the Markov matrix or the grid at ``x`` differs from the steady state's."""
-        for k in (self.markov, self.grid):
-            if not np.array_equal(np.asarray(x[k]), np.asarray(x0[k])):
-                raise NotImplementedError(f"het block {self.name}: {sorted(moved)} move {k}, "
-                                          "which must stay fixed along a path")
+        """Raises if the asset grid at ``x`` differs from the steady state's."""
+        if not np.array_equal(np.asarray(x[self.grid]), np.asarray(x0[self.grid])):
+            raise NotImplementedError(f"het block {self.name}: {sorted(moved)} move {self.grid}, "
+                                      "which must stay fixed along a path")
 
-    def path(self, ss: BlockSteadyState, paths: Mapping[str, np.ndarray], T: int):
+    def _initial(self, Dbeg: ArrayLike, shape: tuple[int, ...]) -> np.ndarray:
+        """``Dbeg`` checked as a distribution on the block's grid."""
+        label = f"het block {self.name}"
+        D0 = np.asarray(Dbeg, dtype=float)
+        if D0.shape != shape:
+            raise ValueError(f"{label}: the initial distribution has shape {D0.shape}, not "
+                             f"{shape}, the income states by the grid")
+        if not np.all(np.isfinite(D0)) or np.any(D0 < 0) or abs(D0.sum() - 1.0) > 1e-10:
+            raise ValueError(f"{label}: the initial distribution must be nonnegative and sum to one")
+        return D0
+
+    def path(self, ss: BlockSteadyState, paths: Mapping[str, np.ndarray], T: int, *,
+             Dbeg: ArrayLike | None = None):
         """The aggregates' paths, in levels, given the paths of some inputs in levels.
 
-        The backward iteration runs from ``T - 1``, where next period is the steady state, and the
-        distribution starts from the steady state's ``Dbeg``.
+        The backward iteration runs from ``T - 1``, where next period is the steady state. The
+        distribution starts from ``Dbeg``, over last period's income state and the assets carried
+        into the first period, by default the steady state's. The Markov matrix may move with the
+        inputs, and the asset grid may not.
         """
         x0, internals = self._at_steady_state(ss)
         changed = self._moving_hetinputs(paths)
         Pi, grid = self._exogenous(x0)
+        Pis = [Pi] * T              # the Markov matrix of each period
         V = {v: internals[v] for v in self.backward}
         policies: list[Any] = [None] * T
         outcomes: list[Any] = [None] * T
@@ -691,19 +715,24 @@ class HetBlock:
             if changed - set(paths):
                 self._run_hetinputs(x, set(paths))
                 self._check_fixed(x, x0, paths)
+            # the expectation at t is taken with the transition from t to t + 1
+            Pi_next = Pis[t + 1] if t + 1 < T else Pi
+            if self.markov in changed:
+                Pis[t] = self._exogenous(x)[0]
             for v in self.backward:
-                x[v + "_p"] = Pi @ V[v]
+                x[v + "_p"] = Pi_next @ V[v]
             out = self._full(x)
             policies[t] = np.asarray(out[self.policy], dtype=float)
             outcomes[t] = {o: out[o] for o in self.individual}
             V = {v: np.asarray(out[v], dtype=float) for v in self.backward}
         Y = {O: np.empty(T) for O in self.outputs}
-        Dbeg = internals["Dbeg"]
+        D_beg = (internals["Dbeg"] if Dbeg is None
+                 else self._initial(Dbeg, np.shape(internals["Dbeg"])))
         for t in range(T):
-            D = Pi.T @ Dbeg
+            D = Pis[t].T @ D_beg
             for O, o in self._aggregate.items():
                 Y[O][t] = np.vdot(D, outcomes[t][o])
-            Dbeg = _Lottery(policies[t], grid).forward(D)
+            D_beg = _Lottery(policies[t], grid).forward(D)
         return Y
 
     # --- Jacobians ---------------------------------------------------------------------------
@@ -727,10 +756,10 @@ class HetBlock:
         Pi, grid = self._exogenous(x0)
         for v in self.backward:
             x0[v + "_p"] = Pi @ internals[v]
-        D = internals["D"]
+        D, Dbeg = internals["D"], internals["Dbeg"]
         lottery = _Lottery(internals[self.policy], grid)
         indiv = {O: self._aggregate[O] for O in outputs}
-        base = None if self.twosided else self._full(x0)
+        base = None if self.twosided else {**self._full(x0), _MARKOV: Pi}
 
         # step 2: the expectation vectors, demeaned (the curlyD sum to zero)
         E = {}
@@ -757,6 +786,15 @@ class HetBlock:
                 curlyD[s] = lottery.shock(D, d[self.policy]).ravel()
                 for O, o in indiv.items():
                     curlyY[O][s] = np.vdot(D, d[o])
+                if s == 0 and _MARKOV in d:
+                    # the input moves the Markov matrix, which moves the distribution today and
+                    # the expectation of the backward variables a period earlier
+                    dPi = d[_MARKOV]
+                    for v in self.backward:
+                        dV[v] = dV[v] + dPi @ internals[v]
+                    curlyD[0] += lottery.forward(dPi.T @ Dbeg).ravel()
+                    for O, o in indiv.items():
+                        curlyY[O][0] += np.vdot(Dbeg, dPi @ np.asarray(internals[o], dtype=float))
             # steps 3 and 4: the fake-news matrix, and the Jacobian by its recursion
             for O in outputs:
                 F = np.empty((T, T))
@@ -769,7 +807,10 @@ class HetBlock:
         return {O: row for O, row in J.items() if row}
 
     def _step_derivative(self, x0, base, i, dV, changed):
-        """The derivative of every outcome of one step, in the direction of an input or of dV."""
+        """The derivative of every outcome of one step, in the direction of an input or of dV.
+
+        When the input moves the Markov matrix, the matrix's derivative is under ``_MARKOV``.
+        """
         h = self.h
 
         def shocked(sign):
@@ -782,7 +823,10 @@ class HetBlock:
             if dV is not None:
                 for v in self.backward:
                     x[v + "_p"] = x0[v + "_p"] + sign * h * dV[v]
-            return self._full(x)
+            out = self._full(x)
+            if i is not None and self.markov in changed:
+                out[_MARKOV] = self._exogenous(x)[0]
+            return out
 
         up = shocked(1.0)
         if self.twosided:
@@ -904,15 +948,21 @@ class SolvedBlock:
                                       outputs=outputs or self.outputs, T=T)
         return {o: row for o, row in G.items() if o in self.outputs and row}
 
-    def path(self, ss, paths, T):
+    def path(self, ss, paths, T, *, initial=None):
         key = (id(ss), T)
         if self._lu is None or self._lu[0] != key or self._lu[1] is not ss:
             H = self.model._stacked(self.model._total(ss, list(self.unknowns), T),
                                     self.targets, list(self.unknowns), T)
             self._lu = (key, ss, lu_factor(H))
-        dev = self.model.impulse_nonlinear(ss, list(self.unknowns), self.targets,
-                                           {k: np.asarray(p, dtype=float) - ss[k]
-                                            for k, p in paths.items()}, _lu=self._lu[2])
+        shocks = {k: np.asarray(p, dtype=float) - ss[k] for k, p in paths.items()}
+        if not shocks:
+            # only an initial distribution moves the block: a path of zeros sets the horizon
+            shocks = {self.inputs[0]: np.zeros(T)}
+        if initial:
+            inner = self.model._het_names()
+            initial = {k: v for k, v in initial.items() if k in inner}
+        dev = self.model.impulse_nonlinear(ss, list(self.unknowns), self.targets, shocks,
+                                           initial=initial, _lu=self._lu[2])
         return {o: ss[o] + dev[o] for o in self.outputs if o in dev}
 
 
@@ -1149,19 +1199,30 @@ class BlockModel:
     def impulse_nonlinear(self, ss: BlockSteadyState, unknowns: Sequence[str],
                           targets: Sequence[str], shocks: Mapping[str, ArrayLike], *,
                           tol: float = 1e-10, max_iter: int = 50,
-                          jacobian: np.ndarray | None = None, _lu=None) -> dict[str, np.ndarray]:
+                          jacobian: np.ndarray | None = None,
+                          initial: Mapping[str, ArrayLike] | None = None,
+                          _lu=None) -> dict[str, np.ndarray]:
         """The nonlinear perfect-foresight transition after the paths of ``shocks``, in deviations
         from the steady state.
 
         The paths of the unknowns are found by a quasi-Newton iteration with the fixed matrix
         ``H_U``, the targets' Jacobian with respect to the unknowns at the steady state, until
         every target is below ``tol`` in every period. ``jacobian`` may give ``H_U``, stacked with
-        one block of ``T`` rows per target and of ``T`` columns per unknown.
+        one block of ``T`` rows per target and of ``T`` columns per unknown. ``initial`` maps the
+        name of a :class:`HetBlock` to the distribution ``Dbeg`` it starts from, over last period's
+        income state and the assets carried into the first period, in place of the steady state's,
+        such as another steady state's ``internals[name]["Dbeg"]``. With shocks that are zero, the
+        transition is the return from that distribution to the steady state. Lags at the first
+        period keep their steady-state values.
         """
         shocks, T = self._horizon(shocks)
         unknowns, targets = list(unknowns), list(targets)
         if len(unknowns) != len(targets):
             raise ValueError(f"{len(unknowns)} unknowns and {len(targets)} targets")
+        initial = dict(initial or {})
+        bad = sorted(set(initial) - self._het_names())
+        if bad:
+            raise ValueError(f"{self.name}: {bad} in initial are not heterogeneous-agent blocks")
         if _lu is None:
             H = (np.asarray(jacobian, dtype=float) if jacobian is not None
                  else self._stacked(self._total(ss, unknowns, T), targets, unknowns, T))
@@ -1169,7 +1230,7 @@ class BlockModel:
         U = {u: np.zeros(T) for u in unknowns}
         err = np.inf
         for _ in range(max_iter):
-            dev = self._paths(ss, {**shocks, **U}, T)
+            dev = self._paths(ss, {**shocks, **U}, T, initial)
             res = np.concatenate([dev.get(t, np.zeros(T)) for t in targets])
             err = float(np.max(np.abs(res)))
             if not np.isfinite(err):
@@ -1182,14 +1243,32 @@ class BlockModel:
         raise RuntimeError(f"{self.name}: the transition did not converge in {max_iter} "
                            f"iterations; the largest target residual is {err:.2e}")
 
-    def _paths(self, ss, dev_inputs: Mapping[str, np.ndarray], T: int) -> dict[str, np.ndarray]:
-        """Every variable's path, in deviations, given the deviations of some inputs."""
+    def _het_names(self) -> set[str]:
+        """The names of the heterogeneous-agent blocks, inside solved blocks too."""
+        names: set[str] = set()
+        for b in self.blocks:
+            if isinstance(b, HetBlock):
+                names.add(b.name)
+            elif isinstance(b, SolvedBlock):
+                names |= b.model._het_names()
+        return names
+
+    def _paths(self, ss, dev_inputs: Mapping[str, np.ndarray], T: int,
+               initial: Mapping[str, ArrayLike] | None = None) -> dict[str, np.ndarray]:
+        """Every variable's path, in deviations, given the deviations of some inputs and the
+        initial distributions of some heterogeneous-agent blocks."""
         dev = dict(dev_inputs)
         for b in self.blocks:
             ins = [i for i in b.inputs if i in dev]
-            if not ins:
+            paths = {i: ss[i] + dev[i] for i in ins}
+            if isinstance(b, HetBlock) and initial and b.name in initial:
+                levels = b.path(ss, paths, T, Dbeg=initial[b.name])
+            elif isinstance(b, SolvedBlock) and initial and set(initial) & b.model._het_names():
+                levels = b.path(ss, paths, T, initial=initial)
+            elif ins:
+                levels = b.path(ss, paths, T)
+            else:
                 continue
-            levels = b.path(ss, {i: ss[i] + dev[i] for i in ins}, T)
             for o, y in levels.items():
                 dev[o] = y - ss[o]
         return dev

@@ -952,6 +952,8 @@ come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
 bash fetch.sh
 bash run_plots.sh                 # densities: draw_prior_density and posterior_moments
                                   # mcmc: fs2000 with mode_check, Metropolis and bayesian_irf (4 min)
+                                  # identification: fs2000's identification with advanced=1
+                                  # decomposition: real-time decompositions, conditional forecast
 python compare_plots.py
 ```
 
@@ -967,10 +969,14 @@ mode_check, 9 parameters, 21 points each: grid 8.9e-16; log posterior and log-li
   logmst (normal prior, Dynare's grid runs from -10 to 10): 1.9e-02 relative where both solve the model, and 10 of 21 points that only one of them solves
 posterior_irf, 1200 draws, 4 variables, 2 shocks, 20 periods: responses 2.5e-10, mean 2.1e-10, median 2.1e-10, lower 2.3e-10, upper 2.0e-10, deciles 2.3e-10 (relative to the largest response); the statistics of Dynare's own responses 3.6e-17
 posterior densities and modes of 'Priors and posteriors': 1.9e-15; smoothed shocks 2.6e-15 and observables 4.1e-16 at the posterior mean
+identification strength, fs2000 at the prior mean, 9 parameters, on Dynare's 300 simulated observations: information matrix 1.2e-08 (relative to the root of its diagonal), strength 2.7e-07, strength_prior 4.4e-08, sensitivity 5.8e-09, sensitivity_prior 5.8e-09, moments_sensitivity 4.9e-09 (relative); the bars drawn 2.7e-07, the patterns 2.4e-09 and their singular values 5.2e-06 (relative, as Dynare prints them); identified parameters the same
+real-time decompositions of fs2000 at the prior mean, 4 variables, 192 observations, forecast 4: realtime pool 3.4e-15, one-step conditional pool 3.4e-15, one-step forecast pool 3.2e-15; vintages 40, 80, 120 (realtime, forecast and 4-step conditional) 4.6e-15; what plot_shock_decomposition draws with realtime 1, 2 and 3, rolling and at vintage 80, 4.0e-15
+annualised decompositions, type=yoy 1.9e-14 and type=aoa 4.8e-15; initial condition decomposition, 14 of Dynare's 15 columns (the other is an auxiliary variable named otherwise), 5.1e-15
+conditional forecast with bands, gp_obs on a path for 4 periods by e_m, 12 periods, 2000 of Dynare's draws, 14 variables: mean 6.7e-15, bands 4.0e-15, unconditional mean 6.7e-15, unconditional bands 4.4e-15, controlled shock 8.0e-16 (the widest 80% band is 0.25)
 ```
 
 The plots draw what the package computes. What they draw that it did not compute before is
-compared here, in two parts.
+compared here, in four parts.
 
 The densities of `plot_posterior`: the nine priors of `fs2000.mod`, read by `from_mod`, against
 `draw_prior_density`, grid and values; and the kernel estimate that `posterior_moments` returns,
@@ -1000,6 +1006,38 @@ the two log posteriors, of order -2e7, differ by 2%. On the seven parameters wit
 and on `gam` the kernels agree within 6e-11. The responses of the posterior IRFs at each draw agree
 within 3e-10 of the largest response, and their statistics within the same: computed on Dynare's own responses, they agree with Dynare's within 4e-17.
 The numbers come from a run on 3 November 2026, with Dynare 7.2 and Octave 11.3.0.
+
+The figures left out in 0.9 come from two more runs. The first is Dynare's `identification` of
+`fs2000.mod` at the prior mean with `advanced=1`, which draws the identification strength, the
+sensitivity bars, the collinearity patterns and the identification patterns. Dynare computes the
+information matrix behind the strength on a sample of 300 observations that it simulates, so a copy
+of its `dsge_likelihood.m`, put first on the path, keeps the sample it receives for the asymptotic
+Hessian, and `plots/export_identification.m` saves it with Dynare's measures and figures.
+`identification(strength=True)` on that sample gives the information matrix within 1.2e-8 of the
+root of its diagonal, and the strength, the sensitivity component and the moments' sensitivity
+within 2.7e-7, relative. The strength divides by the asymptotic standard deviation, the root of
+the diagonal of the inverse information, whose smallest singular value is 4.6e-5 against a largest
+of 7.6e6, and that ratio amplifies the difference between Dynare's analytic derivatives and the
+differences of dsgelab. The bars of the strength figure agree within the same, the identification
+patterns within 2.4e-9, and the singular values in their titles within the five digits Dynare
+prints. The sensitivity figure is compared through the moments' sensitivity only: its bars divide
+by the largest value, which is infinite for the two shock standard deviations, whose inverse gamma
+priors have an infinite standard deviation, so Dynare's moments bars are all minus infinity.
+`plot_identification_sensitivity` divides by the largest finite value. Its "Model" and "LRE model"
+bars come from derivatives of Dynare's own reduced form and dynamic Jacobian, whose rows differ
+from dsgelab's state space, and are not drawn.
+
+The second run estimates nothing: `fs2000.mod` at the prior mean (`mode_compute=0`), with
+`initial_condition_decomposition`, `shock_decomposition`, `realtime_shock_decomposition` with
+`forecast=4` and `save_realtime=[40 80 120]`, and a `conditional_forecast` of 12 periods on 2,000
+draws in which `gp_obs` follows a path for 4 periods and `e_m` is the controlled shock.
+`plots/export_decomposition.m` saves the pools and vintages, what `plot_shock_decomposition`
+returns (its `get_decomp_only`) with `type=yoy`, `type=aoa` and `realtime` 1, 2 and 3, rolling and
+at vintage 80, and the conditional forecast with the normal draws behind it, drawn again in Octave
+from the state of `randn` recorded just before the command. Everything agrees within 2e-14. The
+initial condition decomposition is compared on 14 of Dynare's 15 columns: the fifteenth is
+Dynare's auxiliary variable for `c(+1)`, which dsgelab calls `LEAD1_c`, and contributes only to
+itself at the first date. These numbers come from a run on 6 November 2026, with the same versions.
 
 ## Out-of-sample forecast evaluation
 
@@ -1702,8 +1740,8 @@ and 31 by time iteration, and the anisotropic one 13 and 30.
 
 ```bash
 bash sequence_jacobian/setup.sh                                  # if not run already
-sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 45 seconds
-python compare_heterogeneous.py                                  # about 40 seconds
+sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 60 seconds
+python compare_heterogeneous.py                                  # about 50 seconds
 ```
 
 ```
@@ -1720,7 +1758,7 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
   ok   linear impulse responses to Z (largest: A)                    4.13e-11  (limit 1e-07)
   ok   nonlinear transition after Z (largest: K)                     1.84e-10  (limit 1e-08)
   ok   household Jacobians, central differences (largest: A/r)       2.24e-10  (limit 1e-07)
-       seconds, dsgelab / sequence-jacobian: steady state 20.1 / 2.8, household Jacobians 1.7 / 1.5, G 1.2 / 2.6, nonlinear 3.4 / 5.8
+       seconds, dsgelab / sequence-jacobian: steady state 2.8 / 2.8, household Jacobians 0.3 / 2.0, G 0.4 / 2.6, nonlinear 1.3 / 7.8
 2. One-asset HANK (hank.ipynb), 7 income states by 500 asset points
   ok   grids and income chain (largest: e_grid)                      4.30e-10  (limit 1e-09)
   ok   steady state: unknowns (largest: vphi)                        1.84e-10  (limit 1e-09)
@@ -1733,21 +1771,41 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
   ok   linear impulse responses to rstar (largest: w)                9.73e-11  (limit 1e-07)
   ok   nonlinear transition after rstar (largest: w)                 1.37e-10  (limit 1e-08)
   ok   household Jacobians, central differences (largest: A/r)       2.45e-10  (limit 1e-07)
-       seconds, dsgelab / sequence-jacobian: steady state 25.1 / 5.8, household Jacobians 4.7 / 6.0, G 6.0 / 8.9, nonlinear 18.4 / 12.4
-3. dsgelab against itself
+       seconds, dsgelab / sequence-jacobian: steady state 5.5 / 6.6, household Jacobians 1.4 / 4.0, G 1.5 / 6.6, nonlinear 3.3 / 14.3
+3. Labor search (labor_search.ipynb), 2 employment states by 5 productivity states by 100 asset points, with the Markov matrix moved by f and s
+  ok   grids, income and the employment chain (largest: y)           1.78e-10  (limit 1e-09)
+  ok   Markov matrix: Kronecker product of sequence-jacobian's two   0.00e+00  (limit 1e-09)
+  ok   steady state: policies (largest: Va)                          3.61e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    8.06e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: B)                         4.14e-10  (limit 1e-09)
+  ok   household Jacobians, forward differences (largest: A/r)       2.87e-10  (limit 1e-07)
+  ok   household's linear response to s, the notebook's (largest: A)  2.19e-10  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: r/s)                8.23e-11  (limit 1e-07)
+  ok   linear impulse responses to s (largest: C)                    4.37e-11  (limit 1e-07)
+  ok   nonlinear transition after s (largest: C)                     6.75e-11  (limit 1e-08)
+  ok   household Jacobians, central differences (largest: A/r)       2.89e-10  (limit 1e-07)
+  ok   distribution of the steady state with s = 0.12, relative to its largest mass  5.83e-10  (limit 1e-07)
+  ok   transition from the distribution with s = 0.12 (largest: r)   5.99e-10  (limit 1e-08)
+       seconds, dsgelab / sequence-jacobian: steady state 0.2 / 0.4, household Jacobians 0.8 / 2.1, G 0.9 / 3.0, nonlinear 2.0 / 7.0
+4. dsgelab against itself
        Krusell-Smith household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.4e-07, 2.7e-09, 3.2e-08
   ok   Krusell-Smith household: fake news against direct, step 1e-07  3.25e-08  (limit 1e-07)
        HANK household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.5e-06, 6.7e-07, 4.1e-08
   ok   HANK household: fake news against direct, step 1e-07          4.08e-08  (limit 1e-07)
        Krusell-Smith, largest gap between the nonlinear and the linear response, for shocks of 1, 0.1, 0.01 per cent: 4.41e-05, 4.51e-07, 3.97e-09
   ok   Krusell-Smith: smallest ratio of the gaps, shock / 10            97.90  (at least 90)
+       labor-search household (moving Markov): fake news against direct, 10 columns, steps 1e-03, 1e-04, 1e-05: 1.5e-05, 2.3e-09, 1.6e-09
+  ok   labor-search household (moving Markov): fake news against direct, step 1e-05  1.64e-09  (limit 1e-07)
+       labor search, largest gap between the nonlinear and the linear response, for shocks to s of 1, 0.1, 0.01 points: 1.01e-04, 1.02e-06, 1.02e-08
+  ok   labor search: smallest ratio of the gaps, shock / 10             99.38  (at least 90)
+  ok   labor search: path from an initial distribution against forward simulation  3.07e-13  (limit 1e-12)
 
 all checks passed
 ```
 
-The two models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb` and
-`notebooks/hank.ipynb` at its v1.0.0 tag, which `setup.sh` downloads and checks against their
-sha256 sums. `run_ssj.py` copies the model code from the notebooks and checks that each piece
+The three models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb`,
+`notebooks/hank.ipynb` and `notebooks/labor_search.ipynb` at its v1.0.0 tag, which `setup.sh`
+downloads and checks against their sha256 sums. `run_ssj.py` copies the model code from the notebooks and checks that each piece
 appears in them verbatim before running it. The household of the HANK model is
 `hetblocks.hh_labor.hh`, part of the package. `compare_heterogeneous.py` writes the same models
 for `dsgelab`, with the same calibration, unknowns and targets, the household's endogenous grid
@@ -1775,21 +1833,38 @@ in general equilibrium, such as assets in the HANK model, where the asset market
 supply of bonds. The differences in each group are therefore taken relative to the largest value
 in the group.
 
-Section 3 checks the fake-news algorithm against brute force, the nonlinear path differentiated
+Section 3 is the model whose Markov matrix moves along a path. `labor_search.ipynb` is
+sequence-jacobian's tutorial on that feature: the household's employment status follows a
+two-state chain whose matrix is a hetinput of the job-finding rate `f` and the separation rate
+`s`, beside a productivity chain of 5 nodes, on 100 asset points. sequence-jacobian keeps the two
+chains on two axes, and `dsgelab` on one chain of 10 nodes whose matrix is their Kronecker product,
+which agrees exactly with the product of sequence-jacobian's two. The notebook stops at the
+household, with its linear response to `s`. `run_ssj.py` adds the smallest general equilibrium,
+which is not in the notebook and is written identically in both packages: a fixed supply of bonds
+equal to the household's assets at the notebook's steady state, the interest rate as the unknown
+and the bond market as the target, and a shock to `s` of 0.02 0.8^t. The closure has no lags, so
+that a transition from another steady state's distribution, sequence-jacobian's `ss_initial` and
+`dsgelab`'s `initial`, moves only the household. The steady state agrees within 8.1e-10, the
+household Jacobians with respect to `f`, `s`, `r` and `w` within 2.9e-10, `G` within 8.3e-11, the
+linear and nonlinear responses within 2.2e-10, and the return to the steady state from the
+distribution with `s = 0.12` within 6.0e-10.
+
+Section 4 checks the fake-news algorithm against brute force, the nonlinear path differentiated
 for a shock at each of ten dates, both by central differences with the same step. The two are
 different finite differences of the same derivative, and the policy has kinks where the borrowing
 limit starts to bind and at every grid point. Their gap falls with the step, to 3e-8 and 4e-8 at
-1e-7, below which rounding takes over. In Krusell–Smith, the gap between the nonlinear transition
-and the linear response falls by 98 and by 114 each time the shock falls by ten, as the square of
-the shock. The test suite checks the same on a grid of 3 by 40 points, together with Walras's law
+1e-7, below which rounding takes over. For the labor-search household, with respect to `f` and
+`s`, the gap is 1.6e-9 at 1e-5 and rises to 1.7e-8 and 1.6e-7 at 1e-6 and 1e-7, where rounding
+takes over sooner. In Krusell–Smith and in labor search, the gap between the nonlinear transition
+and the linear response falls by at least 98 each time the shock falls by ten, as the square of
+the shock. The household's path from the distribution with `s = 0.12`, at the steady state's
+prices, agrees within 3.1e-13 with the steady state's transition matrix applied for 300 periods. The test suite checks the same on a grid of 3 by 40 points, together with Walras's law
 along the path, the stationarity of the distribution, the simple blocks' exact Jacobians and a
 solved block against the closed form of a forward-looking equation.
 
-`dsgelab` has no numba, and its times depend on the load of the machine. These come from a run
-with other jobs on it. On an idle machine the steady states took 1.8 and 4.4 seconds, the
-household Jacobians 0.3 and 1.5, `G` 0.3 and 1.4, and the nonlinear transitions 1.0 and 3.4. The
-numbers come from a run on 5 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and
-`dsgelab` on Python 3.13.
+`dsgelab` has no numba, and its times depend on the load of the machine. The numbers come from a
+run on 6 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and `dsgelab` on Python 3.13.
+The differences of sections 1 and 2 are those of the first run, on 5 November.
 
 ## Markov regime switching: published solutions, statsmodels and the exact likelihood
 
