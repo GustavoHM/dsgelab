@@ -16,6 +16,25 @@ features, without changing the API of an earlier release. The rest of the milest
   Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
   value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
   error falls by at least 58 from one level to the next.
+- `forecast_evaluation(bvar_lags=..., bvar_options=...)` adds a BVAR with the Sims–Zha prior as a
+  second benchmark, re-estimated at each origin on the model's window. Its forecasts at the
+  posterior mean are in `ForecastEvaluation.bvar_mean` and its errors in `bvar_errors`, and
+  `rmse`, `relative_rmse` and `diebold_mariano` take `benchmark="bvar"`. On Dynare 7.2's
+  `tests/bvar_a_la_sims/bvar_and_dsge.mod`, at four origins on an expanding and a rolling window,
+  the errors 1 to 4 steps ahead agree within 1.6e-16 with those of Dynare's `bvar.toolbox` on the
+  same windows (the largest error is 0.022).
+- `BVAR.irf`, Dynare's `bvar_irf`: impulse responses over draws from the posterior, identified by
+  the Cholesky factor, the symmetric square root or a callable, with the mean, median, variance,
+  HPD interval, deciles and the bounds of `oo_.bvar.irf`. On `bvar_standalone.mod`, with the
+  normal draws Octave took, the 1000 sampled responses agree with Dynare's within 1.9e-15 of the
+  largest response, and the statistics within 1.1e-15. Dynare 7.2 takes the rows of the
+  Cholesky factor `L` as the impulses, whose covariance is `L'L` rather than `Sigma`. `BVAR.irf`
+  takes its columns, and reproduces Dynare's numbers with the upper factor as identification.
+- `dsge_var_irf`, Dynare's `bayesian_irf` with `dsge_var`: the DSGE-VAR's impulse responses over
+  the posterior, identified by the rotation of Del Negro and Schorfheide (2004) from the model's
+  impact matrix. On `tests/dsge-var`, with the 1000 parameter draws and the normal draws Dynare
+  took, the sampled responses agree within 1.1e-13 of the largest response and the statistics of
+  `oo_.PosteriorIRF.bvardsge` within 5.7e-14. `plot_posterior_irf` draws the results of both.
 
 ### Changed
 

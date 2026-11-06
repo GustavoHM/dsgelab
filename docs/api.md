@@ -1543,7 +1543,7 @@ Posterior model probabilities from log marginal likelihoods.
 Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
 uncertainty, with keys `mean`, `lower`, `upper` and `paths`.
 
-### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None) -> ForecastEvaluation`
+### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None, bvar_lags=None, bvar_options=None) -> ForecastEvaluation`
 
 Out-of-sample forecasts, as Dynare's recursive estimation makes them with
 `nobs=[T1:T2]` and `forecast`. For each origin `n`, the sample is the first `n`
@@ -1562,21 +1562,29 @@ with mean `d + Z a_{T+h|T}` and variance `Z V_h Z' + H` (without `H` when
 Dynare's forecast after the mode is; `posterior_forecast` adds parameter
 uncertainty at one origin.
 
+With `bvar_lags`, a BVAR with the Sims–Zha prior is the second benchmark. At each
+origin `bvar` is estimated on the model's window, with its first `bvar_lags`
+observations starting the VAR (`first_obs=bvar_lags + 1`) and the other options from
+`bvar_options` (the hyperparameters, or `first_obs`, `presample` and `train` counted
+within the window), and its forecast at the posterior mean, the point forecast of
+Dynare's `bvar_forecast`, is kept in `bvar_mean`.
+
 `ForecastEvaluation` has `variables` (the observables), `origins`, `horizon`, and
 per observable `mean`, `std` and `actual` (arrays of origins by horizons, in the
 units of the data, with `actual` NaN past the end of the sample) and `last` (the
 observation at each origin). `covariance` holds the joint predictive covariances,
 `theta` the parameters used at each origin (in the order of `names`), and, when
 they were estimated, `modes` the `ModeResult` of each origin and `objective` the
-posterior kernel or likelihood there. Pairs with a missing outcome are left out of
+posterior kernel or likelihood there. With the BVAR benchmark, `bvar_mean` holds its
+forecasts and `bvar_lags` its lags. Pairs with a missing outcome are left out of
 every statistic:
 
 | Method | Returns |
 |---|---|
-| `errors`, `random_walk_errors` | `actual - mean`, and `actual - last` |
-| `rmse(benchmark=False)` | RMSE by horizon, of the model or of the random walk |
-| `relative_rmse()` | the model's RMSE over the random walk's |
-| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk or given errors |
+| `errors`, `random_walk_errors`, `bvar_errors` | `actual - mean`, `actual - last` and `actual - bvar_mean` |
+| `rmse(benchmark=False)` | RMSE by horizon, of the model, of the random walk (`True` or `"random_walk"`) or of the BVAR (`"bvar"`) |
+| `relative_rmse(benchmark="random_walk")` | the model's RMSE over the random walk's or the BVAR's |
+| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk, the BVAR (`"bvar"`) or given errors |
 | `pit()` | `Phi((actual - mean) / std)`, uniform when the density is right |
 | `coverage_rate(coverage=None)` | share of outcomes inside the central band, by horizon |
 | `log_score(joint=False)` | log predictive density, per observable or joint |
@@ -1595,7 +1603,8 @@ This is R's `forecast::dm.test`. `DieboldMariano` has `statistic`, `p_value`,
 
 Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples,
 at Dynare's modes and with modes re-estimated by `dsgelab`, and against R's
-`forecast::dm.test` in 48 cases (see `validation/README.md`).
+`forecast::dm.test` in 48 cases. The BVAR's errors agree with those of Dynare's
+`bvar.toolbox` on the same windows (see `validation/README.md`).
 
 ```python
 import dsgelab as dsg
@@ -1690,6 +1699,41 @@ share of draws with a root of modulus above one, which are kept, as in Dynare), 
 the last a pair `(lower, upper)`. The default coverage is Dynare's `bvar.conf_sig`,
 0.6.
 
+`irf(periods=40, draws=2000, *, identification="Cholesky", seed=0, coverage=0.6,
+mass=0.9) -> dict` is Dynare's `bvar_irf`. Each draw takes `(Phi, Sigma)` from the
+posterior, as `forecast` does, and gives the responses `Psi_h B`, `h = 0..periods - 1`,
+to orthogonal impulses with impact matrix `B`, `B B' = Sigma`: the lower Cholesky
+factor (`"Cholesky"`), the symmetric square root (`"SquareRoot"`), or what a callable
+`identification(Sigma)` returns. Impulse `j` is named after the `j`-th variable, as in
+Dynare. The result has the layout of `posterior_irf`, `{statistic: {shock: {variable:
+path}}}`, with `mean`, `median`, `variance`, `lower` and `upper` (the HPD interval
+holding `mass`), `deciles` and `responses` `(draws, periods)`, and in addition
+`lower_bound` and `upper_bound`, the central band holding `coverage`, and `explosive`.
+The median, variance and bounds are those of Dynare's `oo_.bvar.irf`: ranked draws, and
+the variance with divisor `N`. `plot_posterior_irf` draws it. Dynare 7.2 takes the rows
+of `B` as the impulses: with `"SquareRoot"` its numbers are these, under field names
+in the order shock, variable, and with `"Cholesky"` its impulses have covariance `L'L`
+instead of `Sigma`, which `identification=lambda S: np.linalg.cholesky(S).T`
+reproduces.
+
+### `dsge_var_irf(problem, draws, *, periods=40, n_draws=1200, mass=0.9, seed=0, max_tries=1000) -> dict`
+
+The impulse responses of a DSGE-VAR over its posterior, Dynare's `bayesian_irf` with
+`dsge_var` (`oo_.PosteriorIRF.bvardsge`). `problem` is an `EstimationProblem` with
+`dsge_var` or with `dsge_prior_weight` estimated, with as many shocks as observables,
+and `draws` the model's parameters, an `MCMCResult` or an array, of which `n_draws` are
+taken at random (all, in order, with `n_draws=None`). At each `theta` one `(Phi,
+Sigma)` is drawn from `problem.dsge_var_posterior(theta)`, and drawn again while the
+VAR is explosive, as in Dynare. The impulses are identified as in Del Negro and
+Schorfheide (2004): with `A0` the model's impact matrix on the observables and `A0' =
+Q R` its QR decomposition (the diagonal of `R` positive), the VAR's impact matrix is
+`chol(Sigma) Q'`. The result has the layout of `posterior_irf`, one entry per model
+shock and observable, in the units of the data, with `mean`, `median`, `variance`,
+`lower` and `upper` (the HPD interval holding `mass`), `deciles`, `responses`, `draws`,
+`mass` and `explosive` (the share of the VAR's draws drawn again). `plot_posterior_irf`
+draws it. Dynare draws `Sigma` with `floor((1 + lambda) T) - k` degrees of freedom,
+and here they are the posterior's, `(1 + lambda) T - k`.
+
 ### `bvar_density(data, max_lags, **kwargs) -> dict`
 
 `{p: log marginal density}` for `p = 1..max_lags`, Dynare's `bvar_density(max_lags)`.
@@ -1706,8 +1750,8 @@ coefficients, `log_integral()` the log of the kernel's integral (Dynare's
 does, the inverse of `X'X` with `X` a `df x n` normal matrix times the Cholesky factor
 of `S^-1`, and a fractional one, as a DSGE-VAR has, by Bartlett's decomposition.
 
-Validated against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var` (see
-`validation/README.md`).
+Validated against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var`, the
+impulse responses of both included (see `validation/README.md`).
 
 ```python
 import numpy as np
@@ -1722,6 +1766,8 @@ data = {"x": y[:, 0], "z": y[:, 1]}
 print(dsg.bvar_density(data, 4, first_obs=5))      # every lag length on the same observations
 var = dsg.bvar(data, 1, first_obs=5)
 lower, upper = var.forecast(8, 2000, seed=1).bands(0.9)
+irf = var.irf(12, 1000, identification="SquareRoot", seed=1)
+print(irf["mean"]["x"]["z"][:4])                    # the response of z to the impulse to x
 ```
 
 ---
@@ -2027,7 +2073,7 @@ draws, and the third column names the command or option that draws each one.
 | `plot_mode_check(slices, names=None, *, columns=3, title=None, figsize=None)` | what `mode_check` returns: the log posterior and the log-likelihood kernel through the mode, the mode as a line, red points where the model has no solution | `mode_check` |
 | `plot_smoothed_shocks(smoothed, names=None, *, measurement=False, shock_states=None, start=1, columns=3, title=None, figsize=None)` | the smoothed shocks of a `SmootherResult` against zero, or with `measurement` its measurement errors larger than 1e-6. For a model read from a `.mod`, `shock_states=mf.shock_states` reads the shocks from their `SHK_` states, as Dynare reports them | "Smoothed shocks", "Smoothed observation errors" |
 | `plot_smoothed_observables(smoothed, data=None, names=None, *, start=1, columns=3, title=None, figsize=None)` | the smoothed observables, `d + Z k_t`, in red, against the data, dashed | "Historical and smoothed variables" |
-| `plot_posterior_irf(irf, shock, variables=None, *, threshold=1e-10, columns=3, title=None, figsize=None)` | the responses to one shock from `posterior_irf`: the HPD interval in grey and the posterior mean in black, leaving out responses below `threshold` | `estimation(bayesian_irf)` (`irf_plot_threshold`) |
+| `plot_posterior_irf(irf, shock, variables=None, *, threshold=1e-10, columns=3, title=None, figsize=None)` | the responses to one shock from `posterior_irf`, `BVAR.irf` or `dsge_var_irf`: the HPD interval in grey and the posterior mean in black, leaving out responses below `threshold` | `estimation(bayesian_irf)` (`irf_plot_threshold`) |
 | `plot_occbin(result, variables=None, *, deviations=False, binding=True, columns=3, title=None, figsize=None)` | the piecewise-linear paths of an `OccbinResult` in blue and the linear ones dashed in red, in levels or in deviations, and a panel per constraint with the dates it binds | `occbin_graph` |
 | `plot_occbin_regimes(result, *, title=None, figsize=None)` | for each surprise, the dates at which each regime of the plan made then starts: red stars binding, blue circles slack | `occbin.plot_regimes` |
 | `plot_identification(ident, groups=None, *, title=None, figsize=None)` | for each group size of `Identification.collinearity`, the cosine of the best fit of each parameter's moment derivatives, in the columns of the parameters that give it | `identification(advanced)`, "Collinearity patterns" |

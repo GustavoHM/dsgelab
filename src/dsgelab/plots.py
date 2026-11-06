@@ -924,7 +924,8 @@ def plot_posterior_irf(irf: Mapping, shock: str, variables: Sequence[str] | None
                        figsize=None):
     """Posterior impulse responses to one shock with their HPD intervals, as Dynare's ``bayesian_irf``.
 
-    ``irf`` is what :func:`posterior_irf` returns. Each panel has the HPD
+    ``irf`` is what :func:`posterior_irf`, :meth:`~dsgelab.BVAR.irf` or
+    :func:`~dsgelab.dsge_var_irf` returns. Each panel has the HPD
     interval in grey and the posterior mean in black. Responses whose mean
     stays below ``threshold`` in absolute value are left out, as with Dynare's
     ``irf_plot_threshold``.

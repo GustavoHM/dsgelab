@@ -308,19 +308,19 @@ warning that lasts at least one minor version. The public API is what is in `__a
   and a joint HAC covariance; on simulated AR(1) data it recovers the model's IRFs in population
   (Plagborg-Møller and Wolf, 2021). Bayesian IRF matching and MATLAB transformation files are
   left out; Python transformations are accepted explicitly.
-- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window,
-  RMSE against a random walk, the Diebold–Mariano test, and the probability integral transform
-  and coverage of the predictive density. The references are the forecast comparisons of Smets
-  and Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR waits
-  on the BVAR of 0.9. `forecast_evaluation` re-estimates at each origin over an expanding or a
-  rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random walk's,
-  `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and the
-  log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
-  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands
-  within `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as
-  Dynare's and lies within `0.003` posterior standard deviations of it. The test agrees with R's
-  `forecast::dm.test` within `3.1e-15` in 48 cases. The predictive density is conditional on the
-  point estimate, as Dynare's after the mode; parameter uncertainty at every origin is left out.
+- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window, RMSE
+  against a random walk, the Diebold–Mariano test, and the probability integral transform and
+  coverage of the predictive density. The references are the forecast comparisons of Smets and
+  Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR, which waited
+  on the BVAR of 0.9, came in 0.10. `forecast_evaluation` re-estimates at each origin over an
+  expanding or a rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random
+  walk's, `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and
+  the log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
+  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands within
+  `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as Dynare's and lies
+  within `0.003` posterior standard deviations of it. The test agrees with R's `forecast::dm.test`
+  within `3.1e-15` in 48 cases. The predictive density is conditional on the point estimate, as
+  Dynare's after the mode; parameter uncertainty at every origin is left out.
 - [x] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`),
   with `check_restrictions` at one point and `sample_restrictions` over draws from the prior, and
   the `.mod` blocks read by `from_mod`. Validated against Dynare 7.2 on its
@@ -562,8 +562,8 @@ MacroModelling.jl.
   plus its 4 initial observations. `dsgelab`'s `T` is the number of rows, the one under which
   the likelihood equals the product of the VAR's one-step predictive densities, a check in the
   suite. With it the mode moves by up to 0.39 posterior standard deviations, and the estimated
-  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) are
-  left out.
+  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) were
+  left out, and came in 0.10.
 
 ### 0.10 — the gaps 0.9 left, and the audit before the freeze
 
@@ -576,9 +576,18 @@ of 0.9.0 records, and each keeps the six conditions above.
   three controls, the value agrees with the closed form within 6.4e-8 at the 69 nodes of level 3
   and 7.3e-8 at 600 random points of the box, and its error falls by at least 58 from one level to
   the next (5 November 2026).
-- [ ] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
-  `forecast_evaluation` takes a BVAR as its benchmark, which closes the note in the 0.6 item.
-  Reference: Dynare's `bvar_irf` and `bayesian_irf` with `dsge_var`.
+- [x] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
+  `forecast_evaluation(bvar_lags=...)` re-estimates a BVAR at each origin on the model's window,
+  which closes the note in the 0.6 item, and `rmse`, `relative_rmse` and `diebold_mariano` take
+  `benchmark="bvar"`. On Dynare 7.2's `bvar_and_dsge.mod`, at four origins on an expanding and a
+  rolling window, its errors 1 to 4 steps ahead agree within 1.6e-16 with those of Dynare's
+  `bvar.toolbox` on the same windows. `BVAR.irf` is `bvar_irf` and `dsge_var_irf` is
+  `bayesian_irf` with `dsge_var`, both with the statistics of `posterior_irf`. With the normal
+  draws Octave took, `bvar_irf`'s 1000 sampled responses agree within 1.9e-15 of the largest
+  response with `SquareRoot` and within 9.5e-16 with `Cholesky`, and the DSGE-VAR's, on the 1000
+  parameter draws of `tests/dsge-var`, within 1.1e-13 (6 November 2026). Dynare 7.2 takes the rows
+  of the Cholesky factor `L` as the impulses, whose covariance is `L'L` rather than `Sigma`.
+  `BVAR.irf` takes its columns, and matches Dynare with the upper factor as its identification.
 - [ ] **Expectations iteration and improved time iteration**, the global methods dolo has and
   `dsgelab` does not. Reference: dolo 0.4.9.20's `improved_time_iteration` on its own models, and
   `time_iteration` on the same grid.
