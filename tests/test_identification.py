@@ -142,3 +142,74 @@ def test_mod_file_route_uses_the_prior_mean_by_default(tmp_path):
     assert cal.point == pytest.approx({"rho": 0.8, "stderr e": 0.3})
     some = mf.identification(point={"rho": 0.5})
     assert some.point == pytest.approx({"rho": 0.5, "stderr e": 0.2})
+
+
+def _ar1_information(y, mu, rho, s):
+    """The asymptotic information of an observed AR(1), by hand: the filter is exact."""
+    v0 = s ** 2 / (1 - rho ** 2)
+    # prediction errors and variances, and their derivatives in (mu, rho, s)
+    dv = [np.array([-1.0, 0.0, 0.0])]
+    F = [v0]
+    dF = [np.array([0.0, 2 * rho * s ** 2 / (1 - rho ** 2) ** 2, 2 * s / (1 - rho ** 2)])]
+    for t in range(1, y.size):
+        dv.append(np.array([-(1 - rho), -(y[t - 1] - mu), 0.0]))
+        F.append(s ** 2)
+        dF.append(np.array([0.0, 0.0, 2 * s]))
+    return sum(np.outer(a, a) / f + 0.5 * np.outer(b, b) / f ** 2 for a, f, b in zip(dv, F, dF))
+
+
+def test_identification_strength_matches_the_closed_form():
+    model, params, guess = ar1()
+    rng = np.random.default_rng(3)
+    y = np.empty(200)
+    y[0] = 0.5
+    for t in range(1, 200):
+        y[t] = 0.5 + 0.8 * (y[t - 1] - 0.5) + 0.3 * rng.standard_normal()
+    priors = {"mu": ("normal", 0.5, 0.25), "rho": ("beta", 0.8, 0.1),
+              "stderr e": ("inv_gamma", 0.3, float("inf"))}
+    r = dsg.identification(model, params, free=["mu", "rho", "stderr e"], observables=["y"],
+                           cov={"e": 0.3}, guess=guess, strength=True, data={"y": y},
+                           priors=priors, max_group=0)
+    s = r.strength
+    A = _ar1_information(y, 0.5, 0.8, 0.3)
+    # a model declared in Python is linearised by finite differences
+    np.testing.assert_allclose(s.information, A, rtol=1e-7, atol=1e-8 * np.abs(A).max())
+    sd = np.sqrt(np.diag(np.linalg.inv(A)))
+    theta = np.array([0.5, 0.8, 0.3])
+    np.testing.assert_allclose(s.uncertainty, sd, rtol=1e-6)
+    np.testing.assert_allclose(s.strength, theta / sd, rtol=1e-6)
+    np.testing.assert_allclose(s.strength_prior[:2], np.array([0.25, 0.1]) / sd[:2], rtol=1e-6)
+    assert s.strength_prior[2] == np.inf                       # inverse gamma with sd = inf
+    np.testing.assert_allclose(s.sensitivity, np.sqrt(np.diag(A)) * theta, rtol=1e-7)
+    assert s.identified == ["mu", "rho", "stderr e"]
+    # the moments' standard deviations come from the inverse information
+    J = r["moments"].jacobian
+    cmm = J @ np.linalg.solve(A, J.T)
+    expect = np.sqrt(np.sum((J / np.sqrt(np.diag(cmm))[:, None]) ** 2, axis=0))
+    np.testing.assert_allclose(s.moments_sensitivity[:2], expect[:2] * [0.25, 0.1], rtol=1e-6)
+    np.testing.assert_allclose(s.singular_values, np.linalg.svd(A, compute_uv=False), rtol=1e-7)
+    np.testing.assert_allclose(s.patterns.T @ s.patterns, np.eye(3), atol=1e-12)
+    # without data, a sample of `periods` is simulated, the same for the same seed
+    a, b = (dsg.identification(model, params, free=["mu", "rho"], observables=["y"],
+                               cov={"e": 0.3}, guess=guess, strength=True, periods=50,
+                               max_group=0) for _ in range(2))
+    assert a.strength.data.shape == (50, 1)
+    np.testing.assert_array_equal(a.strength.data, b.strength.data)
+    assert np.isnan(a.strength.moments_sensitivity).all()     # no priors, as in Dynare
+    plain = dsg.identification(model, params, free=["mu"], observables=["y"], cov={"e": 0.3},
+                               guess=guess, max_group=0)
+    assert plain.strength is None
+
+
+def test_identification_strength_leaves_out_dependent_parameters():
+    model, params, guess = ar1(product=True)
+    r = dsg.identification(model, params, free=["a", "b", "mu"], observables=["y"],
+                           cov={"e": 0.3}, guess=guess, strength=True, periods=100,
+                           max_group=0)
+    s = r.strength
+    assert s.identified == ["mu"]
+    assert np.isnan(s.strength[:2]).all() and np.isfinite(s.strength[2])
+    assert s.singular_values[-1] < 1e-6 * s.singular_values[0]
+    # the weakest direction moves a and b against each other, with a b fixed
+    v = np.abs(s.patterns[:, -1])
+    assert v[2] < 1e-6 and v[0] / v[1] == pytest.approx(1.6 / 0.5, rel=1e-4)

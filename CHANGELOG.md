@@ -16,6 +16,27 @@ features, without changing the API of an earlier release. The rest of the milest
   Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
   value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
   error falls by at least 58 from one level to the next.
+- The figures left out in 0.9. `identification(..., strength=True)` computes the identification
+  strength of Ratto and Iskrev (2011) as Dynare's `identification` does at first order, from the
+  asymptotic information matrix of the Gaussian likelihood on the data or on a simulated sample
+  (`IdentificationStrength`: the matrix, the strength and the sensitivity component relative to
+  the parameter and to its prior standard deviation, the sensitivity of the moments and the
+  identification patterns), drawn by `plot_identification_strength`,
+  `plot_identification_sensitivity` and `plot_identification_patterns`.
+  `realtime_shock_decomposition` takes `forecast` and `vintages` and returns Dynare's one-step
+  conditional and forecast pools and, for each vintage, its decomposition, its forecast and its
+  conditional decomposition, which `plot_decomposition` draws with `realtime` and `vintage`.
+  `annualise_decomposition` and `plot_decomposition(frequency=...)` give Dynare's `type=yoy` and
+  `type=aoa`, and `initial_condition_decomposition` Dynare's command of that name.
+  `conditional_forecast_bands` draws the shocks left free, as Dynare's `conditional_forecast`, and
+  returns a `ConditionalForecast` with its bands, `posterior_conditional_forecast` adds parameter
+  draws, and `plot_conditional_forecast` draws the bands. `validation/compare_plots.py` compares
+  them with Dynare's on `fs2000.mod` at the prior mean. On the sample Dynare simulates for its
+  information matrix, the matrix agrees within 1.2e-8 of the root of its diagonal and the strength
+  and sensitivity measures within 2.7e-7. The real-time, annualised and initial condition
+  decompositions agree within 2e-14, and the conditional forecast and its bands, on Dynare's 2,000
+  draws, within 7e-15. Dynare's `q2a` annualisation and its sensitivity bars for the reduced
+  form and the dynamic model are not reproduced.
 - `forecast_evaluation(bvar_lags=..., bvar_options=...)` adds a BVAR with the Sims–Zha prior as a
   second benchmark, re-estimated at each origin on the model's window. Its forecasts at the
   posterior mean are in `ForecastEvaluation.bvar_mean` and its errors in `bvar_errors`, and
@@ -35,25 +56,6 @@ features, without changing the API of an earlier release. The rest of the milest
   impact matrix. On `tests/dsge-var`, with the 1000 parameter draws and the normal draws Dynare
   took, the sampled responses agree within 1.1e-13 of the largest response and the statistics of
   `oo_.PosteriorIRF.bvardsge` within 5.7e-14. `plot_posterior_irf` draws the results of both.
-- `improved_time_iteration`: Newton's method on the equilibrium conditions of every grid point at
-  once, with next period's policy interpolated from the unknowns, as dolo's
-  `improved_time_iteration`. It takes the declaration, the arguments and the result of
-  `time_iteration`, on a `CartesianGrid` or a `SmolyakGrid`, with Markov or quadrature exogenous
-  states and bounds by complementarity, and reaches the same fixed point. The derivative through
-  next period's policy is applied as an operator, and each step is solved by GMRES, preconditioned
-  by the blocks for each point. `validation/compare_improved_time_iteration.py` checks it against
-  dolo 0.4.9.20's routine on dolo's RBC, Markov RBC and consumption–savings models, within 3.7e-10
-  with linear and cubic interpolation, in 4 to 10 Newton steps where time iteration takes 114 to
-  361 iterations. As published, dolo's routine does not converge on the consumption–savings model
-  from its calibration, and `validation/dolo/run_dolo_iti.py` starts it from its own time
-  iteration stopped at 1e-3, without editing dolo.
-- `expectations_iteration`: iteration on the conditional expectations of the Euler equations,
-  declared as jumps of the `Model` (`z - beta E[c'^(-gamma) R']`, with `c^(-gamma) - z` among the
-  conditions without `t+1`), with the controls found from the expectations at each grid point
-  without an integral, and `damping=0.5` on the update of the expectations. dolo documents this
-  iteration, as parameterized expectations, and 0.4.9.20 does not implement it. On stochastic
-  growth with log utility and full depreciation it agrees with `time_iteration` on the same grid
-  within 5e-12 and with the closed form as time iteration does. Without damping it diverges there.
 
 ### Changed
 

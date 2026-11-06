@@ -789,7 +789,8 @@ class ModFile:
         default), ``"calibration"`` (the values the file assigns), or a mapping from
         the estimated names to values, which may leave some out. The shocks'
         covariance, the measurement errors and the steady state come from the file,
-        as in :meth:`estimation_problem`. ``kwargs`` go to
+        as in :meth:`estimation_problem`, and the priors, for the identification
+        strength (``strength=True``), from ``estimated_params``. ``kwargs`` go to
         :func:`~dsgelab.identification` and override anything.
         """
         from .identification import identification
@@ -831,7 +832,9 @@ class ModFile:
                                   measurement=meas or None,
                                   transforms="log" if "loglinear" in self.estimation_options
                                   else "level",
-                                  steady_fn=lambda p: self.steady_state(params=p))
+                                  steady_fn=lambda p: self.steady_state(params=p),
+                                  priors={e["name"]: e["prior"] for e in self.estimated
+                                          if e["prior"] is not None})
         kw.update(kwargs)
         return identification(self.model, params, **kw)
 

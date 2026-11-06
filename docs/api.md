@@ -552,46 +552,6 @@ not held within the bounds. The policy at the grid points is in `values`
 (`"smolyak"` on a `SmolyakGrid`),
 `iterations`, `converged`, `distance` (the last change) and `history` (every change).
 
-### `improved_time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=100, linear_tol=1e-10, linear_max_iter=1000) -> TimeIterationSolution`
-
-Improved time iteration, as dolo's `improved_time_iteration`: Newton's method on the equilibrium
-conditions of every grid point at once, with next period's policy interpolated from the unknowns
-themselves, on the same declaration and with the same arguments and result as `time_iteration`.
-The Jacobian is a block for each point, the derivative with next period's policy held fixed, plus
-the derivative through next period's policy, which is linear in the policy's values because the
-interpolant is. That term is applied without forming the matrix, and each Newton step is solved by
-GMRES, preconditioned by the blocks, to a residual of `linear_tol` relative to the right-hand side
-or for at most `linear_max_iter` iterations. A step that does not reduce the sum of squares of
-the conditions, in complementarity form, is halved up to nine times, and when none does the
-iteration takes one step of time iteration instead. It stops when a step moves no jump by more
-than `tol`, and `iterations` counts the Newton steps.
-
-The fixed point is that of `time_iteration` on the same grid. On dolo's RBC, its Markov RBC and
-its consumption–savings model, the Newton steps number 4 to 10 where time iteration takes 114 to
-361 iterations to a tolerance of 1e-11. Newton's method needs a start close enough to the solution:
-with a borrowing limit that binds on part of the grid, it may not converge from a distant policy.
-A `TimeIterationSolution` with a loose `tol`, passed as `initial`, is such a start.
-
-### `expectations_iteration(model, params, *, expectations, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), damping=0.5, tol=1e-8, max_iter=5000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
-
-Iteration on the conditional expectations of the Euler equations, the parameterized expectations
-that dolo's documentation describes for its `fgh` models, `0 = f(s, x, E[h(s', x')])`, and that
-dolo 0.4.9.20 does not implement. Each expectation is a jump, named in `expectations`, whose
-equilibrium condition involves `t+1`, such as `z - beta E[c'^(-gamma) R']`, and the controls'
-conditions involve nothing at `t+1`, such as `c^(-gamma) - z`. The conditions are paired with the
-jumps by position, as in `time_iteration`, and the call raises `ValueError` when the condition in
-an expectation's position has nothing at `t+1` or the one in a control's position has something.
-
-Each iteration integrates the expectations at every grid point, with today's controls and next
-period's policy both taken from the current policy, averages them with the old ones with weight
-`damping` on the new, and solves the controls' conditions for today's controls, point by point
-and with no integral. Bounds apply to the controls only. At the fixed point the policy solves the
-equations that `time_iteration` solves on the same grid. Without damping the iteration can
-diverge: on stochastic growth with log utility and full depreciation, a change in consumption
-moves the next update by about `-(1 - alpha beta) / (alpha beta)` times as much, -1.8 with
-`alpha = 0.36` and `beta = 0.99`, and by about `1 - damping / (alpha beta)` times as much with
-damping.
-
 ### `CartesianGrid(axes)`
 
 A tensor grid: `axes` maps each name to an increasing vector of nodes, or to `(low, high, n)` for
@@ -1453,12 +1413,35 @@ condition, Dynare's definition. `initial_shock_states` (for a `.mod`,
 `ModFile.shock_states`) counts the first value of a shock-carrying state as the
 shock's.
 
-### `realtime_shock_decomposition(space, data, *, init="auto", variables=None, initial_shock_states=None, first=2) -> dict`
+### `realtime_shock_decomposition(space, data, *, init="auto", variables=None, initial_shock_states=None, first=2, forecast=0, vintages=()) -> dict`
 
 The decomposition each date would have shown with the data up to it, as Dynare's
 `realtime_shock_decomposition` pool, including its conventions (a first sample
 of two observations, and the first period's shock left in the initial
-condition).
+condition). The result also holds Dynare's other decompositions, each with the
+same keys: `"conditional"`, the one-step conditional pool (at each date, the
+impact of that date's innovations); with `forecast`, the pool runs `forecast`
+dates past the sample and `"forecast"` is the pool of one-step forecasts. For each
+cut in `vintages` (Dynare's `save_realtime`, the number of observations in the
+cut), `"vintages"` holds its decomposition, `"forecast_vintages"` that of its
+forecast and `"conditional_vintages"` the `forecast`-step conditional
+decomposition: what the cut did not forecast, with the forecast counted in the
+initial condition. `plot_decomposition` draws them with `realtime` and `vintage`.
+
+### `annualise_decomposition(decomposition, kind="yoy", *, quarter=1) -> dict`
+
+A quarterly decomposition at the frequency of `plot_shock_decomposition`'s `type`:
+`"yoy"` sums each contribution over four consecutive quarters, `"aoa"` keeps the
+fourth quarter of each year (`quarter` is the quarter of the first date) and
+`"qoq"` leaves it as it is. Dynare's `q2a` structure, which turns quarterly levels
+or growth rates into annual ones, is not reproduced.
+
+### `initial_condition_decomposition(smoothed, *, variables=None, initial_shock_states=None) -> dict`
+
+Dynare's `initial_condition_decomposition`: the initial condition split by the
+first value of each variable, each carried alone by the solution from the second
+date on, with what the first values do not explain under `"shocks"`. Returns
+`{"initial": {variable: {var: path}}, "shocks": {var: path}, "total": {var: path}}`.
 
 ### `forecast(space, data, horizon, *, init="auto", coverage=0.9, variables=None, include_measurement=False, logs=()) -> Forecast`
 
@@ -1466,6 +1449,24 @@ Point forecast from the last filtered state, and Gaussian bands from the
 forecast-error variance (state uncertainty and future shocks).
 
 `Forecast`: `mean`, `std`, `lower`, `upper`, `horizon`, `coverage`.
+
+### `conditional_forecast_bands(solution, conditions, *, controlled=None, periods=None, initial=None, cov=None, levels=False, replic=5000, coverage=0.8, seed=0, normals=None) -> ConditionalForecast`
+
+A conditional forecast with bands, as Dynare's `conditional_forecast` computes
+them. For each of `replic` draws the shocks not in `controlled` are drawn over the
+`periods` dates and the controlled ones, paired in order with the conditions, are
+chosen date by date to put the variables on their paths (zero after the last
+condition); the unconditional paths draw the same shocks with the controlled ones
+at zero. The bands hold `coverage` of the draws (Dynare's `conf_sig`), ranked as
+Dynare ranks them. `normals` (`(replic, periods, n_shocks)` standard normal draws,
+or a pair for the conditional and the unconditional paths) replaces the draws of
+`seed`. After an estimation, `initial` is the smoothed state at the last date, as
+Dynare takes it.
+
+`ConditionalForecast`: `mean`, `lower`, `upper`, `unconditional_mean`,
+`unconditional_lower`, `unconditional_upper` (by variable, over dates `0..H`),
+`shocks` (`{shock: {"mean", "lower", "upper"}}` for the controlled shocks),
+`coverage`, `replic`.
 
 ---
 
@@ -1605,6 +1606,15 @@ Posterior model probabilities from log marginal likelihoods.
 
 Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
 uncertainty, with keys `mean`, `lower`, `upper` and `paths`.
+
+### `posterior_conditional_forecast(problem, draws, conditions, *, controlled=None, periods=None, variables=None, n_draws=200, replic=10, coverage=0.8, logs=(), seed=0) -> ConditionalForecast`
+
+A conditional forecast whose bands carry parameter uncertainty as well as the
+shocks': `replic` paths of `conditional_forecast_bands` from the smoothed state at
+the last date, at each of `n_draws` parameter vectors from `draws`, with the bands
+taken over all of them. Dynare's `conditional_forecast` uses one parameter vector
+(`parameter_set`). `conditions` and the paths are in levels, or in logs for the
+variables in `logs`.
 
 ### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None, bvar_lags=None, bvar_options=None) -> ForecastEvaluation`
 
@@ -1860,7 +1870,7 @@ to), `condition`, `base_targets` and `base_params`.
 
 ## Identification
 
-### `identification(model, params, *, free, observables, cov=None, measurement=None, transforms=None, guess=None, steady_fn=None, qz_criterium=None, lags=1, grid=5000, max_group=2, criteria=("moments", "spectrum", "minimal"), tol_rank="auto", tol_deriv=1e-8, tol_sv=1e-3, step=1e-2, levels=8) -> Identification`
+### `identification(model, params, *, free, observables, cov=None, measurement=None, transforms=None, guess=None, steady_fn=None, qz_criterium=None, lags=1, grid=5000, max_group=2, criteria=("moments", "spectrum", "minimal"), tol_rank="auto", tol_deriv=1e-8, tol_sv=1e-3, step=1e-2, levels=8, strength=False, data=None, periods=300, seed=0, priors=None) -> Identification`
 
 Local identification of the parameters in `free` at one point, from the
 distribution of the `observables`, as Dynare's `identification` command computes
@@ -1899,6 +1909,27 @@ order) and `moment_labels`, `checks` (also by index, `ident["moments"]`),
 `collinearity[k][name]` is `(group, cosine)`: the `k` other parameters whose
 moment derivatives best reproduce those of `name`, as Dynare's brute-force search
 finds them. The group is shorter than `k` when a larger one adds nothing.
+
+With `strength=True` the identification strength of Ratto and Iskrev (2011) is
+computed as well, as Dynare's `identification` computes it at first order, from
+the asymptotic information matrix of the Gaussian likelihood: the sum over the
+sample of `dv' F^-1 dv + tr(F^-1 dF F^-1 dF) / 2`, with `v` and `F` the Kalman
+filter's prediction errors and their variance, differentiated at the steps chosen
+for the moments. The sample is `data`, or, as in Dynare, `periods` observations
+simulated at the point after 100 discarded ones. `priors` (as in
+`EstimationProblem`; `ModFile.identification` passes those of `estimated_params`)
+give the measures relative to the prior standard deviation. On Dynare's own sample
+for `fs2000.mod`, the matrix agrees with Dynare's within 1.2e-8 of the root of its
+diagonal and the strength within 2.7e-7 (`validation/compare_plots.py`).
+
+`IdentificationStrength` (`Identification.strength`): `information`, `data`,
+`uncertainty` (the asymptotic standard deviations, for the parameters in no
+dependent set), `strength` and `strength_prior` (the parameter, or its prior
+standard deviation, over its uncertainty), `sensitivity` and `sensitivity_prior`
+(the root of the information's diagonal times the same), `moments_sensitivity`
+(the norm of the moments' derivatives, each moment over its asymptotic standard
+deviation, times the prior standard deviation; NaN without priors), `identified`,
+and `singular_values` and `patterns` (the information's right singular vectors).
 
 `IdentificationCheck`: `criterion`, `jacobian` (before its rows are normalised),
 `rank`, `required`, `identified`, `condition`, `tolerance`, `sensitive` (whether
@@ -2125,9 +2156,9 @@ draws, and the third column names the command or option that draws each one.
 |---|---|---|
 | `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values | `stoch_simul` |
 | `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}`. A `TransitionPath` is accepted as it is, with `start=0` for its initial condition | `rplot` |
-| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None, groups=None, steady_state=None, detail=False)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line. `groups={label: shocks}` sums shocks, and those in no group join the initial condition as "Others + Initial Values"; `steady_state` labels the axis in levels; `detail` draws each contribution in a panel of its own, on a common scale | `plot_shock_decomposition` (`use_shock_groups`, `steadystate`, `detail_plot`) |
+| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None, groups=None, steady_state=None, detail=False, realtime=0, vintage=0, frequency="qoq", quarter=1)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line. `groups={label: shocks}` sums shocks, and those in no group join the initial condition as "Others + Initial Values"; `steady_state` labels the axis in levels; `detail` draws each contribution in a panel of its own, on a common scale. From `realtime_shock_decomposition`, `realtime` 1, 2 or 3 draws the real-time, one-step conditional or one-step forecast pool, and with a `vintage` the decomposition of that cut, of its conditional forecast or of its forecast; `frequency="yoy"` or `"aoa"` draws it as `annualise_decomposition` changes it | `plot_shock_decomposition` (`use_shock_groups`, `steadystate`, `detail_plot`, `realtime`, `vintage`, `type`) |
 | `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given | `forecast` |
-| `plot_conditional_forecast(forecast, variables=None, *, unconditional=None, conditions=None, columns=3, title=None, figsize=None)` | what `FirstOrderSolution.conditional_forecast` returns, solid, against the paths without conditions, dashed, with the imposed values in red | `plot_conditional_forecast` |
+| `plot_conditional_forecast(forecast, variables=None, *, unconditional=None, conditions=None, columns=3, title=None, figsize=None)` | what `FirstOrderSolution.conditional_forecast` returns, solid, against the paths without conditions, dashed, with the imposed values in red. A `ConditionalForecast` adds its band in grey and the bounds of the unconditional paths, thin and dashed | `plot_conditional_forecast` |
 | `plot_priors(priors, names=None, *, columns=3, title="Priors", figsize=None)` | the prior densities of a mapping or an `EstimationProblem`, in grey | `estimation(plot_priors)` |
 | `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed, on axes that span both densities and run to 1.1 times the higher peak | "Priors and posteriors" |
 | `trace_plot(draws, names=None, *, chains=None, window=200, posterior=False, title=None, figsize=None)` | the draws of one chain in grey with their centred moving average over `2 window + 1` draws, or several chains over each other; `posterior` adds the log posterior | `trace_plot` (`trace_plot_ma`) |
@@ -2140,6 +2171,9 @@ draws, and the third column names the command or option that draws each one.
 | `plot_occbin(result, variables=None, *, deviations=False, binding=True, columns=3, title=None, figsize=None)` | the piecewise-linear paths of an `OccbinResult` in blue and the linear ones dashed in red, in levels or in deviations, and a panel per constraint with the dates it binds | `occbin_graph` |
 | `plot_occbin_regimes(result, *, title=None, figsize=None)` | for each surprise, the dates at which each regime of the plan made then starts: red stars binding, blue circles slack | `occbin.plot_regimes` |
 | `plot_identification(ident, groups=None, *, title=None, figsize=None)` | for each group size of `Identification.collinearity`, the cosine of the best fit of each parameter's moment derivatives, in the columns of the parameters that give it | `identification(advanced)`, "Collinearity patterns" |
+| `plot_identification_strength(ident, *, prior=True, title=None, figsize=None)` | from `identification(..., strength=True)`, the logarithm of each parameter's strength and of its sensitivity component, sorted by strength, relative to the parameter and to its prior standard deviation; an infinite logarithm is marked at zero | `identification`, "Identification strength" |
+| `plot_identification_sensitivity(ident, *, title=None, figsize=None)` | the logarithm of 100 times the moments' sensitivity to each parameter over its largest finite value | `identification(advanced)`, "Sensitivity bars", its "Moments" bars |
+| `plot_identification_patterns(ident, *, largest=False, count=4, title=None, figsize=None)` | the absolute entries of the right singular vectors of the information matrix for its `count` smallest singular values, or its largest | `identification(advanced)`, "Identification patterns" |
 | `plot_filtering(result, names=None, *, kind="determinate", scatter=True, title=None, figsize=None)` | a `FilteringResult` (or a `StabilityMap` and the `kind` of its filtering), for the parameters with a significant Smirnov test: the cumulative distributions with and without the behaviour on the diagonal and the draws of each pair off it, or with `scatter=False` one panel of distributions per parameter with its p-value | `dynare_sensitivity`: `scatter_mcf`, `stability_mapping_univariate` |
 
 The numbers these figures draw that the package does not compute elsewhere come
