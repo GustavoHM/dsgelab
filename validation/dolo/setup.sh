@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # setup.sh: creates validation/dolo/.venv, a Python 3.11 environment with dolo 0.4.9.20 and the
 # versions in requirements.txt, and downloads the three dolo models that compare_time_iteration.py
-# solves (compare_value_iteration.py solves one of them, rbc_mc, and compare_egm.py another,
-# consumption_savings_iid), from dolo's v0.4.9.20 tag, checking their sha256 sums.
+# and compare_improved_time_iteration.py solve (compare_value_iteration.py solves one of them,
+# rbc_mc, and compare_egm.py another, consumption_savings_iid), from dolo's v0.4.9.20 tag, checking
+# their sha256 sums.
 #
 # Usage:  bash validation/dolo/setup.sh
 #

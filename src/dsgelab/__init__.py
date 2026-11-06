@@ -83,7 +83,8 @@ from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .smolyak import SmolyakGrid
-from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
+from .time_iteration import (CartesianGrid, TimeIterationSolution, expectations_iteration,
+                             improved_time_iteration, time_iteration)
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .egm import EGMProgram, EGMSolution, egm
 from .switching import (MarkovSwitchingError, MarkovSwitchingSolution, MSVSolution,
@@ -138,6 +139,7 @@ __all__ = [
     "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
+    "improved_time_iteration", "expectations_iteration",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",
     "egm", "EGMSolution", "EGMProgram",
     "HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyState", "simple",

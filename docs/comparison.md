@@ -34,8 +34,9 @@ I read only the documentation, so a **📄** cell may be wrong without the table
 `dsgelab` solves heterogeneous-agent models by the sequence-space Jacobian method, the subject of
 **sequence-jacobian**, against which it is validated, and of **econpizza**. Among global methods,
 `dsgelab` has polynomial projection and time iteration, on a tensor grid or on a Smolyak sparse
-grid with any number of states, value function iteration on a grid and the endogenous grid method,
-and **dolo** also documents expectations iteration. **gEconpy** estimates through PyMC and its
+grid with any number of states, improved time iteration, expectations iteration, value function
+iteration on a grid and the endogenous grid method. **dolo** documents expectations iteration, as
+parameterized expectations, and version 0.4.9.20 does not implement it. **gEconpy** estimates through PyMC and its
 gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
 analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
 second and third order it estimates with a particle filter, and at second order also with an
@@ -55,6 +56,7 @@ policy under switching require **RISE**.
 | 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
 | Global methods / projection | ✅ ‡ Chebyshev collocation on a tensor grid up to three states, or on a Smolyak grid (isotropic or anisotropic) with any number; the Smolyak nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids, and the closed form of stochastic growth with up to five capital stocks (six states) within 3e-8 at level 4 | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, or on a Smolyak grid, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth, with one capital stock and with up to five | — | ✅ `time_iteration` | — | — | — | — |
+| Improved time iteration and expectations iteration | ✅ ‡ on the same declaration and grids as time iteration, with the same fixed point; Newton's method against dolo 0.4.9.20's `improved_time_iteration` on three of its models within 3.7e-10, in 4 to 10 steps where time iteration takes 114 to 361; expectations iteration against time iteration within 1e-11 and the closed form of stochastic growth | — | ✅ `improved_time_iteration`, 📄 expectations iteration | — | — | — | — |
 | Value function iteration, with Howard's improvement steps | ✅ ‡ on a Cartesian or a Smolyak grid, over intervals or finite sets of choices; against QuantEcon's `DiscreteDP` within 6e-12, dolo 0.4.9.20's `value_iteration` on its Markov RBC within 1.3e-11 of the value, and the closed form of stochastic growth, with three capital stocks on a Smolyak grid within 7e-8 | — | ✅ `value_iteration` | — | — | — | — |
 | Endogenous grid method | ✅ ‡ one endogenous state, Markov or quadrature exogenous states, bounded controls; against dolo 0.4.9.20's `egm` on its consumption–savings model within 1.1e-11, against `time_iteration` and the closed form of stochastic growth | — | ✅ `egm` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
@@ -111,9 +113,11 @@ the table, it is the only one that states it has no estimation. It and `dolo` di
 Python 3.14, and in its case the reason is that the 0.95.9 package on PyPI comes without a build
 file, either `setup.py` or `pyproject.toml`.
 
-**`dolo` documents methods absent from `dsgelab`,** such as expectations iteration, as well as
-perturbation up to third order, and its time iteration, value function iteration and endogenous
-grid method are the references for `dsgelab`'s. As published, its `value_iteration` ends in NaN on its own `rbc_mc`
+**`dolo` documents perturbation up to third order,** and its time iteration, improved time
+iteration, value function iteration and endogenous grid method are the references for
+`dsgelab`'s. It documents expectations iteration, as parameterized expectations, without
+implementing it in 0.4.9.20, and `dsgelab`'s is checked against time iteration and the closed
+form instead. As published, its `value_iteration` ends in NaN on its own `rbc_mc`
 model, and `validation/dolo/run_dolo_vfi.py` lists the four changes that make it run. Installation failed because the package pins a version of
 pandas that no longer builds, and I did not test Python versions earlier than 3.14.
 
@@ -169,10 +173,10 @@ constraints, the extended path, declared trends, the analytic steady state and m
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
-plots, and milestone 0.9 the BVAR, the DSGE-VAR, heterogeneous agents and first-order regime
-switching. Still absent are expectations iteration among the global methods, regime switching
-beyond the first order and the declaration of trends in `from_equations`. The README lists
-them under *Known limitations*, and `ROADMAP.md` gives the version for each.
+plots, milestone 0.9 the BVAR, the DSGE-VAR, heterogeneous agents and first-order regime
+switching, and milestone 0.10 improved time iteration and expectations iteration. Still absent
+are regime switching beyond the first order and the declaration of trends in `from_equations`.
+The README lists them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
 
@@ -262,7 +266,8 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
 | Endogenous grid method | ✅ dolo | **done**: `egm` on an `EGMProgram`, against dolo's `egm` on its consumption–savings model, with iid and with Markov income, within 1.1e-11 | 0.7.4 |
 | Sparse grids | ✅ Tasmanian | **done**: `SmolyakGrid`, isotropic and anisotropic, for `solve_projection` and `time_iteration`; nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids in one to six dimensions, and the closed form of growth with three to five capital stocks | 0.7.5 |
-| Global methods | 📄 dolo | Chebyshev collocation and time iteration on tensor or Smolyak grids, value function iteration and the endogenous grid method; expectations iteration missing | — |
+| Global methods | 📄 dolo | Chebyshev collocation and time iteration on tensor or Smolyak grids, value function iteration and the endogenous grid method | — |
+| Improved time iteration and expectations iteration | ✅ dolo (improved), 📄 dolo (expectations) | **done**: `improved_time_iteration`, against dolo's on its RBC, its Markov RBC and its consumption–savings model within 3.7e-10, in 4 to 10 Newton steps; `expectations_iteration`, which dolo documents and does not implement, against `time_iteration` on the same grid within 1e-11 and the closed form of stochastic growth | 0.10 |
 | BVAR (Sims–Zha prior) and DSGE-VAR | ✅ Dynare (`+bvar`, `estimation(dsge_var=...)`) | **done**: `bvar`, `bvar_density` and `BVAR.forecast` against Dynare's `tests/bvar_a_la_sims` (posteriors within 1.8e-14, log marginal densities within 1.8e-12, forecast paths draw by draw within 2.1e-16), and `EstimationProblem(dsge_var=...)` against `tests/dsge-var` (log posterior within 4.9e-12, modes within 1e-4 posterior sd) with Dynare's count of `T`, which dsgelab does not use by default; IRFs missing | 0.9 |
 | Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; two endogenous states missing | 0.9 |
 | Markov regime switching, solution and estimation | 📄 RISE | **done**: first-order partition perturbation with every solution found and mean-square stability, and Kim's filter; the nine solutions of Foerster et al. (2013), statsmodels' Hamilton filter and the exact likelihood over regime paths. RISE runs only in MATLAB, as P-code that Octave cannot execute | 0.9 |

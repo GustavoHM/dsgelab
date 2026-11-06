@@ -1040,6 +1040,48 @@ f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
   maiores na célula onde o limite passa a se impor. A validação resolve três dos modelos de exemplo
   do repositório do dolo, entre eles o de consumo e poupança com esse limite, e concorda com o
   <code>time_iteration</code> do dolo a 1e-9 ou menos.</p>
+<pre><code>newton = dsg.improved_time_iteration(poupanca, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                     grid={"w": (0.2, 12.0, 80)}, markov={"y": renda},
+                                     bounds={"c": (0.0, lambda s, p: s.w)},
+                                     initial={"c": lambda s, p: 0.5 * s.w})
+newton.converged, newton.iterations
+bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)
+
+def poupador_z(nxt, cur, eps, p):        # a esperança da equação de Euler como o salto z
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,
+        cur.c - cur.z ** (-1 / p["gamma"]),                         # c dado z, par de c &lt;= w
+        cur.z - p["beta"] * p["R"] * nxt.c ** -p["gamma"],          # z = beta R E[c'^-gamma]
+    ]
+
+poupanca_z = dsg.Model(states=["w", "y"], jumps=["c", "z"], shocks=["e"], equations=poupador_z)
+ei = dsg.expectations_iteration(poupanca_z, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                expectations=["z"], grid={"w": (0.2, 12.0, 80)},
+                                markov={"y": renda}, bounds={"c": (0.0, lambda s, p: s.w)},
+                                initial={"c": lambda s, p: 0.5 * s.w,
+                                         "z": lambda s, p: (0.5 * s.w) ** -2.0})
+ei.converged
+bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">newton.converged, newton.iterations</span>
+(True, 9)
+<span class="out-expr">bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)</span>
+True
+<span class="out-expr">ei.converged</span>
+True
+<span class="out-expr">bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p><code>improved_time_iteration</code> resolve as mesmas equações pelo método de Newton em todos
+  os pontos da grade de uma vez, com a derivada através da política do período seguinte, como faz a
+  rotina de mesmo nome do dolo. Do mesmo ponto de partida, leva 9 passos onde a iteração temporal
+  leva 179, e as duas políticas concordam dentro da tolerância da iteração temporal, que para
+  quando a política se move menos de 1e-8 e por isso fica a cerca de 1e-7 do ponto fixo.
+  <code>expectations_iteration</code> pede a esperança da equação de Euler declarada como um salto.
+  Cada iteração a integra com a política corrente e depois obtém dela o consumo, em cada ponto da
+  grade, sem integral, e o resultado é de novo a política da iteração temporal. O dolo documenta
+  essa iteração, como expectativas parametrizadas, e não a implementa. A validação compara
+  <code>improved_time_iteration</code> com a do dolo nos três modelos da validação da iteração
+  temporal, a 4e-10, e os dois métodos com a forma fechada do crescimento estocástico.</p>
   <h3>31. Crescimento estocástico, por iteração da função valor</h3>
 <pre><code>alpha, beta = 0.36, 0.95
 log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log da produtividade
@@ -1860,10 +1902,11 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   pacote indicado é o <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> Ele
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
-  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal, da iteração da
-  função valor e do método da grade endógena, como a iteração das expectativas, o
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
+  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Entre os métodos globais, o
+  dsgelab tem a colocação de Chebyshev (em grades tensoriais ou de Smolyak), a iteração temporal,
+  melhorada ou sobre as esperanças, a iteração da função valor e o método da grade endógena, e o
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta também a iteração temporal
+  com horizonte finito. Para agentes
   heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
   validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
   que também resolve modelos com dois ativos, assim como o

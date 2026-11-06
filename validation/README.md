@@ -1245,6 +1245,100 @@ product of two Markov chains, and the cubic interpolant against SciPy's natural 
 numbers come from a run on 30 October 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on
 Python 3.12.
 
+## Improved time iteration and expectations iteration against dolo and the closed form
+
+```bash
+bash dolo/setup.sh                                 # as for time iteration
+dolo/.venv/bin/python dolo/run_dolo_iti.py         # about 90 seconds
+python compare_improved_time_iteration.py          # about 90 seconds
+```
+
+```
+1. dolo 0.4.9.20's improved_time_iteration, tolerance 1e-11
+ rbc (linear): dsgelab 0 + 9 Newton steps (0.90 s), time iteration 352; dolo 0 + 8 Newton steps, time iteration 352
+  ok   rbc, linear: against dolo at the grid points                3.37e-10  (limit 1e-08)
+  ok   rbc, linear: against dolo between them                      3.30e-10  (limit 1e-08)
+  ok   rbc, linear: against time iteration                         4.37e-11  (limit 1e-09)
+ rbc (cubic): dsgelab 0 + 9 Newton steps (2.85 s), time iteration 361; dolo 0 + 8 Newton steps, time iteration 361
+  ok   rbc, cubic: against dolo at the grid points                 3.72e-10  (limit 1e-08)
+  ok   rbc, cubic: against dolo between them                       3.68e-10  (limit 1e-08)
+  ok   rbc, cubic: against time iteration                          2.67e-11  (limit 1e-09)
+ consumption_savings (linear): dsgelab 40 + 4 Newton steps (0.07 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, linear: against dolo at the grid points  3.46e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against dolo between them      3.30e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against time iteration         2.82e-12  (limit 1e-09)
+ consumption_savings (cubic): dsgelab 40 + 4 Newton steps (0.19 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, cubic: against dolo at the grid points  3.32e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against dolo between them       3.17e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against time iteration          2.85e-12  (limit 1e-09)
+ rbc_mc (linear): dsgelab 0 + 10 Newton steps (0.21 s), time iteration 351; dolo 0 + 11 Newton steps, time iteration 351
+  ok   rbc_mc, linear: against dolo at the grid points             1.96e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against dolo between them                   1.92e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against time iteration                      3.56e-11  (limit 1e-09)
+ rbc_mc (cubic): dsgelab 0 + 10 Newton steps (0.87 s), time iteration 343; dolo 0 + 11 Newton steps, time iteration 343
+  ok   rbc_mc, cubic: against dolo at the grid points              1.70e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against dolo between them                    1.67e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against time iteration                       3.37e-11  (limit 1e-09)
+2. improved time iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, improved and time iteration: 4 and 17, 4 and 16, 4 and 17, 4 and 17; 1.02 s and 4.43 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              4.93e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, improved and time iteration: 4 and 17, 4 and 17, 4 and 17, 4 and 17; 1.40 s and 4.38 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               2.15e-12  (limit 1e-09)
+3. expectations iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, expectations and time iteration: 28 and 19, 29 and 19, 29 and 19, 29 and 19; 2.24 s and 6.46 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              3.68e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, expectations and time iteration: 26 and 19, 26 and 19, 26 and 19, 26 and 19; 2.43 s and 7.48 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               4.69e-12  (limit 1e-09)
+  without damping, the first steps move the policy by 6.3e-01, 8.9e-01, 1.5e+00, 2.0e+00, 3.7e+00
+
+all checks passed
+```
+
+`run_dolo_iti.py` solves the three models of the time-iteration comparison, on the same grids, with
+dolo 0.4.9.20's `improved_time_iteration`, and with its `time_iteration` from the same start for
+the iteration counts, and writes `out_time_iteration/dolo_iti.json`. `compare_improved_time_iteration.py`
+solves them with `dsgelab`'s `improved_time_iteration` from the same start. Both apply Newton's
+method to the conditions of every grid point at once, with the derivative through next period's
+policy. dolo solves each Newton step by a Neumann series in that derivative and `dsgelab` by
+GMRES, both preconditioned by the blocks of the derivative with next period's policy held fixed.
+dolo stops when the largest residual is below 1e-11, and `dsgelab` when a step moves no control by
+more than 1e-11, so the policies agree within 3.7e-10 relative to the largest control, and
+`dsgelab`'s agrees with its own time iteration run to 1e-12 within 4.4e-11. The Newton steps
+number 4 to 10, where time iteration takes 114 to 361 iterations from the same start.
+
+On `rbc` and `rbc_mc` both routines start from the controls of dolo's calibration, a constant
+policy. On `consumption_savings`, as published, dolo's routine does not converge from the
+calibration within its 1000 steps, and from `c = min(w, 1)` it takes 899 steps with linear
+interpolation and does not converge with cubic. `run_dolo_iti.py` therefore starts it from its
+own time iteration stopped at a tolerance of 1e-3, 40 iterations from `min(w, 1)`, and
+`dsgelab` starts in the same way. dolo is not edited, and the starting policies are passed as
+`dr0`. From `min(w, 1)` directly, `dsgelab`'s routine takes 9 steps on this grid.
+
+The second part repeats the closed-form check of the time-iteration comparison with improved time
+iteration, which takes 4 Newton steps on every grid where time iteration takes 16 or 17. The third
+solves the same model with the expectation in the Euler equation declared as the jump `z`, by
+`expectations_iteration`. dolo's documentation describes this iteration, as parameterized
+expectations for its `fgh` models, and dolo 0.4.9.20 has no code for it, so the references are
+the closed form and time iteration on the same grid. Both methods reproduce time iteration's
+policy within 1e-11 and the closed form's errors to the digits printed. Expectations iteration
+takes 26 to 29 iterations where time iteration takes 19, and a third of the time, because no
+integral is evaluated inside the solve for the controls. Without damping it diverges, as its
+docstring explains: a change in consumption moves the next update by about
+`-(1 - alpha beta) / (alpha beta)`, -1.8, times as much. The numbers come from a run on
+6 November 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.13.
+
 ## Value function iteration against QuantEcon and dolo
 
 ```bash

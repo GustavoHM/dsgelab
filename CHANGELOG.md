@@ -16,6 +16,25 @@ features, without changing the API of an earlier release. The rest of the milest
   Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
   value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
   error falls by at least 58 from one level to the next.
+- `improved_time_iteration`: Newton's method on the equilibrium conditions of every grid point at
+  once, with next period's policy interpolated from the unknowns, as dolo's
+  `improved_time_iteration`. It takes the declaration, the arguments and the result of
+  `time_iteration`, on a `CartesianGrid` or a `SmolyakGrid`, with Markov or quadrature exogenous
+  states and bounds by complementarity, and reaches the same fixed point. The derivative through
+  next period's policy is applied as an operator, and each step is solved by GMRES, preconditioned
+  by the blocks for each point. `validation/compare_improved_time_iteration.py` checks it against
+  dolo 0.4.9.20's routine on dolo's RBC, Markov RBC and consumption–savings models, within 3.7e-10
+  with linear and cubic interpolation, in 4 to 10 Newton steps where time iteration takes 114 to
+  361 iterations. As published, dolo's routine does not converge on the consumption–savings model
+  from its calibration, and `validation/dolo/run_dolo_iti.py` starts it from its own time
+  iteration stopped at 1e-3, without editing dolo.
+- `expectations_iteration`: iteration on the conditional expectations of the Euler equations,
+  declared as jumps of the `Model` (`z - beta E[c'^(-gamma) R']`, with `c^(-gamma) - z` among the
+  conditions without `t+1`), with the controls found from the expectations at each grid point
+  without an integral, and `damping=0.5` on the update of the expectations. dolo documents this
+  iteration, as parameterized expectations, and 0.4.9.20 does not implement it. On stochastic
+  growth with log utility and full depreciation it agrees with `time_iteration` on the same grid
+  within 5e-12 and with the closed form as time iteration does. Without damping it diverges there.
 
 ### Changed
 

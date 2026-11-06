@@ -102,6 +102,7 @@ examples in English and Portuguese.
 | Third-order perturbation: full decision rule in Dynare's form, stochastic steady state, sparse tensors | `solve_third_order`, `ThirdOrderSolution.decision_rule`, `stochastic_steady_state` |
 | Global solution by Chebyshev collocation, on a tensor grid up to three states or on a Smolyak sparse grid with any number, isotropic or anisotropic, validated against Tasmanian | `solve_projection`, `SmolyakGrid` |
 | Global solution by time iteration on a Cartesian or a Smolyak grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
+| Improved time iteration (Newton's method on the whole grid) and expectations iteration, on the same declaration and grids as time iteration and with its fixed point, validated against dolo and the closed form | `improved_time_iteration`, `expectations_iteration` |
 | Value function iteration with Howard's improvement steps, over intervals or finite sets of choices, validated against QuantEcon and dolo | `value_iteration`, `ValueIterationSolution`, `DynamicProgram` |
 | The endogenous grid method (Carroll, 2006), for one endogenous state with Markov or quadrature exogenous states and bounded controls, validated against dolo | `egm`, `EGMSolution`, `EGMProgram` |
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
@@ -290,9 +291,11 @@ planned.
 - **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.
-- **Global methods are limited** to Chebyshev collocation and time iteration, on a Cartesian
-  grid or on a Smolyak sparse grid, to value function iteration on the same two grids, and to the
-  endogenous grid method with one endogenous state. A Cartesian grid's size grows as the product
+- **Global methods are limited** to Chebyshev collocation and time iteration, improved or on the
+  expectations, on a Cartesian grid or on a Smolyak sparse grid, to value function iteration on
+  the same two grids, and to the endogenous grid method with one endogenous state. Improved time
+  iteration needs a start close enough to the solution, and expectations iteration a model in
+  which each expectation is declared as a jump. A Cartesian grid's size grows as the product
   of the points on each axis. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.

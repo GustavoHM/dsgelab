@@ -1030,6 +1030,48 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   equation is written as a ratio, and they are largest in the cell where the bound starts to bind.
   The validation solves three of the example models in dolo's repository, among them consumption
   and saving with this limit, and agrees with dolo's <code>time_iteration</code> to 1e-9 or better.</p>
+<pre><code>newton = dsg.improved_time_iteration(saving, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                     grid={"w": (0.2, 12.0, 80)}, markov={"y": income},
+                                     bounds={"c": (0.0, lambda s, p: s.w)},
+                                     initial={"c": lambda s, p: 0.5 * s.w})
+newton.converged, newton.iterations
+bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)
+
+def saver_z(nxt, cur, eps, p):           # the expectation in the Euler equation as the jump z
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,
+        cur.c - cur.z ** (-1 / p["gamma"]),                         # c given z, paired with c &lt;= w
+        cur.z - p["beta"] * p["R"] * nxt.c ** -p["gamma"],          # z = beta R E[c'^-gamma]
+    ]
+
+saving_z = dsg.Model(states=["w", "y"], jumps=["c", "z"], shocks=["e"], equations=saver_z)
+ei = dsg.expectations_iteration(saving_z, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                expectations=["z"], grid={"w": (0.2, 12.0, 80)},
+                                markov={"y": income}, bounds={"c": (0.0, lambda s, p: s.w)},
+                                initial={"c": lambda s, p: 0.5 * s.w,
+                                         "z": lambda s, p: (0.5 * s.w) ** -2.0})
+ei.converged
+bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">newton.converged, newton.iterations</span>
+(True, 9)
+<span class="out-expr">bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)</span>
+True
+<span class="out-expr">ei.converged</span>
+True
+<span class="out-expr">bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p><code>improved_time_iteration</code> solves the same equations by Newton's method on all the
+  grid points at once, with the derivative through next period's policy, as dolo's routine of the
+  same name does. From the same start it takes 9 steps where time iteration takes 179, and the two
+  policies agree within the tolerance of time iteration, which stops when the policy moves by less
+  than 1e-8 and so lies some 1e-7 from the fixed point. <code>expectations_iteration</code> needs the
+  expectation in the Euler equation declared as a jump. Each iteration integrates it with the
+  current policy and then finds consumption from it, at every grid point, without an integral,
+  and the result is again time iteration's policy. dolo documents this iteration, as
+  parameterized expectations, and does not implement it. The validation compares
+  <code>improved_time_iteration</code> with dolo's on the three models of the time-iteration
+  validation, within 4e-10, and both methods with the closed form of stochastic growth.</p>
   <h3>31. Stochastic growth, by value function iteration</h3>
 <pre><code>alpha, beta = 0.36, 0.95
 log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log productivity
@@ -1835,9 +1877,10 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation (on tensor or Smolyak
-  grids), time iteration, value function iteration and the endogenous grid method, such as
-  expectations iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more.
+  second-order solution. Among global methods, dsgelab has Chebyshev collocation (on tensor or
+  Smolyak grids), time iteration, improved or on the expectations, value function iteration and
+  the endogenous grid method, and <a href="https://github.com/EconForge/dolo.py">dolo</a> also
+  documents time iteration over a finite horizon.
   For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one asset,
   validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
   which also solves models with two assets, as does

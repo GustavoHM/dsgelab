@@ -20,6 +20,13 @@ convention for its arbitrage equations. The pair is solved through the Fischer�
 function (Fischer, 1992), in the box form of Billups (1995), which is smooth wherever the
 solution is not exactly at a bound with a zero residual.
 
+Two other iterations reach the same fixed point on the same grid. :func:`improved_time_iteration`
+applies Newton's method to the conditions of every grid point at once, with the derivative
+through next period's policy, as dolo's ``improved_time_iteration`` does. It takes a few steps
+where time iteration takes tens or hundreds, and it needs a start close enough to the solution.
+:func:`expectations_iteration` iterates on the conditional expectations, declared as jumps, and
+solves for the controls given them, which needs no integral inside the solve.
+
 The policy is interpolated between the grid points, linearly or by a natural cubic spline along
 each axis, and extrapolated linearly from the ends of the grid in both cases. On a
 :class:`SmolyakGrid` it is the grid's polynomial instead, which takes more than three continuous
@@ -39,7 +46,8 @@ from .model import Covariance, Model, Params, Point, VarView
 from .smolyak import SmolyakGrid
 from .solution import shock_covariance
 
-__all__ = ["CartesianGrid", "TimeIterationSolution", "time_iteration"]
+__all__ = ["CartesianGrid", "TimeIterationSolution", "time_iteration",
+           "improved_time_iteration", "expectations_iteration"]
 
 #: A bound on a control: a number, ``None`` for none, or ``bound(states, params)`` with ``states``
 #: a name-indexed view of today's states.
@@ -340,6 +348,216 @@ def time_iteration(model: Model, params: Params, *,
     tol :
         The iteration stops when no control moves by more than ``tol`` at any grid point.
     """
+    pb, U, lo, hi = _setup(model, params, grid, markov, cov, n_quad, quadrature, bounds,
+                           interpolation, initial, guess, steady, positive)
+    history: list[float] = []
+    distance = np.inf
+    it = 0
+    while it < max_iter:
+        it += 1
+        G = pb.coefficients(U.reshape(pb.n_nodes, pb.grid.n, -1))
+        U_new = pb.solve_controls(U, G, lo, hi, inner_tol, inner_max_iter)
+        distance = float(np.max(np.abs(U_new - U)))
+        history.append(distance)
+        U = U_new
+        if not np.isfinite(distance):
+            break
+        if distance < tol:
+            break
+    return _solution(pb, U, lo, hi, it, distance, tol, history)
+
+
+def improved_time_iteration(model: Model, params: Params, *,
+                            grid: CartesianGrid | SmolyakGrid | Mapping[str, Any],
+                            markov: Mapping[str, MarkovChain] | None = None,
+                            cov: Covariance = None, n_quad: int = 5,
+                            quadrature: tuple[ArrayLike, ArrayLike] | None = None,
+                            bounds: Mapping[str, tuple[Bound, Bound]] | None = None,
+                            interpolation: str | None = None, initial: Any = None,
+                            guess: Point | None = None, steady: Any = None,
+                            positive: Sequence[str] = (), tol: float = 1e-8, max_iter: int = 100,
+                            linear_tol: float = 1e-10,
+                            linear_max_iter: int = 1000) -> TimeIterationSolution:
+    """Solve ``model`` globally by improved time iteration (Newton's method on the whole grid).
+
+    Time iteration holds next period's policy fixed while it solves for today's controls, and
+    converges at the rate at which a change in the policy feeds back through next period. Improved
+    time iteration (dolo's ``improved_time_iteration``) applies Newton's method to the equilibrium
+    conditions of every grid point at once, with the policy for next period interpolated from the
+    unknowns themselves. The Jacobian has a block for each point, the derivative with next period's
+    policy held fixed, and a second term, the derivative through next period's policy, which is
+    linear in the policy's values because the interpolant is. That term is applied as an operator,
+    without forming the matrix, and each Newton step is solved by GMRES, preconditioned by the
+    blocks of the first term. A step that does not reduce the sum of squares of the conditions is
+    halved, up to nine times as in dolo, and when none does, the iteration takes one step of time
+    iteration instead. Bounds are imposed by the same Fischer–Burmeister complementarity as in
+    :func:`time_iteration`, and the fixed point on the grid is the same.
+
+    Newton's method converges from a policy close enough to the solution, and then in a few
+    steps. From a distant one, with a bound that binds on part of the grid, it may not converge.
+    On dolo's consumption and saving model, with a borrowing limit, it takes 9 steps from
+    ``c = min(w, 1)`` and 35 to 46 from ``c = 0.9 w``. With cash on hand from 0.5 instead of
+    0.01, on 40 points, it takes 6 to 8 steps from the first start and does not converge within
+    100 from the second. A solution of :func:`time_iteration` with a loose ``tol``, given as
+    ``initial``, is a start that avoids this.
+
+    The parameters are those of :func:`time_iteration`, and so is the result. ``iterations``
+    counts the Newton steps.
+
+    Parameters
+    ----------
+    tol :
+        The iteration stops when a step moves no control by more than ``tol`` at any grid point.
+    linear_tol, linear_max_iter :
+        GMRES stops at a residual of ``linear_tol`` relative to the right-hand side, or after
+        ``linear_max_iter`` iterations.
+    """
+    if max_iter < 1:
+        raise ValueError("max_iter must be at least 1")
+    pb, U, lo, hi = _setup(model, params, grid, markov, cov, n_quad, quadrature, bounds,
+                           interpolation, initial, guess, steady, positive)
+    shape = (pb.n_nodes, pb.grid.n, model.n_jumps)
+    has_lo, has_hi = np.isfinite(lo), np.isfinite(hi)
+    history: list[float] = []
+    distance = np.inf
+    it = 0
+    G = pb.coefficients(U.reshape(shape))
+    r = pb.phi(U, G, lo, hi)
+    while it < max_iter:
+        it += 1
+        step = pb.newton_direction(U, G, r, lo, hi, linear_tol, linear_max_iter)
+        base = float(np.sum(r ** 2))
+        t = 1.0
+        accepted = False
+        for _ in range(10):
+            trial = U - t * step
+            trial = np.where(has_lo, np.maximum(trial, lo), trial)
+            trial = np.where(has_hi, np.minimum(trial, hi), trial)
+            G_trial = pb.coefficients(trial.reshape(shape))
+            r_trial = pb.phi(trial, G_trial, lo, hi)
+            if np.all(np.isfinite(r_trial)) and (
+                    float(np.sum(r_trial ** 2)) < base * (1.0 - 1e-4 * t) or not np.isfinite(base)):
+                accepted = True
+                break
+            t *= 0.5
+        if not accepted:
+            trial = pb.solve_controls(U, G, lo, hi, 1e-12, 50)
+            G_trial = pb.coefficients(trial.reshape(shape))
+            r_trial = pb.phi(trial, G_trial, lo, hi)
+        distance = float(np.max(np.abs(trial - U)))
+        history.append(distance)
+        U, G, r = trial, G_trial, r_trial
+        if not np.isfinite(distance) or distance < tol:
+            break
+    return _solution(pb, U, lo, hi, it, distance, tol, history)
+
+
+def expectations_iteration(model: Model, params: Params, *, expectations: Sequence[str],
+                           grid: CartesianGrid | SmolyakGrid | Mapping[str, Any],
+                           markov: Mapping[str, MarkovChain] | None = None,
+                           cov: Covariance = None, n_quad: int = 5,
+                           quadrature: tuple[ArrayLike, ArrayLike] | None = None,
+                           bounds: Mapping[str, tuple[Bound, Bound]] | None = None,
+                           interpolation: str | None = None, initial: Any = None,
+                           guess: Point | None = None, steady: Any = None,
+                           positive: Sequence[str] = (), damping: float = 0.5,
+                           tol: float = 1e-8, max_iter: int = 5000, inner_tol: float = 1e-12,
+                           inner_max_iter: int = 50) -> TimeIterationSolution:
+    """Solve ``model`` globally by iterating on the conditional expectations of its Euler equations.
+
+    The model declares each expectation as a jump, named in ``expectations``, defined by an
+    equilibrium condition with next-period variables, such as ``z - beta E[c'^(-gamma) R']``,
+    and used in conditions with nothing dated ``t+1``, such as ``c^(-gamma) - z``. This is
+    dolo's ``fgh`` form, ``0 = f(s, x, E[h(s', x')])``, in the conditions of a :class:`Model`.
+    Each iteration takes the policy found so far, integrates the expectations at every grid
+    point with today's controls and next period's policy both taken from it, and then solves the
+    conditions without ``t+1`` for today's controls, given the expectations, point by point.
+    The second step integrates nothing, and the first solves only for the expectations, in one
+    step when their conditions are affine in them, whereas time iteration integrates in every
+    evaluation of its Newton solve. This is the iteration that dolo's documentation describes as
+    parameterized expectations, on a grid (Christiano and Fisher, 2000). dolo 0.4.9.20 documents
+    it and does not implement it.
+
+    The new expectations are averaged with the old ones, with weight ``damping`` on the new.
+    Without it, the iteration can diverge. On stochastic growth with log utility and full
+    depreciation, ``c = 1/z`` and ``z = alpha beta / ((1 - alpha beta) k')``, with ``k'`` today's
+    output less ``c``, so a change in ``c`` changes the next ``c`` by about
+    ``-(1 - alpha beta) / (alpha beta)`` times as much, -1.8 at ``alpha = 0.36`` and
+    ``beta = 0.99``. With ``damping`` the factor is about ``1 - damping / (alpha beta)``, -0.4 at
+    the default of 0.5.
+
+    The conditions are paired with the jumps by position, as in :func:`time_iteration`: the
+    condition in the position of an expectation must involve ``t+1``, and the condition in the
+    position of a control must not. Bounds apply to the controls, by the same complementarity.
+    At its fixed point, the policy solves the same equations on the same grid as
+    :func:`time_iteration` on the same model, and the two agree. The other parameters are those
+    of :func:`time_iteration`, and so is the result.
+
+    Parameters
+    ----------
+    expectations :
+        The jumps that hold the expectations.
+    damping :
+        The weight of the new expectations against the old ones, in ``(0, 1]``; 1 is the
+        iteration without damping.
+    tol :
+        The iteration stops when no jump moves by more than ``tol`` at any grid point.
+    inner_tol, inner_max_iter :
+        The tolerance and the limit on Newton steps in the solve for the controls.
+    """
+    if not 0.0 < damping <= 1.0:
+        raise ValueError("damping must lie in (0, 1]")
+    names = list(expectations)
+    unknown = [z for z in names if z not in model.jumps]
+    if unknown:
+        raise KeyError(f"expectations {unknown} are not jumps of the model")
+    if not names or len(set(names)) != len(names):
+        raise ValueError("expectations needs at least one jump, each named once")
+    if len(names) == model.n_jumps:
+        raise ValueError("every jump is an expectation: some jump must be a control")
+    bounded = [z for z in names if z in (bounds or {})]
+    if bounded:
+        raise ValueError(f"bounds apply to the controls, not to the expectations {bounded}")
+    pb, U, lo, hi = _setup(model, params, grid, markov, cov, n_quad, quadrature, bounds,
+                           interpolation, initial, guess, steady, positive)
+    zi = np.array([model.jumps.index(z) for z in names], dtype=int)
+    xi = np.array([j for j in range(model.n_jumps) if j not in zi], dtype=int)
+    forward = pb.forward[pb.equilibrium_rows]
+    wrong = ([model.jumps[j] for j in zi if not forward[j]]
+             + [model.jumps[j] for j in xi if forward[j]])
+    if wrong:
+        raise ValueError(
+            f"the conditions in the positions of {wrong} do not fit: an expectation's condition "
+            "must involve t+1, and a control's must not")
+    shape = (pb.n_nodes, pb.grid.n, model.n_jumps)
+    history: list[float] = []
+    distance = np.inf
+    it = 0
+    while it < max_iter:
+        it += 1
+        G = pb.coefficients(U.reshape(shape))
+        try:
+            Z = pb.solve_expectations(U, G, zi, inner_tol, inner_max_iter)
+        except np.linalg.LinAlgError:
+            # a policy far enough from the solution that next period cannot be computed: the
+            # iteration has diverged
+            history.append(np.nan)
+            distance = np.nan
+            break
+        new = U.copy()
+        new[:, zi] = U[:, zi] + damping * (Z - U[:, zi])
+        new[:, xi] = pb.solve_static(new, xi, lo[:, xi], hi[:, xi], inner_tol, inner_max_iter)
+        distance = float(np.max(np.abs(new - U)))
+        history.append(distance)
+        U = new
+        if not np.isfinite(distance) or distance < tol:
+            break
+    return _solution(pb, U, lo, hi, it, distance, tol, history)
+
+
+def _setup(model, params, grid, markov, cov, n_quad, quadrature, bounds, interpolation, initial,
+           guess, steady, positive):
+    """The problem, the starting policy within the bounds, and the bounds at the grid points."""
     if isinstance(grid, SmolyakGrid):
         if interpolation is not None:
             raise ValueError("a SmolyakGrid interpolates by its own polynomial; leave "
@@ -355,25 +573,15 @@ def time_iteration(model: Model, params: Params, *,
     lo, hi = pb.bounds_at(pb.grid_nodes, pb.grid_cont)
     U = np.clip(U, lo, hi)
     pb.classify(U)
-    history: list[float] = []
-    distance = np.inf
-    it = 0
-    while it < max_iter:
-        it += 1
-        G = pb.coefficients(U.reshape(pb.n_nodes, grid.n, -1))
-        U_new = pb.solve_controls(U, G, lo, hi, inner_tol, inner_max_iter)
-        distance = float(np.max(np.abs(U_new - U)))
-        history.append(distance)
-        U = U_new
-        if not np.isfinite(distance):
-            break
-        if distance < tol:
-            break
-    shape = (pb.n_nodes, grid.n, model.n_jumps)
+    return pb, U, lo, hi
+
+
+def _solution(pb, U, lo, hi, it, distance, tol, history):
+    shape = (pb.n_nodes, pb.grid.n, pb.model.n_jumps)
     return TimeIterationSolution(
-        model=model, params=params, grid=grid, chain=pb.chain, markov_states=pb.markov_names,
-        values=U.reshape(shape), interpolation=interpolation, iterations=it,
-        converged=bool(distance < tol), distance=distance, history=history,
+        model=pb.model, params=pb.params, grid=pb.grid, chain=pb.chain,
+        markov_states=pb.markov_names, values=U.reshape(shape), interpolation=pb.kind,
+        iterations=it, converged=bool(distance < tol), distance=distance, history=history,
         lower=lo.reshape(shape), upper=hi.reshape(shape), _problem=pb)
 
 
@@ -425,6 +633,7 @@ class _Problem:
         self.grid_cont = np.tile(grid.points, (self.n_nodes, 1))
         self._vectorised = None
         self.affine = None
+        self._z_jacobian = None
 
     # -- states ------------------------------------------------------------
     def full_states(self, node, cont):
@@ -562,6 +771,7 @@ class _Problem:
             transition = ~on_jump & on_endo
             dropped = ~on_jump & ~on_endo & on_markov
         equilibrium = ~transition & ~dropped
+        self.forward = dep.any(axis=1)          # rows with something dated t+1
         self.transition_rows = np.where(transition)[0]
         self.equilibrium_rows = np.where(equilibrium)[0]
         n_trans = len(self.endo) if self.chain is not None else ns
@@ -669,49 +879,141 @@ class _Problem:
             F = self.equilibrium(u, node, cont, G)
             return _fischer_burmeister(u, F, lo, hi, has_lo, has_hi) if bounded else F
 
+        return _newton_points(phi, U, lo, hi, tol, max_iter)
+
+    # -- improved time iteration -------------------------------------------------
+    def phi(self, U, G, lo, hi):
+        """The equilibrium conditions at the grid points, in complementarity form."""
+        F = self.equilibrium(U, self.grid_nodes, self.grid_cont, G)
+        has_lo, has_hi = np.isfinite(lo), np.isfinite(hi)
+        if not np.any(has_lo | has_hi):
+            return F
+        return _fischer_burmeister(U, F, lo, hi, has_lo, has_hi)
+
+    def newton_direction(self, U, G, r, lo, hi, linear_tol, linear_max_iter):
+        """The Newton step for the conditions of every grid point, next period's policy included.
+
+        ``phi(U)`` depends on ``U`` at each point directly and through the policy interpolated
+        from ``U`` for next period. The first derivative is a block for each point, ``A``, by
+        finite differences with the policy fixed. The second is ``D sum_j w_j J_j W_j``: ``W_j``
+        evaluates the policy at the next states of quadrature node ``j``, which is linear in
+        ``U``, ``J_j`` is the derivative of the conditions in next period's jumps there, and
+        ``D`` the derivative of the complementarity in the conditions.
+        """
+        from scipy.sparse.linalg import LinearOperator
+
+        node, cont = self.grid_nodes, self.grid_cont
+        P, nu = U.shape
+        ns = self.model.n_states
+        has_lo, has_hi = np.isfinite(lo), np.isfinite(hi)
+        bounded = np.any(has_lo | has_hi)
+        A = np.empty((P, nu, nu))
+        for j in range(nu):
+            h = 1e-7 * (1.0 + np.abs(U[:, j]))
+            h = np.where(has_hi[:, j] & (U[:, j] + h > hi[:, j]), -h, h)
+            up = U.copy()
+            up[:, j] += h
+            A[:, :, j] = (self.phi(up, G, lo, hi) - r) / h[:, None]
+        if bounded:
+            F = self.equilibrium(U, node, cont, G)
+            hF = 1e-7 * (1.0 + np.abs(F))
+            D = (_fischer_burmeister(U, F + hF, lo, hi, has_lo, has_hi)
+                 - _fischer_burmeister(U, F, lo, hi, has_lo, has_hi)) / hF
+        else:
+            D = np.ones((P, nu))
+        X = np.column_stack([self.full_states(node, cont), U])
+        terms = []
+        for jn in range(self.n_nodes):
+            pj = self.transition[node, jn]
+            if not np.any(pj > 0):
+                continue
+            nxt = np.full(P, jn)
+            for e, w in zip(self.eps_nodes, self.eps_weights):
+                E = np.tile(e, (P, 1))
+                cn = self.next_states(cont, node, U, nxt, E, G)
+                Xn = np.column_stack([self.full_states(nxt, cn), self.policy(G, nxt, cn)])
+                base = self.residuals(Xn, X, E)[:, self.equilibrium_rows]
+                J = np.empty((P, nu, nu))
+                for k in range(nu):
+                    h = 1e-7 * (1.0 + np.abs(Xn[:, ns + k]))
+                    Xp = Xn.copy()
+                    Xp[:, ns + k] += h
+                    J[:, :, k] = (self.residuals(Xp, X, E)[:, self.equilibrium_rows]
+                                  - base) / h[:, None]
+                terms.append((nxt, cn, (pj * w)[:, None, None] * J * D[:, :, None]))
+        try:
+            Ainv = np.linalg.inv(A)
+        except np.linalg.LinAlgError:
+            Ainv = np.linalg.pinv(A)
+        shape = (self.n_nodes, self.grid.n, nu)
+
+        def matvec(v):
+            dU = np.asarray(v).reshape(P, nu)
+            C = self.coefficients(dU.reshape(shape))
+            out = np.zeros((P, nu))
+            for nxt, cn, M in terms:
+                out += np.einsum("pij,pj->pi", M, self.policy(C, nxt, cn))
+            return (dU + np.einsum("pij,pj->pi", Ainv, out)).ravel()
+
+        rhs = np.einsum("pij,pj->pi", Ainv, r).ravel()
+        if not np.all(np.isfinite(rhs)) or not np.any(rhs):
+            return np.where(np.isfinite(rhs), rhs, 0.0).reshape(P, nu)
+        op = LinearOperator((P * nu, P * nu), matvec=matvec, dtype=float)
+        return _gmres(op, rhs, linear_tol, linear_max_iter).reshape(P, nu)
+
+    # -- expectations iteration --------------------------------------------------
+    def solve_expectations(self, U, G, zi, tol, max_iter):
+        """The expectations at the grid points, with today's controls and the policy from ``U``.
+
+        The conditions in the expectations' positions are solved for the expectations, with
+        everything else fixed. They are almost always affine in them, ``z - E[h]``, and then
+        one Newton step solves them exactly; the step is repeated until it is below ``tol``.
+        """
+        node, cont = self.grid_nodes, self.grid_cont
+        rows = zi       # the columns of equilibrium() follow the jumps they are paired with
         u = U.copy()
-        r = phi(u)
-        nu = u.shape[1]
         for _ in range(max_iter):
-            norm = np.max(np.abs(r), axis=1)
-            if np.max(norm) < tol:
+            F = self.equilibrium(u, node, cont, G)[:, rows]
+            if not np.all(np.isfinite(F)):
+                return np.full((u.shape[0], zi.size), np.nan)
+            if self._z_jacobian is None:
+                J = np.empty((u.shape[0], zi.size, zi.size))
+                for k, j in enumerate(zi):
+                    h = 1e-6 * (1.0 + np.abs(u[:, j]))
+                    up = u.copy()
+                    up[:, j] += h
+                    J[:, :, k] = (self.equilibrium(up, node, cont, G)[:, rows] - F) / h[:, None]
+                if np.allclose(J, J[:1], rtol=1e-6, atol=1e-9) and np.allclose(
+                        J[0], np.round(J[0]), rtol=0, atol=1e-6):
+                    self._z_jacobian = np.round(J[0])     # z - E[h], the same at every point
+            else:
+                J = np.broadcast_to(self._z_jacobian, (u.shape[0], zi.size, zi.size))
+            step = np.linalg.solve(J, F[:, :, None])[:, :, 0]
+            u[:, zi] -= step
+            if np.max(np.abs(step) / (1.0 + np.abs(u[:, zi]))) < tol or \
+                    self._z_jacobian is not None:
                 break
-            J = np.empty((u.shape[0], nu, nu))
-            for j in range(nu):
-                h = 1e-7 * (1.0 + np.abs(u[:, j]))
-                h = np.where(has_hi[:, j] & (u[:, j] + h > hi[:, j]), -h, h)
-                up = u.copy()
-                up[:, j] += h
-                J[:, :, j] = (phi(up) - r) / h[:, None]
-            try:
-                step = np.linalg.solve(J, r[:, :, None])[:, :, 0]
-            except np.linalg.LinAlgError:
-                step = np.einsum("pij,pj->pi", np.linalg.pinv(J), r)
-            # Backtracking, point by point, on the sum of squares.
-            t = np.ones(u.shape[0])
-            todo = norm >= tol
-            new_u, new_r = u.copy(), r.copy()
-            for _ in range(20):
-                if not np.any(todo):
-                    break
-                trial = u.copy()
-                trial[todo] = u[todo] - t[todo, None] * step[todo]
-                if bounded:
-                    # Keep each control within a bounded side: the Fischer–Burmeister function
-                    # is defined beyond the bounds, but the model may not be (log c at c < 0).
-                    trial = np.where(has_lo, np.maximum(trial, lo), trial)
-                    trial = np.where(has_hi, np.minimum(trial, hi), trial)
-                rt = phi(trial)
-                better = np.sum(rt ** 2, axis=1) < np.sum(r ** 2, axis=1) * (1.0 - 1e-4 * t)
-                better |= ~np.all(np.isfinite(r), axis=1)
-                ok = todo & better & np.all(np.isfinite(rt), axis=1)
-                new_u[ok], new_r[ok] = trial[ok], rt[ok]
-                todo &= ~ok
-                t[todo] *= 0.5
-            if np.array_equal(new_u, u):
-                break
-            u, r = new_u, new_r
-        return u
+        return u[:, zi]
+
+    def solve_static(self, U, xi, lo, hi, tol, max_iter):
+        """The controls that solve the conditions without ``t+1``, the expectations fixed."""
+        node, cont = self.grid_nodes, self.grid_cont
+        rows = self.equilibrium_rows[xi]
+        S = self.full_states(node, cont)
+        has_lo, has_hi = np.isfinite(lo), np.isfinite(hi)
+        bounded = np.any(has_lo | has_hi)
+        P = U.shape[0]
+
+        def phi(x):
+            u = U.copy()
+            u[:, xi] = x
+            X = np.column_stack([S, u])
+            F = np.zeros((P, xi.size))
+            for e, w in zip(self.eps_nodes, self.eps_weights):
+                F += w * self.residuals(X, X, np.tile(e, (P, 1)))[:, rows]
+            return _fischer_burmeister(x, F, lo, hi, has_lo, has_hi) if bounded else F
+
+        return _newton_points(phi, U[:, xi], lo, hi, tol, max_iter)
 
     # -- the starting policy -------------------------------------------------------
     def initial_policy(self, initial, guess, steady, positive):
@@ -754,6 +1056,74 @@ class _Problem:
         ns = m.n_states
         khat = (X - sol.steady.x[:ns]) / sol.coords.scale[:ns]
         return sol.steady.x[ns:] + sol.coords.scale[ns:] * (khat @ sol.F.T)
+
+
+def _newton_points(phi, U, lo, hi, tol, max_iter):
+    """Newton's method point by point on ``phi``, with a Jacobian block for each row of ``U``.
+
+    ``phi`` maps the unknowns, one row per point, to as many conditions; the rows are solved
+    independently, with backtracking on each row's sum of squares and the unknowns kept within
+    their finite bounds.
+    """
+    has_lo, has_hi = np.isfinite(lo), np.isfinite(hi)
+    bounded = np.any(has_lo | has_hi)
+    u = U.copy()
+    r = phi(u)
+    nu = u.shape[1]
+    for _ in range(max_iter):
+        norm = np.max(np.abs(r), axis=1)
+        if np.max(norm) < tol:
+            break
+        J = np.empty((u.shape[0], nu, nu))
+        for j in range(nu):
+            h = 1e-7 * (1.0 + np.abs(u[:, j]))
+            h = np.where(has_hi[:, j] & (u[:, j] + h > hi[:, j]), -h, h)
+            up = u.copy()
+            up[:, j] += h
+            J[:, :, j] = (phi(up) - r) / h[:, None]
+        try:
+            step = np.linalg.solve(J, r[:, :, None])[:, :, 0]
+        except np.linalg.LinAlgError:
+            step = np.einsum("pij,pj->pi", np.linalg.pinv(J), r)
+        # Backtracking, point by point, on the sum of squares.
+        t = np.ones(u.shape[0])
+        todo = norm >= tol
+        new_u, new_r = u.copy(), r.copy()
+        for _ in range(20):
+            if not np.any(todo):
+                break
+            trial = u.copy()
+            trial[todo] = u[todo] - t[todo, None] * step[todo]
+            if bounded:
+                # Keep each control within a bounded side: the Fischer–Burmeister function
+                # is defined beyond the bounds, but the model may not be (log c at c < 0).
+                trial = np.where(has_lo, np.maximum(trial, lo), trial)
+                trial = np.where(has_hi, np.minimum(trial, hi), trial)
+            rt = phi(trial)
+            better = np.sum(rt ** 2, axis=1) < np.sum(r ** 2, axis=1) * (1.0 - 1e-4 * t)
+            better |= ~np.all(np.isfinite(r), axis=1)
+            ok = todo & better & np.all(np.isfinite(rt), axis=1)
+            new_u[ok], new_r[ok] = trial[ok], rt[ok]
+            todo &= ~ok
+            t[todo] *= 0.5
+        if np.array_equal(new_u, u):
+            break
+        u, r = new_u, new_r
+    return u
+
+
+def _gmres(op, b, rtol, max_iter):
+    """GMRES with restarts every 50 iterations, by scipy's keyword for the relative tolerance."""
+    import inspect
+
+    from scipy.sparse.linalg import gmres
+
+    restart = min(b.size, 50)
+    cycles = max(1, -(-max_iter // restart))
+    key = "rtol" if "rtol" in inspect.signature(gmres).parameters else "tol"
+    x, _ = gmres(op, b, x0=b.copy(), restart=restart, maxiter=cycles, atol=0.0,
+                 **{key: rtol})
+    return x
 
 
 def _fischer_burmeister(u, F, lo, hi, has_lo, has_hi):

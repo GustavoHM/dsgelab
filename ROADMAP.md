@@ -579,9 +579,19 @@ of 0.9.0 records, and each keeps the six conditions above.
 - [ ] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
   `forecast_evaluation` takes a BVAR as its benchmark, which closes the note in the 0.6 item.
   Reference: Dynare's `bvar_irf` and `bayesian_irf` with `dsge_var`.
-- [ ] **Expectations iteration and improved time iteration**, the global methods dolo has and
-  `dsgelab` does not. Reference: dolo 0.4.9.20's `improved_time_iteration` on its own models, and
-  `time_iteration` on the same grid.
+- [x] **Expectations iteration and improved time iteration**, the global methods dolo has and
+  `dsgelab` did not. `improved_time_iteration` applies Newton's method to the conditions of every
+  grid point at once, on the declaration and grids of `time_iteration`. Against dolo 0.4.9.20's
+  `improved_time_iteration` on its RBC, its Markov RBC and its consumption–savings model, with
+  linear and cubic interpolation, the policies agree within 3.7e-10, in 4 to 10 Newton steps
+  where time iteration takes 114 to 361 iterations, and within 4.4e-11 of time iteration's fixed
+  point. On the consumption–savings model both start from time iteration stopped at 1e-3, because
+  dolo's does not converge from its calibration. `expectations_iteration` iterates on the
+  expectations of the Euler equations, declared as jumps. dolo documents it, as parameterized
+  expectations, and does not implement it. On stochastic growth with log utility and full
+  depreciation it agrees with time iteration within 5e-12 and has the closed form's errors, in a
+  third of time iteration's time, with a damping of 0.5, without which it diverges (6 November
+  2026).
 - [ ] **The figures left out in 0.9**: identification strength and sensitivity, from the
   information matrix, the annualised and vintage shock decompositions, and bands for conditional
   forecasts. Reference: Dynare's `identification`, `shock_decomposition` and

@@ -606,9 +606,19 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 - [ ] **O BVAR na avaliação de previsões, e as IRFs do BVAR e do DSGE-VAR.** O
   `forecast_evaluation` aceita um BVAR como referência de comparação, o que fecha a nota do item da
   0.6. Referência: o `bvar_irf` e o `bayesian_irf` com `dsge_var` do Dynare.
-- [ ] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
-  tem e o `dsgelab` não. Referência: o `improved_time_iteration` do dolo 0.4.9.20 nos modelos dele,
-  e o `time_iteration` na mesma grade.
+- [x] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
+  tem e o `dsgelab` não tinha. O `improved_time_iteration` aplica o método de Newton às condições
+  de todos os pontos da grade de uma vez, na declaração e nas grades do `time_iteration`. Contra o
+  `improved_time_iteration` do dolo 0.4.9.20 no RBC, no RBC markoviano e no modelo de consumo e
+  poupança dele, com interpolação linear e cúbica, as políticas concordam até 3,7e-10, em 4 a 10
+  passos de Newton onde a iteração temporal leva de 114 a 361 iterações, e até 4,4e-11 do ponto
+  fixo da iteração temporal. No modelo de consumo e poupança os dois partem da iteração temporal
+  interrompida em 1e-3, porque a do dolo não converge a partir da calibração. O
+  `expectations_iteration` itera sobre as esperanças das equações de Euler, declaradas como
+  saltos. O dolo a documenta, como expectativas parametrizadas, e não a implementa. No
+  crescimento estocástico com utilidade logarítmica e depreciação total, concorda com a iteração
+  temporal até 5e-12 e tem os erros da forma fechada, em um terço do tempo da iteração temporal,
+  com amortecimento de 0,5, sem o qual diverge (6 de novembro de 2026).
 - [ ] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
   matriz de informação, as decomposições de choques anualizadas e por safra, e bandas para as
   previsões condicionais. Referência: o `identification`, o `shock_decomposition` e o
