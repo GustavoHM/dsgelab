@@ -48,7 +48,7 @@ Name-indexed view over one period's vector, handed to the equations.
 | `v.vec(prefix, n=None)` | gather `K0, K1, …` (prefix `"K"`) into an array, in index order |
 | `v.to_dict()`, `v.array` | the whole period |
 
-### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None)`
+### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None, trend_vars=None, log_trend_vars=None, deflators=None, log_deflators=None)`
 
 Requires sympy. Builds a `Model` from text equations, with exact analytic
 derivatives. `x` is the variable at `t` and `x(+1)` at `t+1`.
@@ -58,9 +58,26 @@ A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, with
 A lead `x(+k)` with `k >= 2` is rewritten as `LEAD{k-1}_x(+1)` and carried by the
 jumps `LEAD1_x`, …, `LEAD{k-1}_x`, with `LEAD1_x = x(+1)` and
 `LEADj_x = LEAD{j-1}_x(+1)`. `LEADj_x` therefore holds `x` at `t+j`, and `y(+2)`
-creates `LEAD1_y`. Each auxiliary has its own equation and is listed in
+creates `LEAD1_y`. For a state the chain starts from the jump `LEAD0_x = x`, with
+`LEAD1_x = LEAD0_x(+1)`, so that the equation of `LEAD1_x` has a jump at `t+1` and
+holds in expectation (`a(+2)` of an exogenous state `a` creates `LEAD0_a` and
+`LEAD1_a`). Each auxiliary has its own equation and is listed in
 `model.auxiliary`. The lag of a jump becomes a new state, and the jump keeps its
 classification.
+
+`trend_vars`, `log_trend_vars`, `deflators` and `log_deflators` declare the trends
+of a model written in levels, as `trend_var(growth_factor=g) A;`,
+`log_trend_var(log_growth_factor=g) A;`, `var(deflator=D) x;` and
+`var(log_deflator=D) x;` do in a `.mod`: `trend_vars={"A": "gA"}` and
+`deflators={"k": "A", "P": "M(-1)/A"}`. A trend variable is not a state or a jump
+and has no equation, since `A(+1) = A g(+1)` is implied. The growth factor may
+contain variables and parameters, and the deflator trend variables, variables and
+parameters, but neither contains a shock or a deflated variable. The equations are
+detrended as `from_mod` detrends a `.mod` (see Reading Dynare files), with the
+same balanced-growth check, and the model returned is the detrended one, with the
+declarations in `model.trends`. The parameters have no values at this point, so
+the check holds them at one random draw, and an equation balanced only at some
+values of its parameters is refused.
 
 `derivatives` is `"third"`, `"both"`, `"jacobian"` or `"none"`. The default
 `"both"` builds the Jacobian and Hessian. `"third"` adds the exact third-derivative
@@ -70,7 +87,8 @@ closed form given as assignments `"name = expr"` in order (Dynare's block), whic
 `calibration_equations` is `{parameter: "steady-state condition"}`, the
 counterpart of MacroModelling's `k[ss]/q[ss] = 2.5 | β`, solved together with the
 steady state. Raises `dsgelab.symbolic.SymbolicError` (a `ValueError`) on an
-undeclared name, a lagged innovation, a wrong equation count or a parse failure.
+undeclared name, a lagged innovation, a wrong equation count, a parse failure or a
+declared trend that the equations do not balance.
 
 ### `optimality_conditions(problem) -> dict`
 
@@ -1072,6 +1090,11 @@ restarts. `fixed` holds variables that do not grow at a given level.
 
 `dsgelab.bgp.bgp_residual(model, params, X, G, ctx=None)` is the residual itself,
 the model evaluated at the two dates.
+
+The trends of a model in levels are declared in `from_mod` (`trend_var`,
+`var(deflator=)`) or in `from_equations` (`trend_vars=`, `deflators=`), which detrend
+it with the same check. `balanced_growth` takes the model in levels without
+declarations.
 
 ---
 
