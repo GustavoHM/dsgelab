@@ -967,6 +967,53 @@ irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"
   também têm as suas figuras. As estatísticas que elas desenham são calculadas como o Dynare as
   calcula e não precisam do matplotlib, e a validação as compara com os números das próprias
   figuras do Dynare.</p>
+<pre><code>strong = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"], observables=["y"],
+                            cov={"e": 0.1}, guess=dict(a=0, y=1), strength=True,
+                            data={"y": serie}, priors=pb.priors)
+rt = dsg.realtime_shock_decomposition(pb.solve(moda.x)[1], pb.Y, forecast=4, vintages=[200])
+cf = dsg.conditional_forecast_bands(s_nk3, {"i": [0.01] * 4}, controlled=["eps_v"], periods=12,
+                                    cov=cov_nk3, replic=1000)                 # example 24
+last = {
+    "strength.png": dsg.plot_identification_strength(strong),
+    "patterns.png": dsg.plot_identification_patterns(strong, count=2),
+    "forecast_vintage.png": dsg.plot_decomposition(rt, "y", realtime=3, vintage=200),
+    "yoy.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(moda.x)), "y",
+                                      frequency="yoy"),
+    "conditional.png": dsg.plot_conditional_forecast(cf, ["i", "pi", "x"],
+                                                     conditions={"i": [0.01] * 4}),
+}
+for name, fig in last.items():
+    fig.savefig(name, dpi=80)
+strong.strength.identified
+len(rt["forecast_vintages"][200]["total"]["y"])
+np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)
+bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">strong.strength.identified</span>
+['rho', 'stderr e']
+<span class="out-expr">len(rt["forecast_vintages"][200]["total"]["y"])</span>
+5
+<span class="out-expr">np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)</span>
+(True, True)
+<span class="out-expr">bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</span>
+True</code></pre>
+  <p>Seguem as figuras que a 0.9 deixou de fora. Com <code>strength=True</code>, o
+  <code>identification</code> calcula a força de identificação de Ratto e Iskrev (2011) a partir da
+  matriz de informação assintótica da verossimilhança, nos dados ou numa amostra simulada do modelo,
+  como faz o <code>identification</code> do Dynare. A força de um parâmetro é o seu valor, ou o seu
+  desvio-padrão a priori, dividido pelo seu desvio-padrão assintótico, e
+  <code>plot_identification_strength</code> desenha as duas em escala logarítmica, com a componente
+  de sensibilidade abaixo. <code>plot_identification_patterns</code> desenha os vetores singulares
+  da matriz de informação para os seus menores valores singulares. Com <code>forecast</code> e
+  <code>vintages</code>, o <code>realtime_shock_decomposition</code> devolve também as decomposições
+  de previsão e condicional de cada corte do Dynare, aqui a previsão de 4 trimestres feita com as
+  200 primeiras observações, que o <code>plot_decomposition</code> desenha com o
+  <code>realtime</code> e o <code>vintage</code> do Dynare. O seu <code>frequency</code> desenha as
+  decomposições interanuais e anuais. <code>conditional_forecast_bands</code> sorteia os choques
+  deixados livres, o choque de tecnologia enquanto o choque monetário mantém a taxa de juros na sua
+  trajetória por quatro trimestres, e as suas bandas, como as do <code>conditional_forecast</code>
+  do Dynare, se fecham nas datas condicionadas e se abrem depois delas. No <code>fs2000.mod</code>,
+  na amostra e nos sorteios do Dynare, a força coincide com a do Dynare a menos de 3e-7, e as
+  decomposições e as bandas a menos de 2e-14.</p>
   <h3>29. Um processo como cadeia de Markov</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log da produtividade, trimestral
 var = sigma ** 2 / (1 - rho ** 2)
@@ -1040,48 +1087,6 @@ f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
   maiores na célula onde o limite passa a se impor. A validação resolve três dos modelos de exemplo
   do repositório do dolo, entre eles o de consumo e poupança com esse limite, e concorda com o
   <code>time_iteration</code> do dolo a 1e-9 ou menos.</p>
-<pre><code>newton = dsg.improved_time_iteration(poupanca, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
-                                     grid={"w": (0.2, 12.0, 80)}, markov={"y": renda},
-                                     bounds={"c": (0.0, lambda s, p: s.w)},
-                                     initial={"c": lambda s, p: 0.5 * s.w})
-newton.converged, newton.iterations
-bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)
-
-def poupador_z(nxt, cur, eps, p):        # a esperança da equação de Euler como o salto z
-    return [
-        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),
-        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,
-        cur.c - cur.z ** (-1 / p["gamma"]),                         # c dado z, par de c &lt;= w
-        cur.z - p["beta"] * p["R"] * nxt.c ** -p["gamma"],          # z = beta R E[c'^-gamma]
-    ]
-
-poupanca_z = dsg.Model(states=["w", "y"], jumps=["c", "z"], shocks=["e"], equations=poupador_z)
-ei = dsg.expectations_iteration(poupanca_z, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
-                                expectations=["z"], grid={"w": (0.2, 12.0, 80)},
-                                markov={"y": renda}, bounds={"c": (0.0, lambda s, p: s.w)},
-                                initial={"c": lambda s, p: 0.5 * s.w,
-                                         "z": lambda s, p: (0.5 * s.w) ** -2.0})
-ei.converged
-bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</code></pre>
-<pre class="output" data-label="Saída"><code><span class="out-expr">newton.converged, newton.iterations</span>
-(True, 9)
-<span class="out-expr">bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)</span>
-True
-<span class="out-expr">ei.converged</span>
-True
-<span class="out-expr">bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</span>
-True</code></pre>
-  <p><code>improved_time_iteration</code> resolve as mesmas equações pelo método de Newton em todos
-  os pontos da grade de uma vez, com a derivada através da política do período seguinte, como faz a
-  rotina de mesmo nome do dolo. Do mesmo ponto de partida, leva 9 passos onde a iteração temporal
-  leva 179, e as duas políticas concordam dentro da tolerância da iteração temporal, que para
-  quando a política se move menos de 1e-8 e por isso fica a cerca de 1e-7 do ponto fixo.
-  <code>expectations_iteration</code> pede a esperança da equação de Euler declarada como um salto.
-  Cada iteração a integra com a política corrente e depois obtém dela o consumo, em cada ponto da
-  grade, sem integral, e o resultado é de novo a política da iteração temporal. O dolo documenta
-  essa iteração, como expectativas parametrizadas, e não a implementa. A validação compara
-  <code>improved_time_iteration</code> com a do dolo nos três modelos da validação da iteração
-  temporal, a 4e-10, e os dois métodos com a forma fechada do crescimento estocástico.</p>
   <h3>31. Crescimento estocástico, por iteração da função valor</h3>
 <pre><code>alpha, beta = 0.36, 0.95
 log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log da produtividade
@@ -1988,11 +1993,10 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   pacote indicado é o <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> Ele
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
-  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Entre os métodos globais, o
-  dsgelab tem a colocação de Chebyshev (em grades tensoriais ou de Smolyak), a iteração temporal,
-  melhorada ou sobre as esperanças, a iteração da função valor e o método da grade endógena, e o
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta também a iteração temporal
-  com horizonte finito. Para agentes
+  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
+  colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal, da iteração da
+  função valor e do método da grade endógena, como a iteração das expectativas, o
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
   heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
   validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
   que também resolve modelos com dois ativos, assim como o

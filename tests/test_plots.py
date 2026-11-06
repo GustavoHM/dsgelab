@@ -383,3 +383,154 @@ def test_posterior_limits_and_transition_paths():
                          values=lambda: {"k": np.array([1.0, 2.0, 3.0]), "c": np.zeros(3)})
     fig = dsg.plot_paths(tp, ["k"], start=0)
     np.testing.assert_array_equal(_lines(fig.axes[0])[0][0], [0, 1, 2])
+
+
+def test_identification_strength_figures():
+    pytest.importorskip("matplotlib")
+    V = np.linalg.qr(np.random.default_rng(2).standard_normal((3, 3)))[0]
+    strength = SimpleNamespace(strength=np.array([2.0, 0.5, np.inf]),
+                               strength_prior=np.array([1.0, np.nan, 0.0]),
+                               sensitivity=np.array([3.0, 1.0, 2.0]),
+                               sensitivity_prior=np.array([np.e, 1.0, 4.0]),
+                               moments_sensitivity=np.array([1.0, 4.0, np.inf]),
+                               singular_values=np.array([9.0, 4.0, 1.0]), patterns=V)
+    ident = SimpleNamespace(names=["p", "q", "r"], strength=strength)
+    upper, lower = _panels(dsg.plot_identification_strength(ident))
+    assert [t.get_text() for t in upper.get_xticklabels()] == ["q", "p", "r"]   # by strength
+    heights = sorted(round(b.get_height(), 12) for b in upper.patches)
+    np.testing.assert_allclose(heights, [math.log(0.5), 0.0, math.log(2.0)])
+    # the infinite strength of r and the zero strength relative to the prior are marked at zero
+    marks = sorted((line.get_xdata()[0], line.get_markerfacecolor()) for line in upper.lines
+                   if line.get_markerfacecolor() in ("red", "white"))
+    assert marks == [(pytest.approx(2.8), "white"), (pytest.approx(3.2), "red")]
+    np.testing.assert_allclose(sorted(b.get_height() for b in lower.patches),
+                               sorted(np.log([1.0, 3.0, 2.0, 1.0, np.e, 4.0])))
+    (ax,) = _panels(dsg.plot_identification_sensitivity(ident))
+    np.testing.assert_allclose(sorted(b.get_height() for b in ax.patches),
+                               sorted([math.log(100.0), math.log(25.0)]))
+    axes = _panels(dsg.plot_identification_patterns(ident, count=2))
+    np.testing.assert_allclose([b.get_height() for b in axes[0].patches], np.abs(V[:, 2]))
+    assert axes[1].get_title() == "Singular value 4"
+    axes = _panels(dsg.plot_identification_patterns(ident, largest=True, count=1))
+    np.testing.assert_allclose([b.get_height() for b in axes[0].patches], np.abs(V[:, 0]))
+    with pytest.raises(ValueError, match="strength=True"):
+        dsg.plot_identification_strength(SimpleNamespace(names=["p"], strength=None))
+
+
+def test_realtime_annualised_and_initial_condition_decompositions(ar_problem):
+    pb = ar_problem
+    theta = pb.start()
+    sol, space = pb.solve(theta)
+    rt = dsg.realtime_shock_decomposition(space, pb.Y, variables=["a", "y"], forecast=2,
+                                          vintages=[50])
+    n = pb.Y.shape[0]
+    assert rt["total"]["y"].size == n + 2 and rt["forecast"]["total"]["y"].size == n + 1
+    for key in ("conditional", "forecast"):
+        d = rt[key]
+        np.testing.assert_allclose(d["shocks"]["e"]["a"] + d["initial"]["a"], d["total"]["a"],
+                                   atol=1e-14)
+    fc, vint, cond = (rt[k][50] for k in ("forecast_vintages", "vintages",
+                                          "conditional_vintages"))
+    assert fc["total"]["a"].size == 3 and vint["total"]["a"].size == 52
+    # the forecast starts from the cut's last date and goes on without shocks
+    assert fc["total"]["a"][0] == vint["total"]["a"][49]
+    np.testing.assert_allclose(fc["total"]["a"][1:], vint["total"]["a"][50:], atol=1e-14)
+    np.testing.assert_allclose(fc["total"]["a"][1], 0.5 * fc["total"]["a"][0])   # rho = 0.5
+    assert rt["forecast"]["total"]["a"][50] == fc["total"]["a"][1]
+    # what the cut did not forecast: the pool's total, less the forecast's contributions
+    np.testing.assert_allclose(cond["total"]["a"], rt["total"]["a"][49:52])
+    np.testing.assert_allclose(cond["shocks"]["e"]["a"],
+                               rt["shocks"]["e"]["a"][49:52] - fc["shocks"]["e"]["a"])
+    # the one-step conditional pool is the impact of each date's innovation
+    sm = dsg.kalman_smoother(space, pb.Y[:40])
+    assert rt["conditional"]["shocks"]["e"]["a"][39] == pytest.approx(sm.shocks[39, 0])
+    pytest.importorskip("matplotlib")
+    ax = dsg.plot_decomposition(rt, "a", realtime=3, vintage=50).axes[0]
+    assert ax.get_title() == "a 2-step ahead forecast (given 50)"
+    assert min(b.get_x() + b.get_width() / 2 for b in ax.patches) == pytest.approx(50)
+    ax = dsg.plot_decomposition(rt, "a", realtime=2).axes[0]
+    assert ax.get_title() == "a 1-step ahead conditional forecast (rolling)"
+    with pytest.raises(ValueError, match="vintage 7"):
+        dsg.plot_decomposition(rt, "a", realtime=1, vintage=7)
+
+    dec = {"shocks": {"e": {"y": np.arange(8.0)}}, "initial": {"y": np.ones(8)},
+           "total": {"y": np.arange(8.0) + 1}}
+    yoy = dsg.annualise_decomposition(dec, "yoy")
+    np.testing.assert_array_equal(yoy["shocks"]["e"]["y"], [6, 10, 14, 18, 22])
+    np.testing.assert_array_equal(yoy["initial"]["y"], [4] * 5)
+    aoa = dsg.annualise_decomposition(dec, "aoa", quarter=3)
+    np.testing.assert_array_equal(aoa["total"]["y"], [2, 6])      # the fourth quarters
+    ax = dsg.plot_decomposition(dec, "y", frequency="yoy", steady_state=1.0).axes[0]
+    assert min(b.get_x() + b.get_width() / 2 for b in ax.patches) == pytest.approx(4)
+    assert ax.yaxis.get_major_formatter()(0.0, 0) == "4"
+    with pytest.raises(ValueError, match="kind"):
+        dsg.annualise_decomposition(dec, "monthly")
+
+    sm = pb.smoother(theta)
+    ic = dsg.initial_condition_decomposition(sm, variables=["a", "y"])
+    total = sum(ic["initial"][c]["a"] for c in ic["initial"]) + ic["shocks"]["a"]
+    np.testing.assert_allclose(total, ic["total"]["a"], atol=1e-14)
+    a0 = ic["total"]["a"][0]
+    np.testing.assert_allclose(ic["initial"]["a"]["a"][:4], a0 * 0.5 ** np.arange(4))
+    own = ic["initial"]["y"]["y"]
+    assert own[0] == ic["total"]["y"][0] and not own[1:].any()
+    assert ic["shocks"]["a"][0] == 0
+
+
+def test_conditional_forecast_bands():
+    two = dsg.from_equations(["a(+1) = 0.8*a + e", "b(+1) = 0.5*b + u", "y = a + b"],
+                             states=["a", "b"], jumps=["y"], shocks=["e", "u"], parameters=[])
+    sol = dsg.solve(two, {}, guess=dict(a=0, b=0, y=0))
+    path = {"y": np.array([0.3, 0.2, np.nan, 0.1])}
+    cf = dsg.conditional_forecast_bands(sol, path, controlled=["e"], periods=6,
+                                        cov={"e": 0.1, "u": 0.2}, replic=500, seed=4)
+    assert cf.replic == 500 and cf.coverage == 0.8
+    for t in (1, 2, 4):        # the conditions hold in every draw, so the bands close on them
+        assert cf.lower["y"][t] == pytest.approx(path["y"][t - 1])
+        assert cf.upper["y"][t] == pytest.approx(path["y"][t - 1])
+    assert cf.upper["y"][3] > cf.lower["y"][3] + 0.1        # date 3 is free
+    assert cf.shocks["e"]["mean"].size == 4
+    # with the drawn shocks at zero, the mean is the mean conditional forecast
+    zeros = np.zeros((3, 6, 2))
+    flat = dsg.conditional_forecast_bands(sol, {"y": np.array([0.3, 0.2, 0.1])}, controlled=["e"],
+                                          periods=6, cov={"e": 0.1, "u": 0.2}, normals=zeros)
+    ref = sol.conditional_forecast({"y": np.r_[[0.3, 0.2, 0.1], [np.nan] * 3]}, controlled=["e"])
+    for v in ("a", "b", "y"):
+        np.testing.assert_allclose(flat.mean[v], ref[v], atol=1e-14)
+        np.testing.assert_allclose(flat.unconditional_mean[v], 0.0, atol=1e-14)
+    # the bands are the draws ranked round(n 0.1) and round(n 0.9), as Dynare ranks them
+    rng = np.random.default_rng(0)
+    Z = rng.standard_normal((20, 6, 2))
+    cf = dsg.conditional_forecast_bands(sol, {"y": np.array([0.3])}, controlled=["e"], periods=6,
+                                        cov={"e": 0.1, "u": 0.2}, normals=(Z, Z))
+    b = np.zeros((20, 7))
+    for t in range(6):
+        b[:, t + 1] = 0.5 * b[:, t] + 0.2 * Z[:, t, 1]
+    np.testing.assert_allclose(cf.unconditional_lower["b"], np.sort(b, axis=0)[1], atol=1e-14)
+    np.testing.assert_allclose(cf.unconditional_upper["b"], np.sort(b, axis=0)[17], atol=1e-14)
+    with pytest.raises(ValueError, match="normals"):
+        dsg.conditional_forecast_bands(sol, path, controlled=["e"], normals=zeros)
+    pytest.importorskip("matplotlib")
+    ax = _panels(dsg.plot_conditional_forecast(cf, ["y"], conditions={"y": [0.3]}))[0]
+    lines = _lines(ax)
+    np.testing.assert_allclose(lines[0][1], cf.mean["y"])
+    np.testing.assert_allclose(lines[2][1], cf.unconditional_lower["y"])
+    assert len(ax.collections) == 1                          # the band
+
+
+def test_posterior_conditional_forecast(ar_problem):
+    pb = ar_problem
+    theta = pb.start()
+    sol, space = pb.solve(theta)
+    sm = pb.smoother(theta)
+    k0 = sm.states[-1, :space.n_model_states]
+    cf = dsg.posterior_conditional_forecast(pb, np.tile(theta, (3, 1)), {"y": [1.1, 1.05]},
+                                            periods=4, n_draws=3, replic=2)
+    assert cf.replic == 6
+    ref = sol.conditional_forecast({"y": np.r_[[1.1, 1.05], [np.nan] * 2]}, initial=k0,
+                                   levels=True)
+    # one shock, controlled: every path is the mean conditional forecast
+    np.testing.assert_allclose(cf.mean["y"], ref["y"], atol=1e-12)
+    np.testing.assert_allclose(cf.lower["a"], cf.upper["a"], atol=1e-12)
+    # without conditions the controlled shock is zero: the path from the smoothed state
+    np.testing.assert_allclose(cf.unconditional_lower["a"], k0[0] * 0.5 ** np.arange(5))

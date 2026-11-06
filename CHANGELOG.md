@@ -16,6 +16,27 @@ features, without changing the API of an earlier release. The rest of the milest
   Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
   value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
   error falls by at least 58 from one level to the next.
+- The figures left out in 0.9. `identification(..., strength=True)` computes the identification
+  strength of Ratto and Iskrev (2011) as Dynare's `identification` does at first order, from the
+  asymptotic information matrix of the Gaussian likelihood on the data or on a simulated sample
+  (`IdentificationStrength`: the matrix, the strength and the sensitivity component relative to
+  the parameter and to its prior standard deviation, the sensitivity of the moments and the
+  identification patterns), drawn by `plot_identification_strength`,
+  `plot_identification_sensitivity` and `plot_identification_patterns`.
+  `realtime_shock_decomposition` takes `forecast` and `vintages` and returns Dynare's one-step
+  conditional and forecast pools and, for each vintage, its decomposition, its forecast and its
+  conditional decomposition, which `plot_decomposition` draws with `realtime` and `vintage`.
+  `annualise_decomposition` and `plot_decomposition(frequency=...)` give Dynare's `type=yoy` and
+  `type=aoa`, and `initial_condition_decomposition` Dynare's command of that name.
+  `conditional_forecast_bands` draws the shocks left free, as Dynare's `conditional_forecast`, and
+  returns a `ConditionalForecast` with its bands, `posterior_conditional_forecast` adds parameter
+  draws, and `plot_conditional_forecast` draws the bands. `validation/compare_plots.py` compares
+  them with Dynare's on `fs2000.mod` at the prior mean. On the sample Dynare simulates for its
+  information matrix, the matrix agrees within 1.2e-8 of the root of its diagonal and the strength
+  and sensitivity measures within 2.7e-7. The real-time, annualised and initial condition
+  decompositions agree within 2e-14, and the conditional forecast and its bands, on Dynare's 2,000
+  draws, within 7e-15. Dynare's `q2a` annualisation and its sensitivity bars for the reduced
+  form and the dynamic model are not reproduced.
 - `forecast_evaluation(bvar_lags=..., bvar_options=...)` adds a BVAR with the Sims–Zha prior as a
   second benchmark, re-estimated at each origin on the model's window. Its forecasts at the
   posterior mean are in `ForecastEvaluation.bvar_mean` and its errors in `bvar_errors`, and
