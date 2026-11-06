@@ -88,8 +88,9 @@ from .time_iteration import (CartesianGrid, TimeIterationSolution, expectations_
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .egm import EGMProgram, EGMSolution, egm
 from .switching import (MarkovSwitchingError, MarkovSwitchingSolution, MSVSolution,
-                        SwitchingSystem, mean_square_stability, msv_solutions,
-                        solve_markov_switching, switching_system)
+                        SecondOrderSwitchingSolution, SwitchingDecisionRule, SwitchingSystem,
+                        mean_square_stability, msv_solutions, solve_markov_switching,
+                        solve_second_order_switching, switching_system)
 from .kim import (KimFilterResult, MarkovSwitchingProblem, SwitchingStateSpace,
                   enumerated_likelihood, kim_filter, switching_state_space)
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
@@ -146,7 +147,8 @@ __all__ = [
     "interpolate_rows", "log_grid",
     "solve_markov_switching", "MarkovSwitchingSolution", "MarkovSwitchingError",
     "switching_system", "SwitchingSystem", "msv_solutions", "MSVSolution",
-    "mean_square_stability",
+    "mean_square_stability", "solve_second_order_switching", "SecondOrderSwitchingSolution",
+    "SwitchingDecisionRule",
     "switching_state_space", "SwitchingStateSpace", "kim_filter", "KimFilterResult",
     "enumerated_likelihood", "MarkovSwitchingProblem",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
