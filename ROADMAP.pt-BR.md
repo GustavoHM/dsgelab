@@ -597,9 +597,12 @@ projeto Julia já usado para o MacroModelling.jl.
 Planejado em 5 de novembro de 2026, depois da 0.9.0. Cada item vem de uma limitação que a
 documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 
-- [ ] **`value_iteration` numa `SmolyakGrid`**, como o `solve_projection` e o `time_iteration` já
-  aceitam. Referência: o valor em forma fechada do crescimento estocástico com vários estoques de
-  capital, e o `value_iteration` numa grade cartesiana.
+- [x] **`value_iteration` numa `SmolyakGrid`**, como o `solve_projection` e o `time_iteration` já
+  aceitam, com o valor e a política interpolados pelo polinômio da grade. No crescimento
+  estocástico com três estoques de capital, utilidade logarítmica e depreciação total, com as
+  frações do produto poupadas como três controles, o valor concorda com a forma fechada até 6,4e-8
+  nos 69 nós do nível 3 e até 7,3e-8 em 600 pontos aleatórios da caixa, e o erro cai pelo menos 58
+  vezes de um nível ao seguinte (5 de novembro de 2026).
 - [ ] **O BVAR na avaliação de previsões, e as IRFs do BVAR e do DSGE-VAR.** O
   `forecast_evaluation` aceita um BVAR como referência de comparação, o que fecha a nota do item da
   0.6. Referência: o `bvar_irf` e o `bayesian_irf` com `dsge_var` do Dynare.

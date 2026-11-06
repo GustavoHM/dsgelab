@@ -1,4 +1,4 @@
-"""Value function iteration on a Cartesian grid, with Howard's improvement steps.
+"""Value function iteration on a Cartesian or a Smolyak grid, with Howard's improvement steps.
 
 A :class:`DynamicProgram` declares the problem the Bellman equation
 
@@ -10,7 +10,8 @@ a Bellman equation needs these other objects, so the program is declared apart f
 
 The value function is kept at the points of a :class:`CartesianGrid` of the continuous states,
 one copy per node of a Markov chain when some states follow one, and interpolated between the
-points, linearly or by a natural cubic spline along each axis. Each iteration applies the
+points, linearly or by a natural cubic spline along each axis. On a :class:`SmolyakGrid` it is
+the grid's polynomial instead, which takes more than three continuous states. Each iteration applies the
 Bellman operator once, maximizing over the controls at every grid point, and then holds the
 policy it found and applies the policy's own operator ``howard`` times (Howard, 1960), which
 costs no maximization. With ``howard=0`` this is plain value function iteration; as ``howard``
@@ -35,6 +36,7 @@ from numpy.typing import ArrayLike
 
 from .markov import MarkovChain
 from .model import Covariance, Params, Point, VarView, get_param
+from .smolyak import SmolyakGrid
 from .time_iteration import Bound, CartesianGrid, _markov_product, _shock_rule
 
 __all__ = ["DynamicProgram", "ValueIterationSolution", "value_iteration"]
@@ -121,7 +123,7 @@ class ValueIterationSolution:
 
     program: DynamicProgram
     params: Params
-    grid: CartesianGrid
+    grid: CartesianGrid | SmolyakGrid
     chain: MarkovChain | None
     markov_states: list[str]
     values: np.ndarray                 # (n_nodes, grid.n)
@@ -226,10 +228,10 @@ class ValueIterationSolution:
 
 
 def value_iteration(program: DynamicProgram, params: Params, *,
-                    grid: CartesianGrid | Mapping[str, Any],
+                    grid: CartesianGrid | SmolyakGrid | Mapping[str, Any],
                     markov: Mapping[str, MarkovChain] | None = None, cov: Covariance = None,
                     n_quad: int = 5, quadrature: tuple[ArrayLike, ArrayLike] | None = None,
-                    interpolation: str = "linear",
+                    interpolation: str | None = None,
                     choices: Mapping[str, ArrayLike] | None = None, initial: Any = None,
                     howard: int = 20, tol: float = 1e-8, max_iter: int = 10000,
                     inner_tol: float = 1e-10, inner_max_iter: int = 100) -> ValueIterationSolution:
@@ -238,15 +240,16 @@ def value_iteration(program: DynamicProgram, params: Params, *,
     Parameters
     ----------
     grid :
-        A :class:`CartesianGrid` of the continuous states, or the mapping that builds one. Every
-        state not given by a Markov chain needs an axis.
+        A :class:`CartesianGrid` of the continuous states, the mapping that builds one, or a
+        :class:`SmolyakGrid`. Every state not given by a Markov chain needs an axis.
     markov :
         Exogenous states given by Markov chains, by name, as in :func:`time_iteration`.
     cov, n_quad, quadrature :
         The shocks' integration rule, as in :func:`time_iteration`.
     interpolation :
-        ``"linear"`` or ``"cubic"`` (a natural spline along each axis), for the value function
-        and for the policy between the grid points.
+        ``"linear"`` (the default) or ``"cubic"`` (a natural spline along each axis), for the
+        value function and for the policy between the points of a :class:`CartesianGrid`. A
+        :class:`SmolyakGrid` interpolates both by its own polynomial and takes no value here.
     choices :
         ``{control: values}`` for every control, to choose among finitely many values instead of
         over an interval. Combinations outside the bounds, or with a reward that is not finite,
@@ -265,8 +268,15 @@ def value_iteration(program: DynamicProgram, params: Params, *,
         The maximization's tolerance on the controls, relative to the width of the bounds for a
         single control and to ``1 + |x|`` for several, and its limit on iterations.
     """
-    if not isinstance(grid, CartesianGrid):
-        grid = CartesianGrid(grid)
+    if isinstance(grid, SmolyakGrid):
+        if interpolation is not None:
+            raise ValueError("a SmolyakGrid interpolates by its own polynomial; leave "
+                             "interpolation unset")
+        interpolation = "smolyak"
+    else:
+        if not isinstance(grid, CartesianGrid):
+            grid = CartesianGrid(grid)
+        interpolation = "linear" if interpolation is None else interpolation
     if howard < 0:
         raise ValueError("howard must be zero or positive")
     if max_iter < 1:
@@ -306,7 +316,8 @@ class _Program:
     def __init__(self, program, params, grid, markov, cov, n_quad, quadrature, interpolation,
                  choices, inner_tol, inner_max_iter):
         self.program, self.params, self.grid = program, params, grid
-        if interpolation not in ("linear", "cubic"):
+        if interpolation not in ("linear", "cubic") and not (
+                interpolation == "smolyak" and isinstance(grid, SmolyakGrid)):
             raise ValueError(f"interpolation must be 'linear' or 'cubic', not {interpolation!r}")
         self.kind = interpolation
         self.beta = program.beta(params)
@@ -392,7 +403,7 @@ class _Program:
                          for m in range(self.n_nodes)])
 
     def interpolate(self, G, node, cont):
-        out = np.empty((cont.shape[0],) + G.shape[1 + self.grid.d:])
+        out = np.empty((cont.shape[0], G.shape[-1]))
         for m in np.unique(node):
             sel = node == m
             out[sel] = self.grid._evaluate(G[m], cont[sel], self.kind)

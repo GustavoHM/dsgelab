@@ -570,9 +570,12 @@ MacroModelling.jl.
 Planned on 5 November 2026, after 0.9.0. Each item comes from a limitation that the documentation
 of 0.9.0 records, and each keeps the six conditions above.
 
-- [ ] **`value_iteration` on a `SmolyakGrid`**, as `solve_projection` and `time_iteration` already
-  take one. Reference: the closed-form value of stochastic growth with several capital stocks, and
-  `value_iteration` on a Cartesian grid.
+- [x] **`value_iteration` on a `SmolyakGrid`**, as `solve_projection` and `time_iteration` already
+  take one, with the value and the policy interpolated by the grid's polynomial. On stochastic
+  growth with three capital stocks, log utility and full depreciation, with the saving shares as
+  three controls, the value agrees with the closed form within 6.4e-8 at the 69 nodes of level 3
+  and 7.3e-8 at 600 random points of the box, and its error falls by at least 58 from one level to
+  the next (5 November 2026).
 - [ ] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
   `forecast_evaluation` takes a BVAR as its benchmark, which closes the note in the 0.6 item.
   Reference: Dynare's `bvar_irf` and `bayesian_irf` with `dsge_var`.

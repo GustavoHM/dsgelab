@@ -1276,6 +1276,15 @@ python compare_value_iteration.py             # about 25 seconds; needs quanteco
   cubic: largest error of V at the grid points with 10, 20, 40, 80 capital points: 1.55e-04, 1.12e-06, 6.11e-08, 3.19e-09
   ok   cubic, 80 points: largest error of V                        3.19e-09  (limit 1e-08)
   ok   cubic: smallest error ratio when the spacing halves            18.32  (at least 3)
+4. three capital stocks on Smolyak grids, against the closed form
+  level  nodes  iterations   V at nodes   V off the grid   policy    seconds
+      1      7          11     1.58e-02         1.78e-02  5.29e-03       0.7
+      2     25          11     2.70e-04         3.02e-04  1.50e-04       6.2
+      3     69          11     6.41e-08         7.32e-08  8.89e-08      14.9
+  ok   level 3: largest error of V at the nodes                    6.41e-08  (limit 2e-07)
+  ok   level 3: largest error of V at 600 random points            7.32e-08  (limit 2e-07)
+  ok   level 3: largest error of the saving shares                 8.89e-08  (limit 2e-07)
+  ok   smallest error ratio of V from one level to the next           58.31  (at least 30)
 
 all checks passed
 ```
@@ -1321,6 +1330,14 @@ with a shock integrated by Gauss–Hermite on a two-dimensional grid, a closed f
 two controls, which exercises the projected Newton method, and the discrete-choice problem against
 an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
 with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
+
+The fourth part puts the closed form on a `SmolyakGrid`. With three capital stocks,
+`c + k_1' + k_2' + k_3' = z k_1^a_1 k_2^a_2 k_3^a_3`, and the shares of output saved in each stock as
+the controls, the policy is `s_j = beta a_j` and the value is `sum_j b_j log k_j + h(z)`, with
+`b_j = a_j / (1 - beta sum a)`. The three controls go through the projected Newton method. The
+value is a polynomial of the capital stocks on the grid and a sum of logarithms in the closed
+form, so its error falls with the level as the Chebyshev approximation of a logarithm does: by 58
+from level 1 to 2 and by 4200 from level 2 to 3. Section 4 ran on 5 November 2026, on Python 3.13.
 
 ## The endogenous grid method against dolo, time iteration and the closed form
 

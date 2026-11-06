@@ -100,6 +100,47 @@ def test_iid_shocks_on_a_two_dimensional_grid_match_the_closed_form():
     assert abs(sol.value({"k": KSS, "a": 0.0}) - (E + F * np.log(KSS))) < 1e-5
 
 
+def test_several_capital_stocks_on_a_smolyak_grid_match_the_closed_form():
+    # c + k_1' + k_2' = z k_1^a_1 k_2^a_2, the controls the shares of output saved in each stock:
+    # the policy is s_j = beta a_j, and V = sum_j b_j log k_j + h(z) with
+    # b_j = a_j / (1 - beta sum a), h solving a linear system in the chain's transition matrix
+    alpha = ALPHA * np.array([0.6, 0.4])
+    chain = dsg.rouwenhorst(0.9, 0.02, 3)
+    ks = ["k1", "k2"]
+
+    def output(s):
+        return np.exp(s.z) * s.k1 ** alpha[0] * s.k2 ** alpha[1]
+
+    prog = dsg.DynamicProgram(
+        states=ks + ["z"], controls=["s1", "s2"],
+        reward=lambda s, x, p: np.log((1 - x.s1 - x.s2) * output(s)),
+        transition=lambda s, x, e, p: {"k1": x.s1 * output(s), "k2": x.s2 * output(s)},
+        discount=BETA, bounds={"s1": (0.01, 0.45), "s2": (0.01, 0.45)})
+    b = alpha / (1 - BETA * ALPHA)
+    a = (np.log(1 - BETA * ALPHA) + BETA * np.sum(b * np.log(BETA * alpha))
+         + (1 + BETA * b.sum()) * chain.nodes)
+    h = np.linalg.solve(np.eye(chain.n) - BETA * chain.transition, a)
+    kss = BETA * alpha * np.exp(np.sum(alpha * np.log(BETA * alpha)) / (1 - ALPHA))
+    box = {k: (0.7 * v, 1.3 * v) for k, v in zip(ks, kss)}
+    errors = []
+    for level in (2, 3):
+        grid = dsg.SmolyakGrid(box, level)
+        sol = dsg.value_iteration(prog, {}, grid=grid, markov={"z": chain}, tol=1e-10,
+                                  howard=50)
+        assert sol.converged and sol.interpolation == "smolyak"
+        exact = (np.log(grid.points) @ b)[None, :] + h[:, None]
+        errors.append(np.abs(sol.values - exact).max())
+        assert np.abs(sol.policy - BETA * alpha).max() < 5e-4
+    assert errors[0] < 5e-4 and errors[1] < 2e-7
+    # between the nodes, the value is the grid's polynomial
+    point = {"k1": 1.1 * kss[0], "k2": 0.9 * kss[1], "z": chain.nodes[1]}
+    exact = b @ np.log([point["k1"], point["k2"]]) + h[1]
+    assert abs(sol.value(point) - exact) < 2e-7
+    assert np.abs(sol.bellman_errors()).max() < 1e-6
+    with pytest.raises(ValueError, match="own polynomial"):
+        dsg.value_iteration(prog, {}, grid=grid, markov={"z": chain}, interpolation="cubic")
+
+
 # -- discrete choices -----------------------------------------------------------------------------
 
 def test_discrete_choices_solve_the_discretised_problem_exactly():

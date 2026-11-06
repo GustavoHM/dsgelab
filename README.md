@@ -291,9 +291,9 @@ planned.
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.
 - **Global methods are limited** to Chebyshev collocation and time iteration, on a Cartesian
-  grid or on a Smolyak sparse grid, to value function iteration on a Cartesian grid, whose size
-  grows as the product of the points on each axis, and to the endogenous grid method with one
-  endogenous state. Collocation on a Smolyak grid solves for all the coefficients at once with a
+  grid or on a Smolyak sparse grid, to value function iteration on the same two grids, and to the
+  endogenous grid method with one endogenous state. A Cartesian grid's size grows as the product
+  of the points on each axis. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.
 - **Markov regime switching is first order only,** with exogenous transition probabilities, and

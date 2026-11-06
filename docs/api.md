@@ -561,7 +561,7 @@ and has no reward, so value function iteration takes this declaration instead.
 
 `beta(params)` returns the discount factor.
 
-### `value_iteration(program, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, interpolation="linear", choices=None, initial=None, howard=20, tol=1e-8, max_iter=10000, inner_tol=1e-10, inner_max_iter=100) -> ValueIterationSolution`
+### `value_iteration(program, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, interpolation=None, choices=None, initial=None, howard=20, tol=1e-8, max_iter=10000, inner_tol=1e-10, inner_max_iter=100) -> ValueIterationSolution`
 
 Value function iteration with Howard's (1960) improvement steps. The value is kept at the grid
 points, one copy per node of the Markov chain, and interpolated between them. Each iteration
@@ -582,8 +582,8 @@ exclude, say, negative consumption that the bounds alone do not rule out.
 
 | Argument | Meaning |
 |---|---|
-| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid (a `CartesianGrid`), the Markov states and the shocks' integration, as in `time_iteration` |
-| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly |
+| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid (a `CartesianGrid`, the mapping that builds one, or a `SmolyakGrid`), the Markov states and the shocks' integration, as in `time_iteration` |
+| `interpolation` | on a `CartesianGrid`, `"linear"` (the default) or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly. A `SmolyakGrid` interpolates both by its own polynomial, evaluated as it is beyond the box, and takes no value here |
 | `choices` | `{control: values}` for every control, to choose among finitely many values, all combinations of which are tried. With next period's states among the grid points, this is the problem QuantEcon's `DiscreteDP` solves |
 | `initial` | the starting value: a number, `initial(states, params)` at a row-stacked array of states, or a `ValueIterationSolution` (to refine on another grid, whose policy also starts the maximization). With `None`, zero |
 | `howard` | the number of applications of the policy's own operator after each maximization |

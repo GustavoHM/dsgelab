@@ -1072,6 +1072,32 @@ f"{np.abs(vi.policy[..., 0] / c - 1).max():.0e}", bool(np.abs(cubic.policy[..., 
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+<pre><code>shares = alpha * np.array([0.6, 0.4])                  # two capital stocks
+
+def output2(s):
+    return np.exp(s.z) * s.k1 ** shares[0] * s.k2 ** shares[1]
+
+two = dsg.DynamicProgram(
+    states=["k1", "k2", "z"], controls=["s1", "s2"],   # the shares of output saved
+    reward=lambda s, x, p: np.log((1 - x.s1 - x.s2) * output2(s)),
+    transition=lambda s, x, e, p: {"k1": x.s1 * output2(s), "k2": x.s2 * output2(s)},
+    discount=beta, bounds={"s1": (0.01, 0.45), "s2": (0.01, 0.45)})
+k2ss = beta * shares * np.exp(np.sum(shares * np.log(beta * shares)) / (1 - alpha))
+sparse = dsg.SmolyakGrid({"k1": (0.7 * k2ss[0], 1.3 * k2ss[0]),
+                          "k2": (0.7 * k2ss[1], 1.3 * k2ss[1])}, 3)
+vi2 = dsg.value_iteration(two, {}, grid=sparse, markov={"z": log_z}, howard=50)
+sparse.n, vi2.converged
+bool(np.abs(vi2.policy - beta * shares).max() &lt; 1e-6)  # the closed form saves beta alpha_j</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">sparse.n, vi2.converged</span>
+(29, True)
+<span class="out-expr">bool(np.abs(vi2.policy - beta * shares).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p>On a <code>SmolyakGrid</code> the value is the grid's polynomial, which takes more continuous
+  states than a Cartesian grid can hold. Here output comes from two capital stocks, and the
+  controls are the shares of output saved in each, found by the projected Newton method. In the
+  closed form each share is <code>beta</code> times the stock's exponent. At level 3 the grid has
+  29 nodes, and the policy is within 1e-6 of the closed form. The validation solves the same
+  economy with three capital stocks, where the value agrees with its closed form within 1e-7.</p>
   <h3>32. Saving with a borrowing limit, by the endogenous grid method</h3>
 <pre><code>saving_egm = dsg.EGMProgram(
     states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],

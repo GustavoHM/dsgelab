@@ -8,6 +8,21 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+### Added
+
+- `value_iteration` takes a `SmolyakGrid`, as `solve_projection` and `time_iteration` do, with the
+  value and the policy interpolated by the grid's polynomial. `validation/compare_value_iteration.py`
+  solves stochastic growth with three capital stocks and the saving shares as three controls on
+  Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
+  value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
+  error falls by at least 58 from one level to the next.
+
+### Changed
+
+- `value_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a
+  `CartesianGrid`, so that a `SmolyakGrid` can refuse a value. Calls that worked before give the
+  same results.
+
 ## 0.9.0 — 2026-11-05
 
 The rest of the roadmap's milestone 0.8 (global methods): value function iteration, the

@@ -1083,6 +1083,33 @@ f"{np.abs(vi.policy[..., 0] / c - 1).max():.0e}", bool(np.abs(cubica.policy[...,
   <code>value_iteration</code> com o <code>DiscreteDP</code> do QuantEcon na versão discretizada
   deste modelo e com o <code>value_iteration</code> do dolo no RBC markoviano dele, que tem dois
   controles.</p>
+<pre><code>fracoes = alpha * np.array([0.6, 0.4])                 # dois estoques de capital
+
+def produto2(s):
+    return np.exp(s.z) * s.k1 ** fracoes[0] * s.k2 ** fracoes[1]
+
+dois = dsg.DynamicProgram(
+    states=["k1", "k2", "z"], controls=["s1", "s2"],   # as frações do produto poupadas
+    reward=lambda s, x, p: np.log((1 - x.s1 - x.s2) * produto2(s)),
+    transition=lambda s, x, e, p: {"k1": x.s1 * produto2(s), "k2": x.s2 * produto2(s)},
+    discount=beta, bounds={"s1": (0.01, 0.45), "s2": (0.01, 0.45)})
+k2ee = beta * fracoes * np.exp(np.sum(fracoes * np.log(beta * fracoes)) / (1 - alpha))
+esparsa = dsg.SmolyakGrid({"k1": (0.7 * k2ee[0], 1.3 * k2ee[0]),
+                           "k2": (0.7 * k2ee[1], 1.3 * k2ee[1])}, 3)
+vi2 = dsg.value_iteration(dois, {}, grid=esparsa, markov={"z": log_z}, howard=50)
+esparsa.n, vi2.converged
+bool(np.abs(vi2.policy - beta * fracoes).max() &lt; 1e-6)  # a forma fechada poupa beta alpha_j</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">esparsa.n, vi2.converged</span>
+(29, True)
+<span class="out-expr">bool(np.abs(vi2.policy - beta * fracoes).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p>Numa <code>SmolyakGrid</code>, o valor é o polinômio da grade, que comporta mais estados
+  contínuos do que uma grade cartesiana. Aqui o produto vem de dois estoques de capital, e os
+  controles são as frações do produto poupadas em cada um, encontradas pelo método de Newton
+  projetado. Na forma fechada, cada fração é <code>beta</code> vezes o expoente do estoque. No
+  nível 3 a grade tem 29 nós, e a política fica a menos de 1e-6 da forma fechada. A validação
+  resolve a mesma economia com três estoques de capital, em que o valor concorda com a forma
+  fechada até 1e-7.</p>
   <h3>32. Poupança com limite de endividamento, pelo método da grade endógena</h3>
 <pre><code>poupanca_egm = dsg.EGMProgram(
     states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],
