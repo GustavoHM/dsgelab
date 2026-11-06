@@ -12,6 +12,12 @@ The closed-form stochastic growth model, log utility and full depreciation, is
 the check: the polynomial has to reproduce ``k' = αβ a k^α`` and
 ``c = (1-αβ) a k^α`` on the box it was built on. A tensor grid in more than
 three states is not built. That is a different algorithm, not a larger ``order``.
+On a :class:`SmolyakGrid` the policy is the grid's polynomial, with one
+coefficient per node, and the collocation equations are solved by Newton's
+method. Their Jacobian is assembled from the derivatives
+of the residual at each node and quadrature point with respect to today's and
+next period's jumps, so a Newton step costs a few evaluations of the residual
+at every point rather than one per coefficient.
 """
 
 from __future__ import annotations
@@ -23,7 +29,8 @@ import numpy as np
 from numpy.typing import ArrayLike
 from scipy.optimize import least_squares, root
 
-from .model import Covariance, Model, Params, Point
+from .model import Covariance, Model, Params, Point, VarView
+from .smolyak import SmolyakGrid
 from .solve import solve
 from .steady import SteadyState
 
@@ -32,7 +39,11 @@ __all__ = ["Projection", "solve_projection"]
 
 @dataclass
 class Projection:
-    """A jump policy ``u(k)`` collocated on a box of the predetermined states."""
+    """A jump policy ``u(k)`` collocated on a box of the predetermined states.
+
+    On a Smolyak grid, ``grid`` holds it, ``order`` is the highest degree along any state, and
+    ``nodes`` and ``bounds`` are in the model's state order.
+    """
 
     model: Model
     params: Params
@@ -42,6 +53,7 @@ class Projection:
     nodes: np.ndarray           # (n_nodes, n_k) in levels
     residual: float
     success: bool
+    grid: SmolyakGrid | None = None
 
     def jumps(self, k: ArrayLike) -> np.ndarray:
         """Jump vector at one state or at a row-stacked array of states."""
@@ -49,16 +61,20 @@ class Projection:
         single = k.ndim == 1
         if single:
             k = k[None, :]
-        basis = _basis_matrix(k, self.bounds, self.order)
+        if self.grid is not None:
+            basis = self.grid.basis(k[:, _grid_columns(self.model, self.grid)])
+        else:
+            basis = _basis_matrix(k, self.bounds, self.order)
         out = basis @ self.coefficients.T
         return out[0] if single else out
 
 
-def solve_projection(model: Model, params: Params, *, bounds: ArrayLike, guess: Point | None,
-                     order: int = 5, cov: Covariance = None, n_quad: int = 7,
-                     positive: Sequence[str] = (),
-                     steady: SteadyState | None = None) -> Projection:
-    """Collocate the expectational residual on a Chebyshev tensor grid.
+def solve_projection(model: Model, params: Params, *, bounds: ArrayLike | None = None,
+                     guess: Point | None, order: int = 5, cov: Covariance = None,
+                     n_quad: int = 7, positive: Sequence[str] = (),
+                     steady: SteadyState | None = None,
+                     grid: SmolyakGrid | None = None) -> Projection:
+    """Collocate the expectational residual on a Chebyshev tensor grid or a Smolyak grid.
 
     Parameters
     ----------
@@ -71,15 +87,29 @@ def solve_projection(model: Model, params: Params, *, bounds: ArrayLike, guess: 
         object there.
     cov :
         Shock covariance, as elsewhere in the package. It scales the quadrature.
+    grid :
+        A :class:`SmolyakGrid` with one axis per predetermined state, named
+        after it, in place of ``bounds`` and ``order``. It takes any number of
+        states.
     """
-    bounds = np.asarray(bounds, dtype=float)
     nk = model.n_states
+    if grid is not None:
+        if bounds is not None:
+            raise ValueError("give bounds and order for a tensor grid, or a SmolyakGrid, not both")
+        if not isinstance(grid, SmolyakGrid):
+            raise TypeError("grid must be a SmolyakGrid")
+        cols = _grid_columns(model, grid)
+        bounds = np.empty((nk, 2))
+        bounds[cols] = grid.bounds
+    elif bounds is None:
+        raise ValueError("give bounds (with order) for a tensor grid, or a SmolyakGrid")
+    bounds = np.asarray(bounds, dtype=float)
     if bounds.shape != (nk, 2):
         raise ValueError(f"bounds must have shape ({nk}, 2), got {bounds.shape}")
-    if nk > 3:
+    if nk > 3 and grid is None:
         raise ValueError(
             f"{nk} states: a tensor Chebyshev grid is not built past 3. "
-            "A sparse grid is a different algorithm.")
+            "Pass a SmolyakGrid for more.")
     if model.n_jumps == 0:
         raise ValueError("a projection needs at least one jump; a pure law of motion is already explicit")
     sol = solve(model, params, guess=guess, steady=steady, positive=positive)
@@ -89,6 +119,9 @@ def solve_projection(model: Model, params: Params, *, bounds: ArrayLike, guess: 
             f"the steady-state Jacobian splits into {expost.size} ex-post rows and "
             f"{expect.size} expectational rows, not {nk} and {model.n_jumps}. "
             "The partition is the incidence of future jumps, and this model does not have that split.")
+    if grid is not None:
+        return _solve_smolyak(model, params, grid, bounds, sol, expost, expect,
+                              *_quadrature(model, cov, n_quad))
     nodes_1d = [_chebyshev_nodes(order + 1) for _ in range(nk)]
     grids = np.meshgrid(*[
         _from_unit(nodes_1d[i], bounds[i, 0], bounds[i, 1]) for i in range(nk)
@@ -132,6 +165,164 @@ def solve_projection(model: Model, params: Params, *, bounds: ArrayLike, guess: 
     return Projection(model=model, params=params, bounds=bounds, order=order,
                       coefficients=coef, nodes=nodes, residual=worst,
                       success=bool(fit.success or worst < 1e-6))
+
+
+def _grid_columns(model, grid):
+    """The positions in the model's state vector of the grid's axes, in the grid's order."""
+    if sorted(grid.names) != sorted(model.states):
+        raise ValueError(f"the grid's axes {grid.names} must be the model's states "
+                         f"{model.states}, one axis each")
+    return np.array([model.states.index(n) for n in grid.names], dtype=int)
+
+
+def _solve_smolyak(model, params, grid, bounds, sol, expost, expect, quad_e, quad_w,
+                   tol=1e-10, max_iter=50):
+    """Collocation on a Smolyak grid, by Newton's method on the coefficients.
+
+    The residual at node ``i`` depends on the coefficients through today's jumps ``u_i = B_i c``
+    and next period's ``u' = B(k') c``, with ``k'`` given by the ex-post rows from ``k_i``,
+    ``u_i`` and the shock. Its derivative is the derivative in ``u_i``, next state and next
+    jumps included, times ``B_i``, plus the derivative in ``u'`` at fixed ``k'`` times
+    ``B(k')``. Both are taken by finite differences at all nodes at once.
+    """
+    nk, nu = model.n_states, model.n_jumps
+    cols = _grid_columns(model, grid)
+    K = np.empty((grid.n, nk))
+    K[:, cols] = grid.points
+    B = grid.basis(grid.points)
+    residuals = _vectorised_residuals(model, params, sol.ctx)
+    k_ss = sol.steady.x[:nk]
+    k_scale = sol.coords.scale[:nk]
+    Q = sol.Q if sol.Q is not None else np.zeros((nk, model.n_shocks))
+
+    def policy(coef, k):
+        return grid.basis(k[:, cols]) @ coef.T
+
+    def next_states(k, u, e):
+        """The ex-post rows solved for next period's states, by Newton at every point."""
+        E = np.broadcast_to(e, (k.shape[0], model.n_shocks))
+        kn = k_ss + ((k - k_ss) / k_scale @ sol.P.T + E @ Q.T) * k_scale
+        X = np.column_stack([k, u])
+
+        def g(kn):
+            return residuals(np.column_stack([kn, u]), X, E)[:, expost]
+
+        for _ in range(30):
+            r = g(kn)
+            if np.max(np.abs(r)) < 1e-13 * (1.0 + np.max(np.abs(kn))):
+                break
+            J = np.empty((k.shape[0], nk, nk))
+            for j in range(nk):
+                h = 1e-7 * (1.0 + np.abs(kn[:, j]))
+                kp = kn.copy()
+                kp[:, j] += h
+                J[:, :, j] = (g(kp) - r) / h[:, None]
+            step = np.linalg.solve(J, r[:, :, None])[:, :, 0]
+            kn = kn - step
+            if np.max(np.abs(step) / (1.0 + np.abs(kn))) < 1e-14:
+                break
+        return kn
+
+    def at_shock(coef, u, e):
+        """The expectational rows at every node for one shock, and ``k'``, ``u'``."""
+        kn = next_states(K, u, e)
+        un = policy(coef, kn)
+        E = np.broadcast_to(e, (grid.n, model.n_shocks))
+        R = residuals(np.column_stack([kn, un]), np.column_stack([K, u]), E)[:, expect]
+        return R, kn, un, E
+
+    def residual(coef):
+        u = B @ coef.T
+        return sum(w * at_shock(coef, u, e)[0] for e, w in zip(quad_e, quad_w))
+
+    def jacobian(coef):
+        u = B @ coef.T
+        today = np.zeros((grid.n, nu, nu))
+        J = np.zeros((grid.n, nu, nu, grid.n))
+        for e, w in zip(quad_e, quad_w):
+            R, kn, un, E = at_shock(coef, u, e)
+            X = np.column_stack([K, u])
+            for j in range(nu):
+                h = 1e-7 * (1.0 + np.abs(u[:, j]))
+                up = u.copy()
+                up[:, j] += h
+                today[:, :, j] += w * (at_shock(coef, up, e)[0] - R) / h[:, None]
+                h = 1e-7 * (1.0 + np.abs(un[:, j]))
+                unp = un.copy()
+                unp[:, j] += h
+                Rn = residuals(np.column_stack([kn, unp]), X, E)[:, expect]
+                J[:, :, j, :] += (w * (Rn - R) / h[:, None])[:, :, None] * grid.basis(
+                    kn[:, cols])[:, None, :]
+        J += today[:, :, :, None] * B[:, None, None, :]
+        return J.reshape(grid.n * nu, nu * grid.n)
+
+    u0 = np.vstack([_linear_jumps(sol, k) for k in K])
+    coef = grid.coefficients(u0).T
+    R = residual(coef)
+    worst = float(np.max(np.abs(R)))
+    converged = worst < tol
+    for _ in range(max_iter):
+        if converged:
+            break
+        step = np.linalg.solve(jacobian(coef), R.ravel()).reshape(nu, grid.n)
+        t = 1.0
+        for _ in range(30):
+            trial = coef - t * step
+            Rt = residual(trial)
+            if np.all(np.isfinite(Rt)) and np.sum(Rt ** 2) < (1.0 - 1e-4 * t) * np.sum(R ** 2):
+                break
+            t *= 0.5
+        else:
+            break
+        coef, R = trial, Rt
+        worst = float(np.max(np.abs(R)))
+        converged = worst < tol
+    return Projection(model=model, params=params, bounds=bounds,
+                      order=int(grid.degrees.max()), coefficients=coef, nodes=K,
+                      residual=worst, success=bool(converged or worst < 1e-6), grid=grid)
+
+
+def _vectorised_residuals(model, params, ctx):
+    """The model's residuals at ``P`` points at once, ``(P, n_vars)``.
+
+    The equations are called with each variable a vector. If that fails, or disagrees with the
+    call at single points on the first use, they are evaluated point by point from then on.
+    """
+    mode = {"vector": None}
+
+    def loop(Xn, X, E):
+        return np.array([model.residuals(xn, x, e, params, ctx)
+                         for xn, x, e in zip(Xn, X, E)]).reshape(X.shape[0], model.n_vars)
+
+    def vector(Xn, X, E):
+        nxt = VarView(Xn.T, model._index)
+        cur = VarView(X.T, model._index)
+        e = VarView(E.T, model._shock_index)
+        r = (model.equations(nxt, cur, e, params, ctx) if model._wants_ctx
+             else model.equations(nxt, cur, e, params))
+        P = X.shape[0]
+        rows = [np.broadcast_to(np.asarray(ri, dtype=float), (P,)) for ri in r]
+        if len(rows) != model.n_vars:
+            raise ValueError(f"{model.name}: equations returned {len(rows)} residuals for "
+                             f"{model.n_vars} variables")
+        return np.column_stack(rows)
+
+    def call(Xn, X, E):
+        if mode["vector"] is not False:
+            try:
+                R = vector(Xn, X, E)
+                if mode["vector"] is None:
+                    k = min(3, X.shape[0])
+                    mode["vector"] = bool(np.allclose(R[:k], loop(Xn[:k], X[:k], E[:k]),
+                                                      rtol=1e-12, atol=1e-14, equal_nan=True))
+                return R if mode["vector"] else loop(Xn, X, E)
+            except Exception:
+                if mode["vector"]:
+                    raise
+                mode["vector"] = False
+        return loop(Xn, X, E)
+
+    return call
 
 
 def _partition(A, nk, tol=1e-8):

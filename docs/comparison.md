@@ -31,15 +31,18 @@ I read only the documentation, so a **📄** cell may be wrong without the table
 
 # DSGE
 
-`dsgelab` does not solve heterogeneous-agent models, which are the subject of **sequence-jacobian**
-and **econpizza**. Among global methods, `dsgelab` has polynomial projection up to three states
-and time and value function iteration on a grid, and **dolo** also documents expectations
-iteration and the endogenous grid method. **gEconpy** estimates through PyMC and its
+`dsgelab` solves heterogeneous-agent models by the sequence-space Jacobian method, the subject of
+**sequence-jacobian**, against which it is validated, and of **econpizza**. Among global methods,
+`dsgelab` has polynomial projection and time iteration, on a tensor grid or on a Smolyak sparse
+grid with any number of states, value function iteration on a grid and the endogenous grid method,
+and **dolo** also documents expectations iteration. **gEconpy** estimates through PyMC and its
 gradient-based samplers. `dsgelab` has its own HMC and NUTS, driven by the
 analytic gradient of the first-order Kalman likelihood, besides Metropolis–Hastings and SMC. At
 second and third order it estimates with a particle filter, and at second order also with an
-inversion filter. Dynare's reduced-form mapping and RMSE filtering still require **Dynare**, and
-Markov regime switching requires **RISE**.
+inversion filter. Dynare's reduced-form mapping and RMSE filtering still require **Dynare**.
+`dsgelab` solves Markov regime switching to first order, with exogenous transition probabilities,
+and estimates it with Kim's filter. Higher orders, endogenous transition probabilities and optimal
+policy under switching require **RISE**.
 
 | Capability | dsgelab | gEconpy 2.2 | dolo | pydsge | econpizza | PyMacLab | Dynare (ref.) |
 |---|---|---|---|---|---|---|---|
@@ -50,11 +53,15 @@ Markov regime switching requires **RISE**.
 | **1st-order perturbation** | ✅ Klein/QZ | ✅ | 📄 | 📄 | — | 📄 Klein | ✅ |
 | **2nd-order perturbation + risk corrections** | ✅ | **—** | 📄 | — | — | 📄 Klein–Gomme | ✅ |
 | 3rd-order perturbation | ✅ ‡ full decision rule in Dynare's form (`ghxxx`, `ghxxu`, `ghxuu`, `ghuuu`, `ghxss`, `ghuss`), against Dynare 7.2 on `example1` and `example2` to 3e-13, and the stochastic steady state. Sparse tensors, checked on a synthetic model with 71 variables | — | 📄 | — | — | — | ✅ |
-| Global methods / projection | ✅ ‡ Chebyshev collocation with up to three states, which reproduces the closed-form solution of stochastic growth | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
-| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth | — | ✅ `time_iteration` | — | — | — | — |
+| Global methods / projection | ✅ ‡ Chebyshev collocation on a tensor grid up to three states, or on a Smolyak grid (isotropic or anisotropic) with any number; the Smolyak nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids, and the closed form of stochastic growth with up to five capital stocks (six states) within 3e-8 at level 4 | — | 📄 time, value, expectations iteration | — | 📄 | — | — |
+| Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ ‡ on a Cartesian grid, linear or natural cubic interpolation, or on a Smolyak grid, bounds by Fischer–Burmeister; against dolo 0.4.9.20 on three of its models within 1e-9, and the closed form of stochastic growth, with one capital stock and with up to five | — | ✅ `time_iteration` | — | — | — | — |
 | Value function iteration, with Howard's improvement steps | ✅ ‡ on a Cartesian grid, over intervals or finite sets of choices; against QuantEcon's `DiscreteDP` within 6e-12, dolo 0.4.9.20's `value_iteration` on its Markov RBC within 1.3e-11 of the value, and the closed form of stochastic growth | — | ✅ `value_iteration` | — | — | — | — |
+| Endogenous grid method | ✅ ‡ one endogenous state, Markov or quadrature exogenous states, bounded controls; against dolo 0.4.9.20's `egm` on its consumption–savings model within 1.1e-11, against `time_iteration` and the closed form of stochastic growth | — | ✅ `egm` | — | — | — | — |
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
-| Heterogeneous agents (HANK) | — | — | — | — | 📄 | — | 📄 |
+| Heterogeneous agents (HANK), steady state with calibration | ✅ ‡ one asset by a Markov chain, the backward step written by the user, Young's lottery; against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK, steady states within 7.6e-10 | — | — | — | 📄 | — | 📄 |
+| Sequence-space Jacobians (fake news), `G` and impulse responses | ✅ ‡ against sequence-jacobian 1.0.0 on the same two models: household Jacobians within 2.5e-10, `G` within 1.7e-10, linear and nonlinear responses within 1.9e-10; fake news against brute force within 4.1e-8 | — | — | — | 📄 | — | — |
+| Markov regime switching, solution | ✅ ‡ first order, partition perturbation with every solution found kept and mean-square stability; the nine solutions that Foerster et al. (2013) print for a New Keynesian model, 106 of 108 entries within a unit of the last digit, and the RBC of Foerster et al. (2016) | — | 📄 discrete Markov chains as exogenous processes, in global methods | — | — | — | 📄 MS-SBVAR, for VARs only |
+| Markov regime switching, estimation | ✅ ‡ Kim's filter with filtered and smoothed regime probabilities, posterior mode and samplers; against statsmodels 0.14.4's Hamilton filter within 3e-14 and the exact likelihood over every regime path | — | — | — | — | — | 📄 MS-SBVAR, for VARs only |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
 | Unit root accepted (`qz_criterium`) | ✅ ‡ optional; strict by default | ? | ? | ? | ? | ? | ✅ by default |
 | **Nonlinear perfect foresight** | ✅ stacked-time Newton | ✅ `solve_perfect_foresight` | 📄 | ? | 📄 shooting | ? | ✅ |
@@ -75,6 +82,7 @@ Markov regime switching requires **RISE**.
 | Optimal simple rules, discretion | ✅ ‡ against Dynare | — | — | — | — | — | ✅ |
 | 2nd-order welfare, conditional and unconditional | ✅ ‡ against Dynare, to 1.4e-12 under Ramsey and 3.5e-13 in an RBC with capital (6.1e-10 under discretion) | — | — | — | — | — | ✅ |
 | **Bayesian estimation** | ✅ ‡ mode, Laplace and Metropolis against Dynare on `fs2000`, SMC and maximum likelihood against the conjugate case, R-hat, ESS. HMC and NUTS at first order, with the likelihood gradient checked against finite differences and the samplers against the exact posterior of an AR(1) coefficient. Particle filter up to third order, against Dynare's likelihood on an AR(1) to 0.006, and inversion filter up to second order, against Dynare's OccBin filter on the same AR(1) | ✅ via PyMC | — | 📄 with ZLB | — | — 📄 states it has none | ✅ |
+| BVAR (Sims–Zha prior) and DSGE-VAR | ✅ ‡ against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var`: priors, posteriors, marginal densities, forecasts draw by draw, DSGE-VAR likelihood and mode | ? | — | ? | — | — | ✅ `bvar_density`, `bvar_forecast`, `dsge_var` |
 | Kalman filter / smoothing | ✅ ‡ filter with exact diffuse start and smoother, against Dynare (likelihood at 6e-12, smoother at 8.4e-15) | ✅ `statespace_from_gcn` | — | 📄 | — | — | ✅ |
 | **Calibration on targets** | ✅ joint, with bounds | ✅ parameters calibrated to target ratios | ? | ? | ? | ? | 📄 |
 | **Identification diagnostic for the calibration** | ✅ rank and null directions | ? | ? | ? | ? | ? | 📄 (model identification) |
@@ -103,14 +111,17 @@ the table, it is the only one that states it has no estimation. It and `dolo` di
 Python 3.14, and in its case the reason is that the 0.95.9 package on PyPI comes without a build
 file, either `setup.py` or `pyproject.toml`.
 
-**`dolo` documents methods absent from `dsgelab`,** such as the endogenous grid method, as well as
-perturbation up to third order, and its time iteration and value function iteration are the
-references for `dsgelab`'s. As published, its `value_iteration` ends in NaN on its own `rbc_mc`
+**`dolo` documents methods absent from `dsgelab`,** such as expectations iteration, as well as
+perturbation up to third order, and its time iteration, value function iteration and endogenous
+grid method are the references for `dsgelab`'s. As published, its `value_iteration` ends in NaN on its own `rbc_mc`
 model, and `validation/dolo/run_dolo_vfi.py` lists the four changes that make it run. Installation failed because the package pins a version of
 pandas that no longer builds, and I did not test Python versions earlier than 3.14.
 
-**`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject,** which the
-`ROADMAP.md` plans for version 0.9 of `dsgelab`. For representative-agent models, the table records
+**`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject.** `dsgelab` has
+the sequence-space Jacobian method for one asset and one Markov chain, validated against
+sequence-jacobian 1.0.0 on two of its own models. sequence-jacobian also has two endogenous
+states, the two-asset HANK among its examples, Markov matrices that move along a path,
+estimation from the impulse responses' covariances, and numba. For representative-agent models, the table records
 for `econpizza`, from its documentation, perfect foresight, IRFs, occasionally binding constraints
 and a global method.
 
@@ -147,18 +158,20 @@ feature is that of the test that validates it.
   At first and second order, the inversion filter reproduces the shocks and the likelihood of
   Dynare's OccBin filter on that AR(1).
 * **Projection by Chebyshev collocation.** The residual used in the perturbation is collocated on a
-  tensor grid of up to three states. Rows without a future jump determine the next state for each
-  shock, and the others are integrated by Gauss–Hermite. For stochastic growth with a
-  closed-form solution, the policy reproduces ``c = (1-αβ) a k^α``. A sparse grid, value iteration
-  and more than two shocks in the tensor quadrature are outside this solver.
+  tensor grid of up to three states, or, since 0.7.5, on a Smolyak grid with any number. Rows
+  without a future jump determine the next state for each shock, and the others are integrated by
+  Gauss–Hermite. For stochastic growth with a closed-form solution, the policy reproduces
+  ``c = (1-αβ) a k^α``, and with five capital stocks the error at level 4 is 3e-8. More than two
+  shocks in the tensor quadrature are outside this solver.
 
 Versions 0.3 and 0.4 also brought optimal policy, the reading of `.mod` files, occasionally binding
 constraints, the extended path, declared trends, the analytic steady state and model diagnostics,
 each validated as the table in the following section indicates. Version 0.6 adds local
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
-plots. Still absent are global methods beyond Chebyshev collocation, regime switching,
-heterogeneous agents, BVAR, DSGE-VAR and the declaration of trends in `from_equations`. The README lists
+plots, and milestone 0.9 the BVAR, the DSGE-VAR, heterogeneous agents and first-order regime
+switching. Still absent are expectations iteration among the global methods, regime switching
+beyond the first order and the declaration of trends in `from_equations`. The README lists
 them under *Known limitations*, and `ROADMAP.md` gives the version for each.
 
 ### How `dsgelab` differs from the other Python packages
@@ -241,14 +254,18 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Global sensitivity | ✅ Dynare (`+gsa`), SALib | **done**: `stability_map`, `monte_carlo_filtering` and `sobol`, with the classes of Dynare's solver on 3 × 1024 draws of `ls2003a`, its Smirnov tests and correlations within 2e-13, and SALib's Sobol design and indices within 1e-15; reduced-form mapping and RMSE filtering missing | 0.6 |
 | Method of moments and restrictions on IRFs and moments | ✅ Dynare (`+mom`, `irf_calibration`, `moment_calibration`) | **done**: GMM and SMM at first and pruned second order, frequentist IRF matching at first order, and calibration restrictions on IRFs and moments at first order, at a point and over the prior, with the same values and verdicts as Dynare on `ls2003a` | 0.6, 0.7 |
 | Filtered moments | ✅ Dynare (`hp_filter`, `bandpass_filter`) | **done**: Hodrick–Prescott and band-pass, against Dynare on five models within 1e-13, a unit root included | 0.6 |
-| Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | **done**: `aggregation=` in the state space and `EstimationProblem`, against Dynare's auxiliary-variable formulation on `fs2000` (likelihood within 8e-13); `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`, with Dynare's prior and posterior densities within 2e-12 | 0.6 |
+| Mixed frequency and plots | ✅ Dynare, gEconpy, MacroModelling | **done**: `aggregation=` in the state space and `EstimationProblem`, against Dynare's auxiliary-variable formulation on `fs2000` (likelihood within 8e-13); `plot_irf`, `plot_paths`, `plot_decomposition`, `plot_forecast` and `plot_posterior`, with Dynare's prior and posterior densities within 2e-12. Unreleased: the rest of Dynare's figures (priors, trace plots, autocorrelograms, Brooks and Gelman diagnostics, `mode_check`, smoothed shocks and observables, posterior IRFs with HPD intervals, shock groups and detail of the decomposition, conditional forecasts, OccBin paths and regimes, collinearity patterns, Monte Carlo filtering), with the numbers new to the package against those in Dynare's own figures on `fs2000`, within 8e-14 for the MCMC diagnostics, 6e-11 for `mode_check` where the prior is bounded and 3e-10 for the posterior IRFs; the identification-strength and sensitivity bars, which need the information matrix, and the annualised and vintage decompositions missing | 0.6 |
 | Third order in Dynare's decision-rule form and stochastic steady state | ✅ Dynare, MacroModelling | **done**, including all cubic blocks, risk terms and the stochastic fixed point | 0.7 |
 | Sparse third order, derivatives with respect to parameters, nonlinear filters | 📄 Dynare (k-order), ✅ MacroModelling | **done**: canonical sparse third order validated on a full 71-variable nonlinear pipeline, implicit first-order QZ derivatives and nonlinear filters; explicit decision-rule composition uses dense arrays | 0.7 |
 | Discretisation of processes (Tauchen, Rouwenhorst) | ✅ dolo, QuantEcon | **done**: `tauchen`, `rouwenhorst` and `MarkovChain`, against QuantEcon on 120 processes, with Tauchen's small probabilities and stationary distributions against a 40-digit computation (QuantEcon loses them in `1 - cdf`) | 0.7.1 |
 | Time iteration, with Markov or quadrature exogenous states and bounded controls | ✅ dolo | **done**: `time_iteration` on the model's own residual, against dolo's `time_iteration` on its RBC, its Markov RBC and its consumption–savings model with a borrowing limit, within 1e-9 with linear and cubic interpolation | 0.7.2 |
 | Value function iteration, with Howard's improvement steps | ✅ dolo, QuantEcon | **done**: `value_iteration` on a `DynamicProgram`, against QuantEcon's `DiscreteDP` on the discretised growth model within 6e-12 with the same policy, and against dolo's `value_iteration` on its Markov RBC within 1.3e-11 of the value | 0.7.3 |
-| Global methods | 📄 dolo | Chebyshev collocation up to three states, time iteration and value function iteration; the endogenous grid method and sparse grids missing | 0.7.4–0.8 |
-| Regime switching, heterogeneous agents, BVAR and DSGE-VAR | 📄 RISE, ✅ Dynare, sequence-jacobian | missing | 0.9 |
+| Endogenous grid method | ✅ dolo | **done**: `egm` on an `EGMProgram`, against dolo's `egm` on its consumption–savings model, with iid and with Markov income, within 1.1e-11 | 0.7.4 |
+| Sparse grids | ✅ Tasmanian | **done**: `SmolyakGrid`, isotropic and anisotropic, for `solve_projection` and `time_iteration`; nodes and interpolation weights against Tasmanian 8.2 within 2e-14 on 40 grids in one to six dimensions, and the closed form of growth with three to five capital stocks | 0.7.5 |
+| Global methods | 📄 dolo | Chebyshev collocation and time iteration on tensor or Smolyak grids, value function iteration and the endogenous grid method; expectations iteration missing | — |
+| BVAR (Sims–Zha prior) and DSGE-VAR | ✅ Dynare (`+bvar`, `estimation(dsge_var=...)`) | **done**: `bvar`, `bvar_density` and `BVAR.forecast` against Dynare's `tests/bvar_a_la_sims` (posteriors within 1.8e-14, log marginal densities within 1.8e-12, forecast paths draw by draw within 2.1e-16), and `EstimationProblem(dsge_var=...)` against `tests/dsge-var` (log posterior within 4.9e-12, modes within 1e-4 posterior sd) with Dynare's count of `T`, which dsgelab does not use by default; IRFs missing | 0.9 |
+| Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; two endogenous states missing | 0.9 |
+| Markov regime switching, solution and estimation | 📄 RISE | **done**: first-order partition perturbation with every solution found and mean-square stability, and Kim's filter; the nine solutions of Foerster et al. (2013), statsmodels' Hamilton filter and the exact likelihood over regime paths. RISE runs only in MATLAB, as P-code that Octave cannot execute | 0.9 |
 
 ---
 

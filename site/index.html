@@ -919,6 +919,45 @@ for name, fig in figs.items():
   <code>prior_density</code> reproduces its <code>draw_prior_density</code> and
   <code>posterior_density</code> the kernel estimate of its <code>posterior_moments</code>, with the
   bandwidth corrected for the draws a Metropolis chain repeats.</p>
+<pre><code>bg = dsg.brooks_gelman(chain, origin=200)                 # chains of 750 draws, example 14
+slices = dsg.mode_check(pb, mode)
+irf_post = dsg.posterior_irf(pb, chain, n_draws=200, periods=20)
+more = {
+    "priors.png": dsg.plot_priors(pb),
+    "trace.png": dsg.trace_plot(chain, posterior=True),
+    "brooks_gelman.png": dsg.plot_brooks_gelman(bg),
+    "mode_check.png": dsg.plot_mode_check(slices),
+    "posterior_irf.png": dsg.plot_posterior_irf(irf_post, "e"),
+    "smoothed.png": dsg.plot_smoothed_observables(pb.smoother(mode.x), pb.Y),
+    "occbin.png": dsg.plot_occbin(ob, ["c", "b", "lam"]),                     # example 15
+    "collinearity.png": dsg.plot_identification(bad),                         # example 19
+    "filtering.png": dsg.plot_filtering(stab, scatter=False),                 # example 26
+}
+for name, fig in more.items():
+    fig.savefig(name, dpi=80)
+bg.iterations[[0, -1]], bg.univariate.shape
+slices["rho"]["x"][[0, 10, 20]].round(3)
+irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">bg.iterations[[0, -1]], bg.univariate.shape</span>
+([200 746], (92, 6, 2))
+<span class="out-expr">slices["rho"]["x"][[0, 10, 20]].round(3)</span>
+[0.501 0.75 1]
+<span class="out-expr">irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"][0] &lt; irf_post["upper"]["e"]["y"][0]</span>
+(200, True)</code></pre>
+  <p>The rest of Dynare's figures follow the same pattern. <code>trace_plot</code>,
+  <code>plot_mh_autocorrelation</code> and <code>plot_brooks_gelman</code> are the MCMC diagnostics
+  of <code>estimation</code>: the draws with their moving average, their autocorrelations, and the
+  convergence measures of Brooks and Gelman (1998) on the pooled draws and within each chain, which
+  settle at the same value when the chains have converged. <code>mode_check</code> evaluates the log
+  posterior and the log likelihood through the mode on Dynare's grid, here from 0.501 to 1 for
+  <code>rho</code>, whose mode is 0.75: the beta prior cuts the right side at 1, and the grid is made symmetric.
+  <code>posterior_irf</code> solves the model at draws of the posterior and gives the mean, median,
+  HPD interval and deciles of the responses, as Dynare's <code>bayesian_irf</code>. The smoother
+  (<code>plot_smoothed_shocks</code>, <code>plot_smoothed_observables</code>), the OccBin paths and
+  regimes, the collinearity patterns of <code>identification</code>, the Monte Carlo filtering of
+  global sensitivity, conditional forecasts and shock groups in the decomposition have their
+  figures too. The statistics they draw are computed as Dynare computes them and need no
+  matplotlib, and the validation compares them with the numbers in Dynare's own figures.</p>
   <h3>29. A process as a Markov chain</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log productivity, quarterly
 var = sigma ** 2 / (1 - rho ** 2)
@@ -1011,12 +1050,12 @@ cubic = dsg.value_iteration(growth, {}, grid=grid, markov={"z": log_z}, interpol
 plain.iterations, vi.iterations
 k = vi.grid.points[:, 0]
 c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the closed form
-[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubic)]
+f"{np.abs(vi.policy[..., 0] / c - 1).max():.0e}", bool(np.abs(cubic.policy[..., 0] / c - 1).max() < 1e-6)
 [f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubic)]</code></pre>
 <pre class="output" data-label="Output"><code><span class="out-expr">plain.iterations, vi.iterations</span>
 (361, 18)
-<span class="out-expr">[f"{np.abs(sol.policy[..., 0] / c - 1).max():.0e}" for sol in (vi, cubic)]</span>
-['6e-03', '7e-07']
+<span class="out-expr">f"{np.abs(vi.policy[..., 0] / c - 1).max():.0e}", bool(np.abs(cubic.policy[..., 0] / c - 1).max() &lt; 1e-6)</span>
+('6e-03', True)
 <span class="out-expr">[f"{np.abs(sol.bellman_errors()).max():.0e}" for sol in (vi, cubic)]</span>
 ['2e-04', '7e-05']</code></pre>
   <p><code>value_iteration</code> solves a <code>DynamicProgram</code>, which declares the reward,
@@ -1033,6 +1072,254 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   compares <code>value_iteration</code> with QuantEcon's <code>DiscreteDP</code> on the discretised
   version of this model and with dolo's <code>value_iteration</code> on its Markov RBC, which has
   two controls.</p>
+  <h3>32. Saving with a borrowing limit, by the endogenous grid method</h3>
+<pre><code>saving_egm = dsg.EGMProgram(
+    states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],
+    expectation=lambda s, x, e, p: p["beta"] * p["R"] * x.c ** -p["gamma"],
+    direct_response=lambda a, z, p: z.m ** (-1 / p["gamma"]),    # c = m^(-1/gamma)
+    reverse_state=lambda a, x, p: a.a + x.c,                      # w = a + c
+    half_transition=lambda a, e, p: p["R"] * a.a + e.y,           # w' = R a + y'
+    post_decision=lambda s, x, p: s.w - x.c,                      # a = w - c
+    bounds={"c": (0.0, lambda s, p: s.w)})
+eg = dsg.egm(saving_egm, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+             grid={"a": (0.0, 12.0, 80)}, markov={"y": income},
+             initial={"c": lambda s, p: 0.5 * s.w})
+eg.converged, eg.iterations
+eg.endogenous[:, 0].round(3)              # cash on hand at which the limit stops binding
+eg.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)
+gap = max(np.abs(eg.controls(np.column_stack([w, np.full(w.size, y)]))[:, 0]
+                 - ti.values[m, :, 0]).max() for m, y in enumerate(income.nodes))
+f"{gap:.1e}"
+errors = np.abs(eg.euler_errors())
+f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">eg.converged, eg.iterations</span>
+(True, 184)
+<span class="out-expr">eg.endogenous[:, 0].round(3)</span>
+[0.429 0.641 0.891 1.154 1.437]
+<span class="out-expr">eg.controls([[1.0, income.nodes[0]], [1.0, income.nodes[-1]], [6.0, income.nodes[0]]]).round(4)</span>
+[[0.5738]
+ [1]
+ [1.046]]
+<span class="out-expr">f"{gap:.1e}"</span>
+'4.0e-03'
+<span class="out-expr">f"{errors.mean():.1e}, {np.median(errors):.1e}"</span>
+'1.3e-04, 4.2e-06'</code></pre>
+  <p><code>egm</code> solves the problem of example 30 by the endogenous grid method (Carroll,
+  2006). The grid is on the poststate <code>a</code>, the saving carried into the next period. At
+  each saving level the expectation in the Euler equation depends only on <code>a</code>, so
+  consumption follows from it in closed form, and cash on hand from the budget,
+  <code>w = a + c</code>. These points of cash on hand form the endogenous grid, one per income
+  state, and no equation is solved numerically. With zero saving the point is the cash on hand at
+  which the borrowing limit stops binding, and below it the bound holds consumption at cash on
+  hand. The limit binds up to higher cash on hand the higher income is, as in example 30, and at
+  the three states printed there the policy is within 1e-4 of time iteration's. The largest
+  difference at time iteration's grid points is at the first point above the kink where the limit
+  stops binding for the lowest income. That kink falls inside a cell of time iteration's grid and
+  on a point of the endogenous grid, so the two interpolations differ most there. The Euler errors
+  are relative to consumption here, and largest in the same cell. The validation compares
+  <code>egm</code> with dolo's <code>egm</code> on dolo's consumption-savings model, with an iid
+  and with a Markov income, where the two agree to 1e-11.</p>
+  <h3>33. Five states, on a Smolyak grid</h3>
+<pre><code>shares = np.array([0.12, 0.10, 0.08, 0.06])         # alpha_j, summing to 0.36
+caps, inv = [f"k{j}" for j in range(4)], [f"i{j}" for j in range(4)]
+
+def planner(nxt, cur, eps, p):
+    def output(x):                                   # output and consumption
+        y = x.a * np.prod([x[k] ** s for k, s in zip(caps, shares)], axis=0)
+        return y, y - sum(x[i] for i in inv)
+    y, c = output(cur)
+    y1, c1 = output(nxt)
+    return ([nxt[k] - cur[i] for k, i in zip(caps, inv)]                         # k_j' = i_j
+            + [1 - 0.96 * c / c1 * s * y1 / nxt[k] for k, s in zip(caps, shares)]  # Euler
+            + [np.log(nxt.a) - 0.9 * np.log(cur.a) - eps.e])
+
+stocks = dsg.Model(states=caps + ["a"], jumps=inv, shocks=["e"], equations=planner)
+k_ss = 0.96 * shares * np.exp(np.sum(shares * np.log(0.96 * shares)) / (1 - shares.sum()))
+box = {k: (0.75 * v, 1.25 * v) for k, v in zip(caps, k_ss)} | {"a": (0.97, 1.03)}
+start = dict(zip(caps, k_ss)) | dict(zip(inv, k_ss)) | {"a": 1.0}
+X = np.random.default_rng(0).uniform(*np.array(list(box.values())).T, (1000, 5))
+exact = 0.96 * shares * (X[:, 4] * np.prod(X[:, :4] ** shares, axis=1))[:, None]  # beta alpha_j y
+for level in (1, 2, 3):
+    sparse = dsg.SmolyakGrid(box, level)
+    proj = dsg.solve_projection(stocks, {}, grid=sparse, guess=start, cov={"e": 0.01}, n_quad=5)
+    print(level, sparse.n, f"{np.abs(proj.jumps(X) / exact - 1).max():.0e}")
+aniso = dsg.SmolyakGrid(box, dict.fromkeys(caps, 3) | {"a": 1})   # the policy is linear in a
+ti_sparse = dsg.time_iteration(stocks, {}, grid=aniso, cov={"e": 0.01}, guess=start)
+aniso.n, ti_sparse.iterations, f"{np.abs(ti_sparse.controls(X) / exact - 1).max():.0e}"</code></pre>
+<pre class="output" data-label="Output"><code>1 11 5e-03
+2 61 1e-04
+3 241 3e-06
+<span class="out-expr">aniso.n, ti_sparse.iterations, f"{np.abs(ti_sparse.controls(X) / exact - 1).max():.0e}"</span>
+(219, 7, '3e-06')</code></pre>
+  <p>A planner with four capital stocks, log utility and full depreciation invests a constant
+  share <code>beta alpha_j</code> of output in each stock, so the policy is known in any
+  dimension. <code>SmolyakGrid</code> builds the sparse grid of Judd, Maliar, Maliar and Valero
+  (2014): 11, 61 and 241 points at levels 1 to 3, where the tensor grid with the same nine nodes
+  along each axis would have 59049. <code>solve_projection</code> takes it in place of
+  <code>bounds</code> and <code>order</code>, and the error against the closed form, at 1000 points
+  drawn in the box, falls by a factor of 36 from level 1 to 2 and of 55 from level 2 to 3. The
+  policy is linear in productivity, so an anisotropic grid with level 1 along it and level 3 along
+  the capital stocks drops 22 of the 241 points and gives the same error to one digit.
+  <code>time_iteration</code> takes the same grid, and
+  its fixed point solves the same collocation equations as the projection. The validation compares
+  the grids' nodes and interpolation weights with Tasmanian's in one to six dimensions, and solves
+  this model with up to six states.</p>
+  <h3>34. A BVAR, and the model as the prior of a VAR</h3>
+<pre><code>data = {"y": series}                                  # the AR(1) data of example 14
+dens = dsg.bvar_density(data, 4, first_obs=5)         # Sims-Zha prior, Dynare's defaults
+{p: round(v, 1) for p, v in dens.items()}
+var = dsg.bvar(data, 1, first_obs=5, nobs=386)        # the last 10 observations held out
+var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)
+fc = var.forecast(4, 1000, seed=0)                    # 1000 draws from the posterior
+fc.point["y"].round(3), fc.mean()["y"].round(3)
+round(var.rmse()["y"], 3)
+
+common = dict(model=ar, data=data, params=dict(rho=0.5), observables=["y"], priors=pb.priors,
+              guess=dict(a=0, y=1), first_obs=5, dsge_varlag=4)
+{w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)
+ for w in (0.05, 0.5, 2.0, float("inf"))}
+dv = dsg.EstimationProblem(**common, dsge_var=0.5)
+{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">{p: round(v, 1) for p, v in dens.items()}</span>
+{1: 365.1, 2: 367.5, 3: 368.5, 4: 368.2}
+<span class="out-expr">var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)</span>
+(0.844, [0.154])
+<span class="out-expr">fc.point["y"].round(3), fc.mean()["y"].round(3)</span>
+([1.13 1.108 1.09 1.074], [1.127 1.103 1.085 1.072])
+<span class="out-expr">round(var.rmse()["y"], 3)</span>
+0.09
+<span class="out-expr">{w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)</span>
+ for w in (0.05, 0.5, 2.0, float("inf"))}
+{0.05: 372.7, 0.5: 378.1, 2.0: 379.2, inf: 379.4}
+<span class="out-expr">{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</span>
+{'rho': 0.738, 'stderr e': 0.091}</code></pre>
+  <p><code>bvar</code> does what Dynare's <code>bvar_density</code> and <code>bvar_forecast</code>
+  do: a VAR whose prior is the dummy observations of Sims and Zha (1998), with Dynare's
+  hyperparameters by default (<code>tau=3</code>, <code>decay=0.5</code>, <code>lambda_=5</code>,
+  <code>mu=2</code>, <code>omega=1</code>). Prior and posterior are normal-inverse-Wishart, so the
+  marginal density is the ratio of their integrating constants. On these AR(1) data it favours
+  three lags over one by 3.4 in logs, and the one-lag VAR puts 0.844 on the lag, for a true value
+  of 0.8. A forecast runs the VAR forward from draws of the coefficients and the covariance, with
+  and without shocks, and <code>rmse()</code> scores the forecast at the posterior mean on the
+  observations after <code>nobs</code>, as Dynare prints it. With <code>dsge_var=</code>, an
+  <code>EstimationProblem</code> becomes the DSGE-VAR of Del Negro and Schorfheide (2004): a VAR
+  with four lags, here, whose prior is <code>lambda T</code> artificial observations from the
+  model, with its coefficients integrated out of the likelihood. On data simulated from the model
+  the likelihood rises with the weight, from 372.7 at <code>lambda = 0.05</code> to 379.4 at
+  <code>lambda = inf</code>, where the VAR is the model's own. A prior on
+  <code>"dsge_prior_weight"</code> estimates the weight. The validation reproduces Dynare's
+  <code>tests/bvar_a_la_sims</code> and <code>tests/dsge-var</code>, the simulated forecasts
+  included, with the same random draws. Dynare counts the VAR's initial observations in
+  <code>T</code>, and dsgelab does not.</p>
+  <h3>35. Krusell–Smith, by the sequence-space Jacobian</h3>
+<pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
+    c_next = 1 / (beta * Va_p)                         # log utility: u'(c) = 1 / c
+    coh = (1 + r) * a_grid + w * e_grid[:, None]       # cash on hand, by income state
+    a = dsg.interpolate_rows(c_next + a_grid, coh, a_grid)   # the endogenous grid method
+    a = np.maximum(a, a_grid[0])                       # the borrowing limit
+    c = coh - a
+    return (1 + r) / c, a, c
+
+def start(a_grid, e_grid, r, w):
+    return (1 + r) / (0.1 * ((1 + r) * a_grid + w * e_grid[:, None]))
+
+def grids(rho_e, sd_e, n_e, n_a):
+    chain = dsg.rouwenhorst(rho_e, sd_e * np.sqrt(1 - rho_e ** 2), n_e)
+    e = np.exp(chain.nodes)
+    return e / (chain.stationary @ e), chain.transition, dsg.log_grid(0.0, 200.0, n_a)
+
+hh = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                  hetinputs=[(grids, ["e_grid", "Pi", "a_grid"])])
+
+@dsg.simple("r", "w", "Y")
+def firm(K, Z, alpha, delta):
+    return (alpha * Z * K(-1) ** (alpha - 1) - delta, (1 - alpha) * Z * K(-1) ** alpha,
+            Z * K(-1) ** alpha)
+
+@dsg.simple("asset_mkt", "goods_mkt")
+def markets(A, K, Y, C, delta):
+    return A - K, Y - C - (K - (1 - delta) * K(-1))
+
+ks = dsg.BlockModel([hh, firm, markets])
+ss = ks.steady_state({"alpha": 0.11, "delta": 0.025, "rho_e": 0.966, "sd_e": 0.5, "n_e": 7,
+                      "n_a": 100},
+                     unknowns={"beta": 0.98, "Z": 0.85, "K": 3.0},
+                     targets={"r": 0.01, "Y": 1.0, "asset_mkt": 0.0})
+f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"
+T = 200
+dZ = 0.01 * 0.8 ** np.arange(T)                        # productivity, 1 per cent
+linear = ks.impulse_linear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+nonlinear = ks.impulse_nonlinear(ss, ["K"], ["asset_mkt"], {"Z": dZ})
+f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+hh.h = 1e-6
+J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # by the fake-news algorithm
+direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
+('0.98191', '-3e-11')
+<span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('3.97 bp', '6e-07')
+<span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
+'1e-10'</code></pre>
+  <p>A <code>HetBlock</code> holds a continuum of households on 100 asset points by 7 income
+  states, and <code>household</code> is one step of their backward iteration by the endogenous
+  grid method, which <code>interpolate_rows</code> does row by row. The firm and the markets are
+  <code>simple</code> blocks, in which <code>K(-1)</code> is last period's capital, and
+  <code>BlockModel</code> joins the three by the names of their inputs and outputs. The steady
+  state is solved for the discount factor, productivity and capital that give an interest rate of
+  1 per cent and output of one, as in sequence-jacobian's Krusell–Smith notebook. The
+  distribution of households is the stationary one of Young's lottery. The goods market, which
+  is not a target, clears within 3e-11 (Walras's law), the order of the tolerance of 1e-10 at
+  which the backward iteration stops. The linear response to a productivity
+  shock is the general-equilibrium Jacobian <code>G</code> times its path. The nonlinear
+  transition, solved by a quasi-Newton iteration with the same Jacobian, differs from it by less
+  than 1e-6 in the interest rate. The fake-news algorithm builds the household's 30 x 30 Jacobian
+  with 30 backward steps, and differentiating the whole path for a shock at each date, which
+  costs 30 times more, gives the same matrix. The validation solves sequence-jacobian's own
+  Krusell–Smith and one-asset HANK models on 7 by 500 points and agrees with it to 2e-10.</p>
+  <h3>36. A Taylor rule that switches regime, solved and filtered</h3>
+<pre><code>fisher = dsg.Model(
+    states=["r"], jumps=["pi"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.r - p["rho"] * cur.r - eps.e,                                   # real rate
+        p["target"] + p["alpha"] * (cur.pi - p["target"]) - cur.r - nxt.pi])  # Fisher, Taylor
+T = np.array([[0.95, 0.05], [0.10, 0.90]])
+ms = dsg.solve_markov_switching(
+    fisher, {"rho": 0.8, "target": 2.0, "alpha": 1.5},
+    {"target": (2.0, 6.0), "alpha": (3.0, 1.1)}, T, guess={"r": 0.0, "pi": 3.0})
+ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)
+impact = [ms.irf("e", regime=s, levels=True)["pi"][0] - ms.steady["pi"] for s in (0, 1)]
+closed = np.linalg.solve(np.diag([3.0, 1.1]) - 0.8 * T, [1.0, 1.0])
+np.round(impact, 6), np.round(closed, 6)
+ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)
+sim = ms.simulate(300, seed=2, levels=True)
+space = dsg.switching_state_space(ms, ["pi"], measurement={"pi": 0.2})
+kim = dsg.kim_filter(space, {"pi": sim["pi"]})
+float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))
+f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(space, sim['pi'][:12]):.1e}"</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ms.perturbed, len(ms.solutions), round(ms.solution.radius, 4)</span>
+(['target'], 1, 0.64)
+<span class="out-expr">np.round(impact, 6), np.round(closed, 6)</span>
+([0.4953 2.736], [0.4953 2.736])
+<span class="out-expr">ms.to_levels({"pi": ms.moments()["conditional_mean"][:, 1]})["pi"].round(3)</span>
+[2.049 4.025]
+<span class="out-expr">float(np.mean((kim.smoothed[:, 1] &gt; 0.5) == (sim["regime"] == 1)))</span>
+0.9633
+<span class="out-expr">f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(space, sim['pi'][:12]):.1e}"</span>
+'5.5e-06'</code></pre>
+  <p>The inflation target and the response to inflation switch together, between a regime with a
+  target of 2 and a response of 3 and one with a target of 6 and a response of 1.1. The steady
+  state is that of the ergodic-mean parameters, so the target, which moves it, is perturbed and
+  enters as a constant per regime, while the response, which does not, keeps its value in each
+  regime (Foerster, Rubio-Ramírez, Waggoner and Zha, 2016). The impact of a real-rate innovation
+  on inflation is then the closed form <code>(diag(alpha) - rho T)^(-1) 1</code>. Given each
+  regime, mean inflation lies between the two targets, because agents expect the regime to change.
+  Kim's filter recovers the simulated regime from noisy inflation, with smoothed probabilities
+  above one half at the right regime in 96 per cent of the periods. Its collapse of the Gaussians that end in
+  the same regime is an approximation, and on the first 12 periods it differs from the exact
+  likelihood, the mixture of the Kalman filters of all 4096 regime paths, by the last number. The
+  validation reproduces the nine solutions that Foerster et al. (2013) print for a New Keynesian
+  model, and checks Kim's filter against statsmodels' Hamilton filter.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1062,6 +1349,8 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
     Diebold–Mariano and PIT, mixed-frequency observables, and plots of the results.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
+    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first order, with
+    every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
     tree, with the hybrid risk correction.</p></div>
     <div class="card"><h4>Models in levels</h4><p>Declared trends, the balanced-growth check and the
@@ -1277,6 +1566,24 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
     </tbody>
   </table>
 
+  <h3>BVAR and DSGE-VAR against Dynare</h3>
+  <p>Dynare's <code>tests/bvar_a_la_sims</code> (two files, lag lengths 1 to 2 and 1 to 8) and
+  <code>tests/dsge-var</code> (λ = 0.8 and λ estimated), with their data, options and priors.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>BVAR prior and posterior (<code>df</code>, <code>S</code>, <code>XXi</code>, <code>PhiHat</code>), relative</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>log marginal density, 10 lag lengths</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
+      <tr><td>3002 simulated forecast paths, draw by draw, with Octave's normal draws</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
+      <tr><td>DSGE-VAR log posterior at 11 points, with Dynare's <code>T</code></td><td class="num">5e-12</td><td class="ok">OK</td></tr>
+      <tr><td>DSGE-VAR posterior modes, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">5e-5</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.9rem;color:var(--muted)">Dynare 7.2 counts the VAR's 4 initial observations
+  in the <code>T</code> of the DSGE-VAR's likelihood, 94 for the 90 rows the VAR is fitted on, and
+  the comparison sets dsgelab's <code>T</code> to that count. With dsgelab's own <code>T</code>, the
+  number of rows, the modes move by up to 0.39 posterior standard deviations.</p>
+
   <h3>Global sensitivity against Dynare and SALib</h3>
   <p>The stability mapping of Lubik and Schorfheide (2003), from Dynare's
   <code>tests/gsa/ls2003a.mod</code>, on three samples of 1024 draws, one of them with explosive
@@ -1294,9 +1601,11 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   the eigenvalues by signed value when they are all real, and its rule cannot see rank
   failures.</p>
 
-  <h3>Mixed-frequency data and plot densities against Dynare</h3>
+  <h3>Mixed-frequency data and plots against Dynare</h3>
   <p><code>fs2000.mod</code> with output growth observed only as its annual mean, which Dynare reads
-  through an auxiliary variable; and the two densities the posterior plots draw.</p>
+  through an auxiliary variable; and the numbers the plots draw that the package did not compute
+  before, against those in Dynare's own figures after an estimation of <code>fs2000.mod</code>
+  with <code>mode_check</code>, two chains and <code>bayesian_irf</code>.</p>
   <table>
     <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
     <tbody>
@@ -1305,6 +1614,10 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
       <tr><td>posterior mode, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">0.003</td><td class="ok">OK</td></tr>
       <tr><td>prior densities of the nine priors (<code>draw_prior_density</code>)</td><td class="num">2e-12</td><td class="ok">OK</td></tr>
       <tr><td>posterior kernel density (<code>posterior_moments</code>), draws with repeats</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>Brooks and Gelman diagnostics, univariate and multivariate (relative)</td><td class="num">8e-14</td><td class="ok">OK</td></tr>
+      <tr><td>moving average of <code>trace_plot</code>, autocorrelogram of the draws</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td><code>mode_check</code>: grid, and kernels where the prior is bounded (relative)</td><td class="num">6e-11</td><td class="ok">OK</td></tr>
+      <tr><td>posterior IRFs on Dynare's 1,200 draws: mean, median, HPD interval, deciles</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 
@@ -1349,6 +1662,68 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
       <tr><td>Markov RBC against dolo, value, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
       <tr><td>Markov RBC against dolo, controls (dolo's maximizer stops some 1e-6 short)</td><td class="num">6e-7</td><td class="ok">OK</td></tr>
       <tr><td>stochastic growth against its closed form, value, 80 capital points, cubic</td><td class="num">3e-9</td><td class="ok">OK</td></tr>
+    </tbody>
+  </table>
+
+  <h3>The endogenous grid method against dolo and time iteration</h3>
+  <p>dolo 0.4.9.20's <code>egm</code> solves its consumption-savings model, with the iid income of
+  the published file and with log income a three-state Markov chain, on the same grid of saving.
+  The two interpolate in the same way and agree at 199 points of cash on hand. Time iteration
+  solves the same model on a fixed grid of cash on hand, and the two methods differ by their
+  interpolation error, which is largest next to the kink where the borrowing limit stops binding.
+  With both grids extended to cash on hand 8, past where next period's cash on hand falls, the
+  difference shrinks as the grids are refined.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>consumption and saving against dolo, iid income, relative</td><td class="num">9e-13</td><td class="ok">OK</td></tr>
+      <tr><td>consumption and saving against dolo, Markov income, relative</td><td class="num">1e-11</td><td class="ok">OK</td></tr>
+      <tr><td>against time iteration, Markov income, 100 points, largest</td><td class="num">3e-3</td><td class="ok">OK</td></tr>
+      <tr><td>against time iteration, Markov income, 1600 points up to 8, largest (mean 2e-6)</td><td class="num">9e-5</td><td class="ok">OK</td></tr>
+      <tr><td>stochastic growth against its closed form, consumption, 80 points, linear</td><td class="num">2e-4</td><td class="ok">OK</td></tr>
+  <h3>Sparse grids against Tasmanian and a closed form</h3>
+  <p>Tasmanian 8.2's global grids on the Clenshaw–Curtis rule, 40 of them, isotropic in one to six
+  dimensions at levels 0 to 6 and anisotropic with a cap on each axis's level, give the reference
+  nodes and interpolation weights. Every grid has the same number of points as Tasmanian's. The
+  growth model of example 32, with three to five capital stocks, is solved by projection and by
+  time iteration on Smolyak grids. The error is the largest relative error of the investment
+  policy at 1000 points in the box.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>nodes against Tasmanian, 40 grids with up to 1457 points</td><td class="num">9e-16</td><td class="ok">OK</td></tr>
+      <tr><td>interpolation weights against Tasmanian, 40 points per grid</td><td class="num">2e-14</td><td class="ok">OK</td></tr>
+      <tr><td>4 states against the closed form, level 4 (401 points)</td><td class="num">2e-8</td><td class="ok">OK</td></tr>
+      <tr><td>6 states against the closed form, level 4 (1457 points)</td><td class="num">3e-8</td><td class="ok">OK</td></tr>
+      <tr><td>projection against time iteration, every grid</td><td class="num">2e-9</td><td class="ok">OK</td></tr>
+  <h3>Heterogeneous agents against sequence-jacobian</h3>
+  <p>sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at
+  the v1.0.0 tag, on 7 income states by 500 asset points, with the same calibration, unknowns and
+  targets. The differences are relative to the largest value compared.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>steady state: unknowns, policies, distribution and aggregates</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>household Jacobians from the fake-news algorithm, T = 300</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>general-equilibrium Jacobians G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>linear and nonlinear impulse responses</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
+      <tr><td>fake news against brute force (dsgelab against itself)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+  <h3>Markov regime switching against published solutions and statsmodels</h3>
+  <p>RISE, the toolbox for regime switching, is distributed as MATLAB P-code, which GNU Octave cannot
+  execute. The solution is checked instead against the solutions Foerster, Rubio-Ramírez, Waggoner
+  and Zha print, which they find with Gröbner bases, and Kim's filter against statsmodels 0.14.4,
+  where the filter is exact, and against the exact likelihood over every regime path, where it is
+  not.</p>
+  <table>
+    <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>New Keynesian model (2013), solutions found, stable ones, two parameterizations</td><td class="num">9 of 9; 1 and 2</td><td class="ok">OK</td></tr>
+      <tr><td>New Keynesian model, printed entries within a unit of the last digit (one conjugate pair is printed as -0.7000 and is -0.66695)</td><td class="num">106 of 108</td><td class="ok">OK</td></tr>
+      <tr><td>RBC (2016), first-order coefficients truncated to four decimals (the constant printed as 0.000049 is 0.0000459)</td><td class="num">23 of 24</td><td class="ok">OK</td></tr>
+      <tr><td>identical regimes against the Klein solution</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>Hamilton's filter against statsmodels, log likelihood; smoothed probabilities</td><td class="num">3e-14; 2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>maximum likelihood against statsmodels' maximum</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>Kim's approximation against the exact likelihood, 14 dates, large measurement error</td><td class="num">0.018</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
 
@@ -1415,7 +1790,7 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
       <tr><td><strong>2nd order + risk corrections</strong></td><td><strong>yes</strong></td><td><strong>no</strong></td><td>yes</td><td>yes</td><td>—</td></tr>
       <tr><td>3rd order (deterministic block)</td><td class="ok">yes</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
       <tr><td>3rd order with risk in the slope</td><td>yes, with Dynare's full decision rule (<code>ghxss</code>, <code>ghuss</code>)</td><td>—</td><td>yes</td><td>—</td><td>—</td></tr>
-      <tr><td>Global / projection methods</td><td>partial (Chebyshev collocation, up to three states)</td><td>—</td><td>yes</td><td>—</td><td>partial</td></tr>
+      <tr><td>Global / projection methods</td><td>partial (Chebyshev collocation, on a tensor grid up to three states or on a Smolyak grid)</td><td>—</td><td>yes</td><td>—</td><td>partial</td></tr>
       <tr><td>Heterogeneous agents</td><td>—</td><td>—</td><td>—</td><td>—</td><td>yes</td></tr>
       <tr><td>Nonlinear perfect foresight</td><td>yes</td><td>yes</td><td>yes</td><td>?</td><td>yes</td></tr>
       <tr><td>Bayesian estimation</td><td>yes (mode, Metropolis–Hastings, SMC, HMC and NUTS, with the Kalman filter at first order, the particle filter up to third and the inversion filter up to second)</td><td>yes</td><td>—</td><td>—</td><td>—</td></tr>
@@ -1434,12 +1809,13 @@ c = (1 - alpha * beta) * np.exp(log_z.nodes)[:, None] * k ** alpha   # the close
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation, time iteration
-  and value function iteration, such as the endogenous grid method,
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more. Heterogeneous
-  agents are outside dsgelab, and
-  <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a> and
-  <a href="https://github.com/gboehl/econpizza">econpizza</a> solve those models.</p></div>
+  second-order solution. For global methods beyond Chebyshev collocation (on tensor or Smolyak
+  grids), time iteration, value function iteration and the endogenous grid method, such as
+  expectations iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more.
+  For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one asset,
+  validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
+  which also solves models with two assets, as does
+  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
   <p>In <code>dsgelab</code> a declared problem goes from the derived first-order conditions to a
   solution and to an export for Dynare or MacroModelling.jl, with the timing translated
   automatically. The same residual function serves the perturbation and the deterministic

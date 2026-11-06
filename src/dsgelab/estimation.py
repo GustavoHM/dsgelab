@@ -16,6 +16,11 @@ The estimated quantities are named as in Dynare's ``estimated_params``: a
 parameter by its name, the standard deviation of a shock as ``"stderr e"``, the
 standard deviation of a measurement error on an observed variable as
 ``"stderr y"``.
+
+With ``dsge_var=`` the likelihood is that of a DSGE-VAR (Del Negro and
+Schorfheide, 2004): a VAR on the observables, with the prior the model implies and
+the VAR's parameters integrated out. The weight of that prior is ``dsge_var``, or
+is estimated under the name ``"dsge_prior_weight"``, as in Dynare.
 """
 
 from __future__ import annotations
@@ -33,6 +38,7 @@ from .model import Covariance, Model, Params, Point, set_params
 from .priors import Prior, prior as make_prior
 
 if TYPE_CHECKING:
+    from .bvar import NormalInverseWishart
     from .inversion import InversionFilterResult
     from .particle import ParticleFilterResult, ParticleSmootherResult
     from .solution import FirstOrderSolution
@@ -122,6 +128,15 @@ class EstimationProblem:
         (``first_obs`` counted from 1).
     aggregation : observables seen at a lower frequency, ``{name: (how, every)}``,
         as for :func:`dsgelab.state_space`; first order only.
+    dsge_var : the weight ``lambda`` of the DSGE prior in a DSGE-VAR, a positive
+        number or ``inf``; Dynare's ``dsge_var``. With ``"dsge_prior_weight"``
+        among the estimated names the weight is estimated instead, and this value
+        only starts the search when that name has no prior.
+    dsge_varlag : the VAR's lags, Dynare's ``dsge_varlag``. The first
+        ``dsge_varlag`` observations before ``first_obs`` start the VAR, so
+        ``first_obs`` must exceed it, as in Dynare.
+    dsge_var_constant : whether the VAR has a constant, whose prior mean is the
+        steady state of the observables (``False`` is Dynare's ``noconstant``).
     """
 
     model: Model
@@ -146,6 +161,9 @@ class EstimationProblem:
     particle_seed: int | None = 0
     resample: float | None = 0.5
     aggregation: Mapping[str, tuple[str, int]] | None = None
+    dsge_var: float | None = None
+    dsge_varlag: int = 4
+    dsge_var_constant: bool = True
     _last_ss: SteadyState | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
@@ -173,6 +191,79 @@ class EstimationProblem:
             raise ValueError("the particle filter starts at the stationary distribution")
         Y = self._data_matrix()
         self.Y = Y[self.first_obs - 1:]
+        if self.is_dsge_var:
+            self._check_dsge_var(Y)
+
+    # -- DSGE-VAR ----------------------------------------------------------
+    @property
+    def is_dsge_var(self) -> bool:
+        """Whether the likelihood is the DSGE-VAR's."""
+        return self.dsge_var is not None or (self.free is not None
+                                             and "dsge_prior_weight" in self.free)
+
+    def _check_dsge_var(self, Y: np.ndarray) -> None:
+        from .bvar import _var_sample_moments
+        p = int(self.dsge_varlag)
+        if p < 1:
+            raise ValueError("dsge_varlag must be a positive whole number")
+        if self.order != 1:
+            raise ValueError("a DSGE-VAR takes its prior from the first-order solution: order=1")
+        if self.aggregation:
+            raise ValueError("a DSGE-VAR needs every observable at the model's frequency")
+        if self.presample:
+            raise ValueError("a DSGE-VAR does not take presample, as in Dynare")
+        if self.dsge_var is not None and not self.dsge_var > 0:
+            raise ValueError("dsge_var, the weight of the DSGE prior, must be positive")
+        meas = [n for n in self.free or () if n.startswith("stderr ")
+                and n[7:] not in self.model.shocks]
+        if meas or any(v for v in self._base_meas().values()):
+            raise ValueError("a DSGE-VAR has no measurement errors, as in Dynare")
+        if self.first_obs - 1 < p:
+            raise ValueError(f"the VAR starts from the {p} observations before first_obs: "
+                             f"first_obs must be at least {p + 1}")
+        Yv = Y[self.first_obs - 1 - p:]
+        if not np.all(np.isfinite(Yv)):
+            raise ValueError("a DSGE-VAR needs the data without missing observations")
+        self._var_sample = _var_sample_moments(Yv, p, self.dsge_var_constant)
+
+    def _dsge_var_nobs(self) -> int:
+        """``T`` of Del Negro and Schorfheide: the observations the VAR is fitted on."""
+        return len(self.Y)
+
+    def dsge_var_weight(self, theta: ArrayLike) -> float:
+        """The weight ``lambda`` of the DSGE prior at ``theta``."""
+        if "dsge_prior_weight" in self.names:
+            return float(np.asarray(theta, dtype=float)[self.names.index("dsge_prior_weight")])
+        if self.dsge_var is None:
+            raise ValueError("not a DSGE-VAR: give dsge_var= or estimate dsge_prior_weight")
+        return float(self.dsge_var)
+
+    def _dsge_var_population(self, theta: ArrayLike) -> tuple:
+        from .bvar import _dsge_var_moments
+        _, space = self.solve(theta)
+        return _dsge_var_moments(space, int(self.dsge_varlag), self.dsge_var_constant)
+
+    def dsge_var_prior(self, theta: ArrayLike) -> NormalInverseWishart:
+        """The prior the model implies at ``theta`` for the VAR's ``(Phi, Sigma)``.
+
+        ``lambda T`` artificial observations from the model's population moments
+        (Del Negro and Schorfheide, 2004, equations 22 to 25).
+        """
+        from .bvar import _dsge_var_prior
+        return _dsge_var_prior(self._dsge_var_population(theta), self._dsge_var_nobs(),
+                               self.dsge_var_weight(theta))
+
+    def dsge_var_posterior(self, theta: ArrayLike) -> NormalInverseWishart:
+        """The posterior of the VAR's ``(Phi, Sigma)`` given the model's parameters ``theta``.
+
+        Dynare's ``PHI_tilde``, ``SIGMA_u_tilde`` and ``iXX`` (Del Negro and
+        Schorfheide, 2004, equations 28 and 29). Draws of ``theta`` from
+        :func:`metropolis_hastings`, each followed by a draw from this, sample the
+        DSGE-VAR's joint posterior.
+        """
+        from .bvar import _dsge_var_posterior
+        return _dsge_var_posterior(self._dsge_var_population(theta), self._var_sample,
+                                   self._dsge_var_nobs(), self.dsge_var_weight(theta))
 
     # -- data and parameters ---------------------------------------------
     def _data_matrix(self):
@@ -192,7 +283,9 @@ class EstimationProblem:
         sds = self._base_sds()
         meas = self._base_meas()
         for n in self.names:
-            if n.startswith("stderr "):
+            if n == "dsge_prior_weight":
+                v = np.nan if self.dsge_var is None or n in self.priors else float(self.dsge_var)
+            elif n.startswith("stderr "):
                 target = n[7:]
                 v = sds.get(target, meas.get(target, np.nan))
             else:
@@ -221,8 +314,11 @@ class EstimationProblem:
 
     def unpack(self, theta: ArrayLike) -> tuple[Params, np.ndarray, dict[str, float]]:
         """``(params, shock covariance, measurement sds)`` at ``theta``."""
-        return unpack_point(self.model, self.params, self.cov, self._base_meas(),
-                            self.names, theta)
+        names, theta = self.names, np.asarray(theta, dtype=float)
+        if "dsge_prior_weight" in names:      # the DSGE-VAR's weight, not a model parameter
+            keep = [i for i, n in enumerate(names) if n != "dsge_prior_weight"]
+            names, theta = [names[i] for i in keep], theta[keep]
+        return unpack_point(self.model, self.params, self.cov, self._base_meas(), names, theta)
 
     # -- densities ---------------------------------------------------------
     def log_prior(self, theta: ArrayLike) -> float:
@@ -253,6 +349,14 @@ class EstimationProblem:
         return sol, space
 
     def log_likelihood(self, theta: ArrayLike) -> float:
+        if self.is_dsge_var:
+            from .bvar import _dsge_var_log_likelihood
+            try:
+                population = self._dsge_var_population(theta)
+            except Exception:
+                return -np.inf
+            return _dsge_var_log_likelihood(population, self._var_sample,
+                                            self._dsge_var_nobs(), self.dsge_var_weight(theta))
         try:
             sol, space = self.solve(theta)
             fr: FilterResult | ParticleFilterResult | InversionFilterResult
@@ -486,7 +590,7 @@ def posterior_mode(problem: EstimationProblem, x0: ArrayLike | None = None, *,
     ``log posterior kernel + k/2 log 2 pi - 1/2 log det H``.
     """
     gradient = None
-    if problem.order == 1:
+    if isinstance(problem, EstimationProblem) and problem.order == 1 and not problem.is_dsge_var:
         from .derivatives import log_posterior_gradient
         gradient = lambda theta: log_posterior_gradient(problem, theta)
     x, res, n = _optimise(problem, problem.log_posterior, x0, method, options, gradient)
@@ -508,7 +612,7 @@ def maximum_likelihood(problem: EstimationProblem, x0: ArrayLike | None = None, 
         return problem.log_likelihood(x)
 
     gradient = None
-    if problem.order == 1:
+    if isinstance(problem, EstimationProblem) and problem.order == 1 and not problem.is_dsge_var:
         from .derivatives import log_likelihood_gradient
         gradient = lambda theta: log_likelihood_gradient(problem, theta)
     x, res, n = _optimise(problem, ll, x0, method, options, gradient)
@@ -807,6 +911,9 @@ def posterior_forecast(problem: EstimationProblem, draws: MCMCResult | SMCResult
     Metropolis-Hastings.
     """
     from .kalman import kalman_filter
+    if problem.is_dsge_var:
+        raise ValueError("posterior_forecast forecasts with the DSGE model's state space, not "
+                         "with the DSGE-VAR")
     rng = np.random.default_rng(seed)
     if isinstance(draws, MCMCResult):
         X = draws.draws

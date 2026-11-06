@@ -946,11 +946,12 @@ and the posterior mode found by each program. The gradient check is internal: th
 gradient through the stacked state against central differences of the likelihood. The numbers
 come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
 
-## Densities of the posterior plots
+## Plots: the numbers Dynare's figures draw
 
 ```bash
 bash fetch.sh
-bash run_plots.sh                 # Dynare's draw_prior_density and posterior_moments
+bash run_plots.sh                 # densities: draw_prior_density and posterior_moments
+                                  # mcmc: fs2000 with mode_check, Metropolis and bayesian_irf (4 min)
 python compare_plots.py
 ```
 
@@ -958,15 +959,47 @@ python compare_plots.py
 prior densities of fs2000 (9 priors: beta, inv_gamma, normal): grid 4.3e-15, density 1.9e-12 (relative)
 posterior density, 6037 draws (3037 repeated): 6.5e-16 (grid and density, relative to its peak)
 posterior density, 5000 draws (0 repeated): 8.9e-16 (grid and density, relative to its peak)
+Brooks and Gelman, 2 chains of 2500 draws, 101 windows: windows 0, univariate (27 panels) 3.5e-14, multivariate 7.8e-14 (relative)
+trace_plot, moving average over 401 draws, alp and the log posterior: 4.1e-16 (relative)
+mh_autocorrelation, alp, lags 0 to 30: 2.3e-15
+mode_check, 9 parameters, 21 points each: grid 8.9e-16; log posterior and log-likelihood kernels 5.2e-11 (relative) for the 7 parameters with a bounded prior
+  gam (normal prior, Dynare's grid runs from -10 to 10): 1.4e-11 relative where both solve the model, and 0 of 21 points that only one of them solves
+  logmst (normal prior, Dynare's grid runs from -10 to 10): 1.9e-02 relative where both solve the model, and 10 of 21 points that only one of them solves
+posterior_irf, 1200 draws, 4 variables, 2 shocks, 20 periods: responses 2.5e-10, mean 2.1e-10, median 2.1e-10, lower 2.3e-10, upper 2.0e-10, deciles 2.3e-10 (relative to the largest response); the statistics of Dynare's own responses 3.6e-17
+posterior densities and modes of 'Priors and posteriors': 1.9e-15; smoothed shocks 2.6e-15 and observables 4.1e-16 at the posterior mean
 ```
 
-The plots draw what the package computes, except for the two densities of `plot_posterior`,
-which are compared here. The prior densities are those of the nine priors of `fs2000.mod`, read
-by `from_mod`, against `draw_prior_density`, grid and values. The posterior density is compared
-with the kernel estimate that `posterior_moments` returns, on draws made in Octave: 3000 normal
-draws each repeated one to three times, as a Metropolis chain repeats a draw when it rejects, so
-that Dynare's bandwidth correction for repeated draws is exercised, and 5000 lognormal draws.
-The numbers come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
+The plots draw what the package computes. What they draw that it did not compute before is
+compared here, in two parts.
+
+The densities of `plot_posterior`: the nine priors of `fs2000.mod`, read by `from_mod`, against
+`draw_prior_density`, grid and values; and the kernel estimate that `posterior_moments` returns,
+on draws made in Octave, 3000 normal draws each repeated one to three times, as a Metropolis chain
+repeats a draw when it rejects, so that Dynare's bandwidth correction for repeated draws is
+exercised, and 5000 lognormal draws.
+
+The rest comes from an estimation of `fs2000.mod` in Dynare, with `mode_check`, two chains of
+2,500 draws and `bayesian_irf`, followed by `trace_plot` and `mh_autocorrelation_function` for
+`alp`. While Dynare draws its figures, `plots/dyn_saveas.m` stands in for Dynare's own and records
+the data of every line and bar in them instead of saving the file, and `plots/export_plots.m`
+gathers them with the draws of both chains, burn-in included, the mode, and the parameters and
+responses of the posterior IRFs. Each figure is then compared with the function that draws it here,
+on the same inputs: `brooks_gelman` with the 27 panels of the univariate figures and the 3 of the
+multivariate one, the moving average of `trace_plot` and `mh_autocorrelation` with theirs, the
+posterior densities, modes, smoothed shocks and smoothed observables with those of the "Priors and
+posteriors" and smoother figures, at the posterior mean that Dynare's smoother uses after
+Metropolis. `mode_check` is compared with the slices Dynare saves, at Dynare's mode, and
+`posterior_irf`, run on the 1,200 parameter vectors of Dynare's `PosteriorIRF`, with the responses
+at each and with `oo_.PosteriorIRF.dsge`.
+
+The grid of `mode_check` is Dynare's to rounding. For a parameter with a normal prior, whose
+bounds are infinite, Dynare's rule (reproduced as written) sends the grid to -10 and 10. At those
+values of `logmst`, the log of money growth, money grows by a factor of up to `e^10` a quarter,
+and the two programs part: Dynare finds no solution above 1, where dsgelab finds one, and at -10
+the two log posteriors, of order -2e7, differ by 2%. On the seven parameters with a bounded prior
+and on `gam` the kernels agree within 6e-11. The responses of the posterior IRFs at each draw agree
+within 3e-10 of the largest response, and their statistics within the same: computed on Dynare's own responses, they agree with Dynare's within 4e-17.
+The numbers come from a run on 3 November 2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Out-of-sample forecast evaluation
 
@@ -1006,6 +1039,77 @@ three alternatives. None of them has a negative variance at the requested horizo
 fallback to horizon 1 that both programs make is checked only in the test suite. The numbers
 come from a run on 30 October 2026, with
 Dynare 7.2 and Octave 11.3.0.
+
+## BVAR and DSGE-VAR
+
+```bash
+bash fetch.sh                     # Dynare 7.2's tests/bvar_a_la_sims and tests/dsge-var, by SHA-256
+bash run_bvar.sh                  # about a minute
+python compare_bvar.py            # about a minute and a half, most of it the four posterior modes
+```
+
+```
+bvar_standalone: bvar_density 2, first_obs=20, train=10, flat=True
+  prior and posterior, lags 1 to 2: df 0e+00, S 5.6e-17, XXi 5.4e-15, PhiHat 1.1e-14 (relative)
+  log marginal density: 6198.9907 6207.4897   deviation 1.8e-12
+  bvar_forecast 2, nobs=200, 2 periods, 1001 draws: RMSE over 782 observations 8.7e-18
+  paths, draw by draw: with shocks 4.9e-17, without 2.8e-17 (largest value 0.05); mean with shocks 8.7e-18; explosive draws 0.000
+bvar_and_dsge: bvar_density 8, first_obs=20, train=10, flat=False
+  prior and posterior, lags 1 to 8: df 0e+00, S 5.6e-17, XXi 1.8e-14, PhiHat 1.4e-14 (relative)
+  log marginal density: 6199.5260 6207.7011 6206.4335 6206.3822 6202.7006 6199.4387 6194.0685 6190.8352   deviation 0.0e+00
+  bvar_forecast 8, nobs=200, 10 periods, 2001 draws: RMSE over 782 observations 1.6e-17
+  paths, draw by draw: with shocks 2.1e-16, without 1.8e-16 (largest value 0.06); mean with shocks 7.8e-17; explosive draws 0.000
+
+dsgevar_forward_calibrated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
+  log posterior kernel at 4 points: 2.5e-12;  log prior 8.9e-16;  -inf at the same 0 point(s): True
+  kernel at Dynare's mode -9.1e-13 from Dynare's; dsgelab's mode: kernel +3.05e-09 over Dynare's, parameters within 5.2e-05 posterior sd
+  Laplace with Dynare's inverse Hessian 9.7e-13; with dsgelab's Hessian -1.6e-04
+  with dsgelab's T: mode moves by up to 0.18 posterior sd
+
+dsgevar_forward_estimated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
+  log posterior kernel at 7 points: 4.9e-12;  log prior 8.9e-16;  -inf at the same 1 point(s): True
+  kernel at Dynare's mode -1.6e-12 from Dynare's; dsgelab's mode: kernel +2.20e-10 over Dynare's, parameters within 9.3e-06 posterior sd
+  Laplace with Dynare's inverse Hessian 1.6e-12; with dsgelab's Hessian -7.3e-06
+  with dsgelab's T: mode moves by up to 0.39 posterior sd, lambda 0.568 against 0.533 (lambda T = 51.1 against 50.1)
+
+OK
+```
+
+The BVAR files are Dynare's `tests/bvar_a_la_sims/bvar_standalone.mod` and `bvar_and_dsge.mod`,
+with their data (`bvar_sample.m`, 1001 observations of two series), options and hyperparameters.
+`run_bvar.sh` removes their `bvar_irf` lines and runs the estimation of `bvar_and_dsge.mod`
+without Metropolis, since neither is compared, and adds a `verbatim` block before
+`bvar_forecast` that resets Octave's generator and saves the normal draws `bvar.forecast` is about
+to take. `bvar` rebuilds, for every lag length of `bvar_density`, the prior and the posterior that
+Dynare's `bvar.toolbox` returns, and the log marginal density. `BVAR.forecast` takes the saved
+draws through an object with the `standard_normal` method of a numpy `Generator`, and its paths
+with and without shocks are Dynare's, draw by draw: Dynare's loop makes `bvar_replic + 1` draws,
+so 1001 and 2001 here. The RMSE is that of the forecast at the posterior mean over the 782
+observations after `nobs=200`. Without the saved draws, the forecast means agree only up to Monte
+Carlo error.
+
+The DSGE-VAR files are Dynare's `tests/dsge-var/dsgevar_forward_calibrated_lambda.mod`
+(`dsge_var=0.8`) and `dsgevar_forward_estimated_lambda.mod` (`dsge_prior_weight` with a uniform
+prior on [0, 1.9]), on the data their `simul_hybrid.mod` simulates in Octave: 500 periods of a
+model with a hybrid Phillips curve, of which the tests use 90 from `first_obs=50`, with 4 lags and
+a constant. `run_bvar.sh` keeps their models, priors, samples and optimiser (`mode_compute=4`) and
+removes Metropolis and `bayesian_irf`. After the mode, it evaluates Dynare's
+`dsge_var_likelihood` at the prior mean, at the mode and at points perturbed from both by 5 and 10
+per cent, and in the second file at the mode with `lambda` set to 0.3, 0.5, 1.5 and 0.2. Below
+`(k + n) / T = 21 / 94 = 0.223` the prior is improper, and both programs give `-inf` at 0.2.
+`from_mod` reads the files, and `ModFile.estimation_problem` the `dsge_var` options.
+
+Dynare 7.2 builds the dataset with the 4 initial observations before `first_obs` and passes its
+length, 94, as the `T` of Del Negro and Schorfheide's formula (A.2), while the sample moments
+`Y'Y`, `Y'X` and `X'X` are sums over the 90 rows of the VAR. `dsgelab`'s `T` is 90. Under that
+count the likelihood is the marginal density of the VAR under the normal-inverse-Wishart prior of
+`lambda T` artificial observations, which `tests/test_dsge_var.py` checks against conjugate updating
+one observation at a time, and its limit as `lambda` grows is the Gaussian likelihood of the VAR
+the model implies. Under Dynare's count, neither holds. `compare_bvar.py` therefore compares the
+two programs with `T` set to Dynare's, through a subclass of `EstimationProblem`, and then reports
+how far `dsgelab`'s own `T` moves the mode. At the prior mean of the first file the two counts
+give log posteriors of -373.37 (Dynare's) and -366.43. The numbers come from a run on 3 November
+2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Process discretisation: Tauchen and Rouwenhorst
 
@@ -1218,6 +1322,476 @@ two controls, which exercises the projected Newton method, and the discrete-choi
 an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
 with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
 
+## The endogenous grid method against dolo, time iteration and the closed form
+
+```bash
+bash dolo/setup.sh                            # if not run already
+dolo/.venv/bin/python dolo/run_dolo_egm.py    # about 10 seconds
+python compare_egm.py                         # about 15 seconds
+```
+
+```
+1. dolo 0.4.9.20 (interpolation 2.2.7), egm, tolerance 1e-12
+ iid: dsgelab 125 iterations, 0.04 s; dolo 155 iterations, 1.33 s
+  ok   iid: largest difference at 199 points of cash on hand       9.11e-13  (limit 1e-10)
+       Euler errors between the endogenous points, relative to c: max 1.14e-03, mean 2.52e-05
+ markov: dsgelab 310 iterations, 0.09 s; dolo 355 iterations, 0.85 s
+  ok   markov: largest difference at 199 points of cash on hand    1.06e-11  (limit 1e-10)
+       Euler errors between the endogenous points, relative to c: max 6.46e-03, mean 3.30e-05
+2. time_iteration on the same model
+  iid: on dolo's grids, 100 points of cash on hand up to 4 and 100 poststates up to 4: largest difference in c 3.36e-04, mean 4.82e-05
+  ok   iid, dolo's grids: largest difference in c                  3.36e-04  (limit 5e-03)
+  iid: both grids up to 8, with 100, 200, 400, 800, 1600 points, at cash on hand up to 4:
+       largest difference in c 1.28e-03, 2.99e-04, 1.65e-04, 5.54e-05, 3.68e-05
+       mean difference in c    1.19e-04, 3.93e-05, 1.34e-05, 1.32e-06, 4.25e-07
+  ok   iid, up to 8, 1600 points: largest difference in c          3.68e-05  (limit 1e-04)
+  ok   iid, up to 8, 1600 points: mean difference in c             4.25e-07  (limit 5e-06)
+  markov: on dolo's grids, 100 points of cash on hand up to 4 and 100 poststates up to 4: largest difference in c 2.78e-03, mean 4.54e-04
+  ok   markov, dolo's grids: largest difference in c               2.78e-03  (limit 5e-03)
+  markov: both grids up to 8, with 100, 200, 400, 800, 1600 points, at cash on hand up to 4:
+       largest difference in c 3.25e-03, 1.59e-03, 4.54e-04, 4.28e-04, 8.59e-05
+       mean difference in c    4.38e-04, 9.18e-05, 8.14e-06, 1.26e-05, 1.94e-06
+  ok   markov, up to 8, 1600 points: largest difference in c       8.59e-05  (limit 1e-04)
+  ok   markov, up to 8, 1600 points: mean difference in c          1.94e-06  (limit 5e-06)
+3. stochastic growth with log utility and full depreciation, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 poststates: 1.03e-02, 2.55e-03, 6.48e-04, 1.63e-04
+         error ratios when the spacing halves: 4.02, 3.94, 3.99
+  ok   linear, 80 points: largest relative error of c              1.63e-04  (limit 2e-04)
+  ok   linear: error ratio when the spacing halves, distance from 4  6.01e-02  (limit 5e-01)
+  cubic: largest relative error of c with 10, 20, 40, 80 poststates: 4.82e-03, 1.01e-03, 2.29e-04, 5.41e-05
+         error ratios when the spacing halves: 4.76, 4.42, 4.23
+  ok   cubic, 80 points: largest relative error of c               5.41e-05  (limit 1e-04)
+  ok   cubic: error ratio when the spacing halves, distance from 4  7.56e-01  (limit 1e+00)
+
+all checks passed
+```
+
+`consumption_savings_iid.yaml`, which `setup.sh` already downloads for the time-iteration
+comparison, declares the `expectation`, `half_transition`, `direct_response_egm` and
+`reverse_state` blocks that dolo's `egm` needs, and `compare_egm.py` writes the same four
+functions as an `EGMProgram`, with `post_decision`, `a = w - c`, added. The second case replaces
+the iid income of the file with log income an AR(1) with persistence 0.9, which dolo discretizes
+as a three-state Rouwenhorst chain. dolo 0.4.9.20's `egm` runs on both as published. It prints a
+debugging line at every step of its inner loop, which `run_dolo_egm.py` silences. It also returns
+the policy resampled on the model's grid of cash on hand and interpolated there by cubic splines,
+which between the grid's points is not the policy of the method, so the runner asks for 199
+points, the 100 of the file and the centres between them, and reads the policy only there. Both
+implementations interpolate linearly between the points of the endogenous grid, extrapolate
+linearly and hold consumption between 0 and cash on hand, so they iterate on the same fixed point
+and agree within 9e-13 with iid income and 1.1e-11 with the chain, relative to the largest
+consumption. The counts of iterations differ because the two start from different policies, dolo
+from its calibrated consumption, 0.9 at every point, and `dsgelab` from 0.9 times cash on hand,
+and because dolo stops on the sum of the changes in the controls and in the endogenous grid and
+`dsgelab` on the larger of the two.
+
+Time iteration solves the same problem with a different discretisation, so the comparison with it
+measures the two interpolation errors, not a shared fixed point. On a fixed grid of cash on hand,
+the kink where the borrowing limit stops binding falls inside a cell, and the linear interpolant's
+error there falls only with the spacing, not with its square. The endogenous grid has a point at
+that kink, the one the lowest poststate, zero saving, leads to. On dolo's grids, with 100 points
+up to 4, the two policies differ by up to 3.4e-4 with iid income and 2.8e-3 with the chain. With
+the chain, next period's cash on hand exceeds 4 when income is high, time iteration extrapolates
+its policy there, and the difference stays at that size as the grids are refined. With both grids
+extended to 8 and compared up to 4, the mean difference falls from 1.2e-4 to 4.3e-7 with iid income
+and from 4.4e-4 to 1.9e-6 with the chain, from 100 to 1600 points. The largest difference falls to
+3.7e-5 and 8.6e-5, unevenly, because it depends on where the kink falls within time iteration's
+cell.
+
+The closed form is stochastic growth with log utility and full depreciation, written with next
+period's capital as the poststate, `c = 1/E[beta alpha exp(z') k'^(alpha-1)/c']` and
+`k = ((k' + c)/exp(z))^(1/alpha)`. Its policy, `c = (1 - alpha beta) exp(z) k^alpha`, is not
+linear in `k`, and the relative error at the centres between the endogenous points falls by 3.9
+to 4.0 each time the spacing halves with linear interpolation. With cubic interpolation the error
+is smaller by a factor of 3 and falls by 4.2 to 4.8, as the square of the spacing, because the
+natural spline's zero second derivative at the ends is not the policy's. The test suite also
+checks a linear policy, consumption and saving with no income, which `egm` reproduces within
+1e-11, the agreement with time iteration, the borrowing limit, the refinement from a coarse
+solution, the simulation and the evaluation point by point. The numbers come from a run on
+3 November 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.13.
+
+
+
+## Sparse grids against Tasmanian and the closed form
+
+```bash
+bash tasmanian/setup.sh                             # Python 3.12, Tasmanian 8.2 built from source
+tasmanian/.venv/bin/python tasmanian/run_tasmanian.py   # about a second
+python compare_smolyak.py                           # about 3 minutes on an idle machine
+```
+
+```
+1. Tasmanian 8.2, global grids of type 'level' on the clenshaw-curtis rule
+  levels               box         points     nodes   weights
+  [0]                  own              1   2.2e-16   0.0e+00
+  [1]                  [-1, 1]          3   0.0e+00   1.6e-16
+  [2]                  own              5   1.7e-16   1.9e-15
+  [3]                  [-1, 1]          9   2.2e-16   7.8e-16
+  [4]                  own             17   8.9e-16   5.3e-15
+  [5]                  [-1, 1]         33   3.3e-16   6.8e-15
+  [6]                  own             65   2.2e-16   2.2e-14
+  [0, 0]               own              1   0.0e+00   0.0e+00
+  [1, 1]               [-1, 1]          5   0.0e+00   2.2e-16
+  [2, 2]               own             13   1.1e-16   1.4e-15
+  [3, 3]               [-1, 1]         29   2.2e-16   1.3e-15
+  [4, 4]               own             65   4.4e-16   2.1e-14
+  [5, 5]               [-1, 1]        145   3.3e-16   2.0e-14
+  [0, 0, 0]            own              1   0.0e+00   0.0e+00
+  [1, 1, 1]            [-1, 1]          7   0.0e+00   3.3e-16
+  [2, 2, 2]            own             25   2.2e-16   1.7e-15
+  [3, 3, 3]            [-1, 1]         69   2.2e-16   2.2e-15
+  [4, 4, 4]            own            177   8.9e-16   1.1e-14
+  [0, 0, 0, 0]         own              1   5.6e-17   0.0e+00
+  [1, 1, 1, 1]         [-1, 1]          9   0.0e+00   4.4e-16
+  [2, 2, 2, 2]         own             41   3.3e-16   2.4e-15
+  [3, 3, 3, 3]         [-1, 1]        137   2.2e-16   2.7e-15
+  [4, 4, 4, 4]         own            401   4.4e-16   1.3e-14
+  [0, 0, 0, 0, 0]      own              1   0.0e+00   0.0e+00
+  [1, 1, 1, 1, 1]      [-1, 1]         11   0.0e+00   8.9e-16
+  [2, 2, 2, 2, 2]      own             61   2.2e-16   2.7e-15
+  [3, 3, 3, 3, 3]      [-1, 1]        241   2.2e-16   4.4e-15
+  [4, 4, 4, 4, 4]      own            801   6.7e-16   1.7e-14
+  [0, 0, 0, 0, 0, 0]   own              1   2.2e-16   0.0e+00
+  [1, 1, 1, 1, 1, 1]   [-1, 1]         13   0.0e+00   1.0e-15
+  [2, 2, 2, 2, 2, 2]   own             85   2.2e-16   2.5e-15
+  [3, 3, 3, 3, 3, 3]   [-1, 1]        389   2.2e-16   8.4e-15
+  [4, 4, 4, 4, 4, 4]   own           1457   4.4e-16   1.3e-14
+  [3, 1]               own             19   4.4e-16   1.6e-15
+  [1, 4]               own             35   1.1e-16   2.9e-15
+  [3, 1, 2]            own             51   4.4e-16   3.0e-15
+  [0, 2, 1, 3]         own             51   4.4e-16   2.3e-15
+  [3, 2, 1, 1, 0]      own             97   3.3e-16   2.6e-15
+  [3, 3, 2, 2, 1, 1]   own            329   3.9e-16   6.0e-15
+  [4, 1, 1, 1, 1, 1]   own            627   4.4e-16   8.4e-15
+  40 grids, 0 with a different number of points
+  ok   largest difference in a node                                    8.88e-16  (limit 1e-14)
+  ok   largest difference in an interpolation weight                   2.25e-14  (limit 1e-12)
+2. stochastic growth with several capital stocks, log utility and full depreciation, against the closed form
+   relative error of k_j' at 1000 points in the box; seconds in brackets
+  4 states (3 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1      9   5.46e-03 [  1.6]   5.46e-03 [  5.8]     4.8e-11
+                     2     41   1.23e-04 [  1.3]   1.23e-04 [  7.7]     4.8e-11
+                     3    137   1.81e-06 [  0.8]   1.81e-06 [  8.5]     4.3e-11
+                     4    401   2.09e-08 [  6.7]   2.11e-08 [ 33.5]     6.0e-10
+  ok   4 states, level 4: largest relative error, projection           2.09e-08  (limit 3e-08)
+  ok   4 states, level 4: largest relative error, time iteration       2.11e-08  (limit 3e-08)
+  ok   4 states: smallest fall of the error per level, inverted        2.26e-02  (limit 0.05)
+  ok   4 states: projection against time iteration                     5.97e-10  (limit 1e-08)
+  5 states (4 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1     11   4.31e-03 [  1.6]   4.31e-03 [  4.7]     4.9e-11
+                     2     61   1.11e-04 [  0.4]   1.11e-04 [  4.5]     4.8e-11
+                     3    241   1.92e-06 [  1.4]   1.92e-06 [  7.6]     1.3e-10
+                     4    801   2.51e-08 [ 17.4]   2.54e-08 [ 66.9]     7.7e-10
+  ok   5 states, level 4: largest relative error, projection           2.51e-08  (limit 6e-08)
+  ok   5 states, level 4: largest relative error, time iteration       2.54e-08  (limit 6e-08)
+  ok   5 states: smallest fall of the error per level, inverted        2.57e-02  (limit 0.05)
+  ok   5 states: projection against time iteration                     7.68e-10  (limit 1e-08)
+  6 states (5 capital stocks), isotropic
+                levels points          projection      time iteration  difference
+                     1     13   4.36e-03 [  0.8]   4.36e-03 [  9.7]     1.5e-10
+                     2     85   1.17e-04 [  1.0]   1.17e-04 [ 14.0]     1.4e-10
+                     3    389   2.21e-06 [  7.6]   2.21e-06 [ 24.9]     1.3e-10
+                     4   1457   3.38e-08 [155.3]   3.33e-08 [223.5]     2.3e-09
+  ok   6 states, level 4: largest relative error, projection           3.38e-08  (limit 6e-08)
+  ok   6 states, level 4: largest relative error, time iteration       3.33e-08  (limit 6e-08)
+  ok   6 states: smallest fall of the error per level, inverted        2.68e-02  (limit 0.05)
+  ok   6 states: projection against time iteration                     2.27e-09  (limit 1e-08)
+  6 states, anisotropic: level 1 along a
+                levels points          projection      time iteration  difference
+    [3, 3, 3, 3, 3, 1]    363   2.21e-06 [  5.0]   2.21e-06 [ 12.9]     1.2e-10
+    [4, 4, 4, 4, 4, 1]   1283   3.34e-08 [ 35.9]   3.33e-08 [ 90.9]     1.2e-10
+    levels [3, 3, 3, 3, 3, 1]: 363 points against 389 at isotropic level 3
+  ok   6 states, levels [3, 3, 3, 3, 3, 1]: error over isotropic level 3's  1.00e+00  (limit 1.05)
+    levels [4, 4, 4, 4, 4, 1]: 1283 points against 1457 at isotropic level 4
+  ok   6 states, levels [4, 4, 4, 4, 4, 1]: error over isotropic level 4's  9.90e-01  (limit 1.05)
+
+all checks passed
+```
+
+Tasmanian is distributed on PyPI as source only, and its build calls `cmake` by name. `setup.sh`
+installs CMake 4.4.4 and scikit-build 0.19.1 from PyPI into the environment, puts its `bin` first
+on the `PATH` and builds Tasmanian 8.2 without build isolation, which would otherwise fetch the
+build tools again, unpinned. On 3 November 2026 the build took a minute and a half on macOS 27
+(arm64) with Apple clang 21.
+
+A global grid of type `level` on Tasmanian's Clenshaw–Curtis rule has, along one axis, one node at
+level 0 and `2^l + 1` at level `l`, the Chebyshev extrema, and takes the multi-indices whose levels
+sum to at most the depth. That is JMMV's isotropic grid with Tasmanian's level `l` as JMMV's
+`i - 1`. `liLevelLimits` caps the level along each axis, which gives JMMV's anisotropic grid.
+Tasmanian builds the interpolant as Smolyak's combination of tensor Lagrange interpolants, and
+`SmolyakGrid` by solving for the coefficients of JMMV's Chebyshev basis. On nested
+nodes both spaces are the span of the same tensor products, so the interpolant is the same
+polynomial and the weights agree to rounding, 2e-14 at most. The cases are 33 isotropic grids, in
+one to six dimensions at levels 0 to 6 (up to 1457 points), and 7 anisotropic ones with a level 0
+or 1 on some axes. The odd levels are on the canonical box `[-1, 1]^d` and the others on boxes of
+their own, set with `setDomainTransform`. The test suite checks the interpolant without Tasmanian,
+against a combination of tensor Lagrange interpolants written in the test.
+
+The second part solves a planner's problem with `n` capital stocks, log utility and full
+depreciation, `c + k_1' + ... + k_n' = a k_1^alpha_1 ... k_n^alpha_n` with `log a` an AR(1), whose
+policy is `k_j' = beta alpha_j y` in any dimension. The shares `alpha_j` sum to 0.36, `beta` is
+0.96 and the persistence 0.9. Each capital stock varies by 25 per cent on either side of its
+steady state and productivity by 3 per cent, and the shock's standard deviation is 0.01, integrated
+by five Gauss–Hermite nodes. The policy does not depend on the shock's variance, so the error
+against the closed form is the approximation's alone. It falls by a factor of 37 to 87 per level,
+and projection and time iteration, which solve the same collocation equations, agree within
+2.3e-9. Time iteration stops when the policy moves by less than 1e-11, and the difference is
+larger than that away from the nodes, most at level 4. The policy is linear in productivity. With
+six states, level 1 along productivity removes 26 of 389 points at level 3 and 174 of 1457 at
+level 4, and the error changes by less than 1 per cent. Both methods start from the first-order
+policy, and time iteration then takes 13 to 15 iterations at levels 1 to 3. The numbers come from
+a run on 5 November 2026, with Tasmanian 8.2 on Python 3.12 and `dsgelab` on Python 3.13, on a
+machine shared with other jobs (load average about 60). The seconds in brackets are therefore
+larger than on an idle machine: alone, on 3 November, the six-state grid of level 4 took 15 seconds by projection
+and 31 by time iteration, and the anisotropic one 13 and 30.
+## Heterogeneous agents against sequence-jacobian
+
+```bash
+bash sequence_jacobian/setup.sh                                  # if not run already
+sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 45 seconds
+python compare_heterogeneous.py                                  # about 40 seconds
+```
+
+```
+sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
+1. Krusell-Smith (krusell_smith.ipynb), 7 income states by 500 asset points
+  ok   grids and income chain (largest: e_grid)                      4.30e-10  (limit 1e-09)
+  ok   steady state: unknowns (largest: beta)                        5.43e-12  (limit 1e-09)
+  ok   steady state: policies (largest: Va)                          4.32e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    5.08e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: C)                         8.26e-11  (limit 1e-09)
+       goods market (Walras), at asset market clearing: dsgelab -1.9e-13, sequence-jacobian 7.6e-11
+  ok   household Jacobians, forward differences (largest: A/r)       2.27e-10  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: K/Z)                6.48e-11  (limit 1e-07)
+  ok   linear impulse responses to Z (largest: A)                    4.13e-11  (limit 1e-07)
+  ok   nonlinear transition after Z (largest: K)                     1.84e-10  (limit 1e-08)
+  ok   household Jacobians, central differences (largest: A/r)       2.24e-10  (limit 1e-07)
+       seconds, dsgelab / sequence-jacobian: steady state 20.1 / 2.8, household Jacobians 1.7 / 1.5, G 1.2 / 2.6, nonlinear 3.4 / 5.8
+2. One-asset HANK (hank.ipynb), 7 income states by 500 asset points
+  ok   grids and income chain (largest: e_grid)                      4.30e-10  (limit 1e-09)
+  ok   steady state: unknowns (largest: vphi)                        1.84e-10  (limit 1e-09)
+  ok   steady state: policies (largest: Va)                          7.59e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    2.11e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: N)                         5.33e-11  (limit 1e-09)
+       goods market (Walras), at asset and labour market clearing: dsgelab 1.2e-14, sequence-jacobian 1.1e-11
+  ok   household Jacobians, forward differences (largest: A/r)       2.46e-10  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: w/rstar)            1.63e-10  (limit 1e-07)
+  ok   linear impulse responses to rstar (largest: w)                9.73e-11  (limit 1e-07)
+  ok   nonlinear transition after rstar (largest: w)                 1.37e-10  (limit 1e-08)
+  ok   household Jacobians, central differences (largest: A/r)       2.45e-10  (limit 1e-07)
+       seconds, dsgelab / sequence-jacobian: steady state 25.1 / 5.8, household Jacobians 4.7 / 6.0, G 6.0 / 8.9, nonlinear 18.4 / 12.4
+3. dsgelab against itself
+       Krusell-Smith household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.4e-07, 2.7e-09, 3.2e-08
+  ok   Krusell-Smith household: fake news against direct, step 1e-07  3.25e-08  (limit 1e-07)
+       HANK household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.5e-06, 6.7e-07, 4.1e-08
+  ok   HANK household: fake news against direct, step 1e-07          4.08e-08  (limit 1e-07)
+       Krusell-Smith, largest gap between the nonlinear and the linear response, for shocks of 1, 0.1, 0.01 per cent: 4.41e-05, 4.51e-07, 3.97e-09
+  ok   Krusell-Smith: smallest ratio of the gaps, shock / 10            97.90  (at least 90)
+
+all checks passed
+```
+
+The two models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb` and
+`notebooks/hank.ipynb` at its v1.0.0 tag, which `setup.sh` downloads and checks against their
+sha256 sums. `run_ssj.py` copies the model code from the notebooks and checks that each piece
+appears in them verbatim before running it. The household of the HANK model is
+`hetblocks.hh_labor.hh`, part of the package. `compare_heterogeneous.py` writes the same models
+for `dsgelab`, with the same calibration, unknowns and targets, the household's endogenous grid
+method again in numpy, and the constrained households' labour supply solved by the same Newton
+iteration on `log u'(c)`. Three settings differ from the notebooks. In both packages the
+household's backward iteration stops when the policy moves by less than 1e-12, where
+sequence-jacobian's default is 1e-8. sequence-jacobian's forward iteration stops at 1e-14,
+where its default is 1e-10, and `dsgelab` finds the stationary distribution by a sparse solve. The
+nonlinear transitions stop at 1e-11, where the notebooks use 1e-8. At the defaults the steady
+states would differ by the tolerance, some 1e-7 in the policies, and hide the comparison.
+
+The grids differ by 4.3e-10. sequence-jacobian computes the income chain's stationary distribution
+by iterating to 1e-11, and `dsgelab` by GTH elimination, which is exact to rounding. The
+normalisation of income to a mean of one carries that difference to every node. Everything else
+agrees within 7.6e-10, relative to the largest value compared. The goods market, which neither
+model targets, clears to 1.9e-13 and 1.2e-14 in `dsgelab`, against 7.6e-11 and 1.1e-11 in
+sequence-jacobian, whose distribution stops at its tolerance.
+
+sequence-jacobian differentiates one backward step by forward differences with step 1e-4, and
+its Jacobians differ from the derivative by some 1e-5 of their size. The comparison of the
+Jacobians, of `G` and of the impulse responses therefore runs `dsgelab` with the same
+differences (`twosided=False`, `h=1e-4`), and a last line compares the central differences that
+`dsgelab` uses by default with sequence-jacobian's own (`twosided=True`). Some responses are zero
+in general equilibrium, such as assets in the HANK model, where the asset market clears at a fixed
+supply of bonds. The differences in each group are therefore taken relative to the largest value
+in the group.
+
+Section 3 checks the fake-news algorithm against brute force, the nonlinear path differentiated
+for a shock at each of ten dates, both by central differences with the same step. The two are
+different finite differences of the same derivative, and the policy has kinks where the borrowing
+limit starts to bind and at every grid point. Their gap falls with the step, to 3e-8 and 4e-8 at
+1e-7, below which rounding takes over. In Krusell–Smith, the gap between the nonlinear transition
+and the linear response falls by 98 and by 114 each time the shock falls by ten, as the square of
+the shock. The test suite checks the same on a grid of 3 by 40 points, together with Walras's law
+along the path, the stationarity of the distribution, the simple blocks' exact Jacobians and a
+solved block against the closed form of a forward-looking equation.
+
+`dsgelab` has no numba, and its times depend on the load of the machine. These come from a run
+with other jobs on it. On an idle machine the steady states took 1.8 and 4.4 seconds, the
+household Jacobians 0.3 and 1.5, `G` 0.3 and 1.4, and the nonlinear transitions 1.0 and 3.4. The
+numbers come from a run on 5 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and
+`dsgelab` on Python 3.13.
+
+## Markov regime switching: published solutions, statsmodels and the exact likelihood
+
+The roadmap names RISE as the reference. RISE runs only in MATLAB. At commit
+`9bdcd74cc72a2bf537ce3182f5883b8942b007b5` of `github.com/jmaih/RISE_toolbox` (27 September 2026)
+the toolbox has 1652 `.p` files, MATLAB P-code, and the `.m` file next to each holds only its help
+text. The `v2019` tag, kept for the earlier public version, is distributed the same way, with 1013
+`.p` files. GNU Octave 11.3 does not execute P-code: `rise_startup` runs the comment-only `.m` file
+and does nothing. The validation therefore uses the references that exist without MATLAB, the
+solutions Foerster, Rubio-Ramírez, Waggoner and Zha print, closed forms, statsmodels' Hamilton
+filter and the exact likelihood over every regime path. RISE's example folder holds the model files
+of those papers (`frwz_nk.rs`, `rbcs.rs`, `simple.rs`), which fix the timing and the
+parameterizations used here.
+
+```bash
+python compare_switching.py                   # about 20 seconds
+```
+
+```
+1. Foerster et al. (2013), New Keynesian model: all solutions of the quadratic system
+  psi(2) = 0.9: perturbed ['mu'], 402 starting points, 402 converged, 9 distinct solutions, 3 real
+  ok   psi(2) = 0.9: number of solutions found minus nine              0.00e+00  (limit 0e+00)
+       entries within a unit of the last printed digit: largest error 3.74e-04, 0.54 of that unit
+  ok   psi(2) = 0.9: entries off by more than a unit of the last digit  0.00e+00  (limit 0e+00)
+       real solutions, stability radius: 0.4532 (stable), 1.0160, 1.5354
+  ok   psi(2) = 0.9: stable solutions found minus 1                    0.00e+00  (limit 0e+00)
+  psi(2) = 0.7: perturbed ['mu'], 402 starting points, 402 converged, 9 distinct solutions, 3 real
+  ok   psi(2) = 0.7: number of solutions found minus nine              0.00e+00  (limit 0e+00)
+       entries within a unit of the last printed digit: largest error 1.94e-04, 0.55 of that unit
+       solution (4): printed -0.7000+4.6327j, computed -0.666951+4.632663j
+       solution (5): printed -0.7000-4.6327j, computed -0.666951-4.632663j
+  ok   psi(2) = 0.7: entries off by more than a unit of the last digit  2.00e+00  (limit 2e+00)
+       real solutions, stability radius: 0.4683 (stable), 0.9527 (stable), 1.5897
+  ok   psi(2) = 0.7: stable solutions found minus 2                    0.00e+00  (limit 0e+00)
+
+2. Foerster et al. (2016), Markov-switching RBC: printed first-order coefficients
+  steady state c = 2.082588, k = 22.15038, z = 1.00706 (printed 2.08259, 22.1504, 1.007); perturbed ['mu']
+  regime 1:
+      0.04056   0.12648   0.00917   0.00005
+      0.96920  -2.14061  -0.15521  -0.37201
+      0.00000   0.10000   0.00725   0.01846
+  regime 2:
+      0.04056   0.00000   0.02687  -0.09681
+      0.96920  -0.00000  -0.46499   0.92271
+      0.00000   0.00000   0.02175  -0.04102
+  ok   23 coefficients truncated to four decimals minus printed        0.00e+00  (limit 1e-12)
+       constant of c in regime 1: computed 0.0000459, printed 4.9e-05
+  ok   entries off by more than a unit of the last digit               1.00e+00  (limit 1e+00)
+  complex Newton from 403 starting points: 4 solutions, 2 real, stability radii 0.9394, 1.0848, 2.6052, 2.6052
+  ok   solutions found minus four (Groebner bases give four)           0.00e+00  (limit 0e+00)
+  ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
+
+3. Foerster et al. (2016), section 5: phi(s) pi_t + sigma(s) eps_t = E_t pi_{t+1}
+  pi_t = -0.080000 eps_t in regime 1, -0.625000 in regime 2 (printed -0.08 and -0.625)
+  ok   solution minus -sigma/phi                                       1.39e-17  (limit 1e-14)
+  with the lag of inflation as a state, coefficients on it: (0.0000, 0.0000) radius 0.000; (-0.0000, 1.1294) radius 1.084; (1.2681, 0.9056) radius 1.539; (1.3158, -0.0000) radius 1.645
+  ok   solutions found minus four                                      0.00e+00  (limit 0e+00)
+  ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
+
+4. Fisherian model with an AR(1) real rate: (diag(alpha) - rho T) c = 1
+  c = 0.976532929599, 2.036336109008
+  ok   c minus the closed form                                         4.44e-16  (limit 1e-14)
+
+5. Identical regimes: the Klein solution of the constant-parameter model
+  ok   rbc: F, P, Q minus Klein's, and constants                       1.78e-15  (limit 1e-13)
+  ok   nk3: F, P, Q minus Klein's, and constants                       4.44e-16  (limit 1e-13)
+
+all checks passed
+```
+
+Foerster et al. (2013, Atlanta Fed working paper 2013-1, section 6.2) solve a New Keynesian model in
+which the drift of technology switches and enters the Euler equation at `t+1`, and the response to
+inflation in the Taylor rule switches at `t`. The drift moves the steady state and is perturbed;
+the response does not and keeps its value in each regime, which `switching_system` finds from the
+residuals. They obtain every solution of the quadratic system with Gröbner bases and print the
+nine, for `psi(2) = 0.9` and for `psi(2) = 0.7`. Newton's method in complex arithmetic, from the
+Klein starting points and 400 random complex ones, finds the same nine in both cases, and the same
+stable ones: solution (1) for the first, (1) and (3) for the second. Each printed entry is compared
+in units of its last printed digit. The two that differ by more than one unit are the conjugate
+pair (4)–(5) of the second table, whose real part is printed as -0.7000 and is -0.66695 here; the
+other five entries of the same pair agree.
+
+For the RBC of Foerster et al. (2016, section 6.1), the paper prints the coefficients of the stable
+solution on `(k_{t-1}, z_{t-1}, eps_t, 1)` in its own timing, in which the predetermined variables
+are dated `t` and depend on `eps_t`. `dsgelab`'s states are `(k_{t-1}, z_t)`, so the comparison
+substitutes the law of motion of `z_t` into the solution. The printed values are truncated to four
+decimals (0.018459 is printed as 0.0184, 0.12648 as 0.1264), and 23 of the 24 then agree exactly.
+The constant of consumption in regime 1, printed to six decimals as 0.000049, is 0.0000459 here.
+Complex Newton finds the four solutions the paper reports, one stable.
+
+```bash
+python compare_kim.py --prepare               # simulates the series, writes out_kim/input.json
+bash statsmodels/setup.sh                     # if not run already
+statsmodels/.venv/bin/python statsmodels/run_statsmodels.py
+python compare_kim.py                         # about 2 minutes, most of it maximum likelihood
+```
+
+```
+1. Hamilton's filter: statsmodels 0.14.4
+  hamilton, 300 observations: log likelihood -213.4494648247, statsmodels -213.4494648247
+  ok   hamilton: log likelihood minus statsmodels'                     2.84e-14  (limit 1e-09)
+  ok   hamilton: filtered Pr(s=0) minus statsmodels'                   4.44e-16  (limit 1e-11)
+  ok   hamilton: smoothed Pr(s=0) minus statsmodels'                   2.00e-15  (limit 1e-11)
+       the smoothed probability puts the simulated regime above one half at 100.0% of the dates
+  ok   hamilton: Kim minus the exact likelihood, 14 observations       8.88e-16  (limit 1e-11)
+  maximum likelihood: dsgelab -207.12820351, statsmodels -207.12820351
+       p[0->0]        0.980276     0.980276
+       p[1->0]        0.095455     0.095455
+       const[0]       2.142501     2.142501
+       const[1]       6.134101     6.134104
+       sigma2[0]      0.128807     0.128807
+       sigma2[1]      0.751839     0.751836
+  ok   hamilton: maximized log likelihood minus statsmodels'           8.29e-10  (limit 1e-06)
+  ok   hamilton: implied reduced form minus statsmodels' estimate      2.57e-06  (limit 1e-04)
+  ar, 299 observations after the first: log likelihood -473.0062781287, statsmodels -473.0062781296
+  ok   ar: log likelihood minus statsmodels'                           9.44e-10  (limit 1e-08)
+  ok   ar: filtered Pr(s=0) minus statsmodels'                         6.12e-11  (limit 1e-09)
+  ok   ar: smoothed Pr(s=0) minus statsmodels'                         4.01e-11  (limit 1e-09)
+
+2. Kim's filter against the exact likelihood, all regime paths enumerated
+  ar, mu and phi switching, measurement s.d. 0.1: largest |Kim - exact| over 10 samples of 14 dates 2.12e-06 (|log likelihood| up to 30.5)
+  ar, mu and phi switching, measurement s.d. 0.5: largest |Kim - exact| over 10 samples of 14 dates 7.63e-03 (|log likelihood| up to 28.8)
+  ar, mu and phi switching, measurement s.d. 2.0: largest |Kim - exact| over 10 samples of 14 dates 1.84e-02 (|log likelihood| up to 30.7)
+  ok   ar: largest |Kim - exact|                                       1.84e-02  (limit 5e-02)
+  Foerster et al. (2013) NK, inflation observed: largest |Kim - exact| over 5 samples of 12 dates 8.62e-04 (|log likelihood| up to 61.1)
+  ok   NK: largest |Kim - exact|                                       8.62e-04  (limit 5e-03)
+
+all checks passed
+```
+
+Kim's filter collapses, at each date, the Gaussians that end in the same regime. It is exact in two
+cases, which statsmodels 0.14.4 computes by Hamilton's filter. In the first, the state is i.i.d.,
+so that observed inflation is `mu[s_t] + sigma[s_t] e_t`, statsmodels' `MarkovRegression`. In the
+second, an AR(1) is observed without error around a switching mean, `MarkovAutoregression`
+(Hamilton, 1989): given the regime, the data reveal the state. statsmodels conditions on the first
+observation, and the comparison does too, through `init=` and a missing first value. The
+smoothed probabilities come from the filter's joint probabilities of consecutive regimes, which
+makes them exact in both cases. Smoothing the marginal probabilities alone, as Kim's (1994)
+formula is often written, differs from statsmodels by up to 0.8 in the autoregression, because
+there the observation at `t` depends on the regime at `t-1`. Maximum likelihood estimates the
+Fisherian model's own parameters (the two inflation targets, the two responses to inflation and the
+staying probabilities), which map one to one into statsmodels' reduced form, and reaches the same
+maximum. The remaining differences, near 1e-9, come from the central differences behind the
+solution's coefficients.
+
+The exact likelihood is the mixture of the Kalman filters of all `2^T` regime paths, which
+`enumerated_likelihood` computes for samples of 12 and 14 dates. Against it, the collapse costs
+2e-6 in the log likelihood when the measurement error is small and up to 0.018 when it is large.
+In the New Keynesian model of Foerster et al. (2013) with inflation observed, the error is 9e-4.
+With output and the interest rate both observed, the regime is identified at almost every date and
+the collapse is exact to 1e-13. The test suite also checks that identical regimes reproduce the
+Kalman filter, Hamilton's filter written out in the test, the exact likelihood with missing data,
+and posterior mode and Metropolis–Hastings on switching parameters and a transition probability.
+The numbers come from a run on 5 November 2026, with `dsgelab` on Python 3.13 and statsmodels on
+Python 3.12.
 ## Declaring the model: diagnostics, closed form, homotopy, calibration
 
 ```bash

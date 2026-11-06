@@ -57,6 +57,8 @@ validation/out_restrictions/
 validation/work_restrictions/
 validation/out_forecast_eval/
 validation/work_forecast_eval/
+validation/out_bvar/
+validation/work_bvar_*/
 validation/out_gsa/
 validation/work_gsa/
 validation/out_mixed/
@@ -90,3 +92,8 @@ docs/ai-memory.md
 validation/dolo/models/
 validation/out_time_iteration/
 validation/out_value_iteration/
+validation/out_egm/
+validation/out_heterogeneous/
+validation/sequence_jacobian/notebooks/
+validation/out_smolyak/
+validation/out_kim/

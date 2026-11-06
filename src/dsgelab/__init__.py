@@ -31,6 +31,7 @@ from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, diagnose, steady_state_invariance)
 from .bgp import BalancedGrowth, balanced_growth
+from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .identification import Identification, IdentificationCheck, identification
 from .irf_matching import IRFMatchingResult, irf_matching
@@ -64,18 +65,32 @@ from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          prior_predictive, rhat, smc)
 from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
                                   forecast_evaluation)
+from .heterogeneous import (BlockModel, BlockSteadyState, HetBlock, SimpleBlock, SolvedBlock,
+                            interpolate_rows, log_grid, simple)
 from .markov import MarkovChain, rouwenhorst, tauchen
 from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
                      kalman_filter, kalman_smoother, realtime_shock_decomposition,
                      low_frequency, shock_decomposition, state_space)
 from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
 from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
-from .plots import (plot_decomposition, plot_forecast, plot_irf, plot_paths, plot_posterior,
-                    posterior_density, prior_density)
+from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
+                    plot_brooks_gelman, plot_conditional_forecast, plot_decomposition,
+                    plot_filtering, plot_forecast, plot_identification, plot_irf,
+                    plot_mh_autocorrelation, plot_mode_check, plot_occbin, plot_occbin_regimes,
+                    plot_paths, plot_posterior, plot_posterior_irf, plot_priors,
+                    plot_smoothed_observables, plot_smoothed_shocks, posterior_density,
+                    posterior_irf, prior_density, trace_plot)
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
+from .smolyak import SmolyakGrid
 from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
+from .egm import EGMProgram, EGMSolution, egm
+from .switching import (MarkovSwitchingError, MarkovSwitchingSolution, MSVSolution,
+                        SwitchingSystem, mean_square_stability, msv_solutions,
+                        solve_markov_switching, switching_system)
+from .kim import (KimFilterResult, MarkovSwitchingProblem, SwitchingStateSpace,
+                  enumerated_likelihood, kim_filter, switching_state_space)
 from .restrictions import (Restriction, RestrictionCheck, RestrictionSample, check_restrictions,
                            sample_restrictions)
 from .sensitivity import (FilteringResult, Normal, SobolResult, StabilityMap, Triangular, Uniform,
@@ -85,7 +100,7 @@ from .solution import FirstOrderSolution, shock_covariance
 from .solve import solve
 from .steady import SteadyState, SteadyStateError, analytic_steady_state, steady_state
 
-__version__ = "0.7.2"
+__version__ = "0.9.0"
 
 __all__ = [
     "Model", "VarView", "get_param", "set_params",
@@ -112,12 +127,26 @@ __all__ = [
     "low_frequency",
     "plot_irf", "plot_paths", "plot_decomposition", "plot_forecast", "plot_posterior",
     "prior_density", "posterior_density",
+    "plot_priors", "trace_plot", "plot_mh_autocorrelation", "plot_brooks_gelman", "plot_mode_check",
+    "plot_smoothed_shocks", "plot_smoothed_observables", "plot_posterior_irf",
+    "plot_conditional_forecast", "plot_occbin", "plot_occbin_regimes", "plot_identification",
+    "plot_filtering", "brooks_gelman", "BrooksGelman", "mh_autocorrelation", "mode_check",
+    "posterior_irf",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
+    "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart",
     "prior", "Prior",
-    "solve_projection", "Projection",
+    "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",
+    "egm", "EGMSolution", "EGMProgram",
+    "HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyState", "simple",
+    "interpolate_rows", "log_grid",
+    "solve_markov_switching", "MarkovSwitchingSolution", "MarkovSwitchingError",
+    "switching_system", "SwitchingSystem", "msv_solutions", "MSVSolution",
+    "mean_square_stability",
+    "switching_state_space", "SwitchingStateSpace", "kim_filter", "KimFilterResult",
+    "enumerated_likelihood", "MarkovSwitchingProblem",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
     "identification", "Identification", "IdentificationCheck",

@@ -100,10 +100,15 @@ examples in English and Portuguese.
 | Impulse responses, simulation, moments, variance decomposition | `FirstOrderSolution` |
 | Second-order perturbation, innovation tensors and risk corrections | `solve_second_order`, `SecondOrderSolution.decision_rule` |
 | Third-order perturbation: full decision rule in Dynare's form, stochastic steady state, sparse tensors | `solve_third_order`, `ThirdOrderSolution.decision_rule`, `stochastic_steady_state` |
-| Global solution by Chebyshev collocation, up to three states | `solve_projection` |
-| Global solution by time iteration on a Cartesian grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
+| Global solution by Chebyshev collocation, on a tensor grid up to three states or on a Smolyak sparse grid with any number, isotropic or anisotropic, validated against Tasmanian | `solve_projection`, `SmolyakGrid` |
+| Global solution by time iteration on a Cartesian or a Smolyak grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
 | Value function iteration with Howard's improvement steps, over intervals or finite sets of choices, validated against QuantEcon and dolo | `value_iteration`, `ValueIterationSolution`, `DynamicProgram` |
+| The endogenous grid method (Carroll, 2006), for one endogenous state with Markov or quadrature exogenous states and bounded controls, validated against dolo | `egm`, `EGMSolution`, `EGMProgram` |
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
+| BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts) and the DSGE-VAR of Del Negro and Schorfheide, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)` |
+| Heterogeneous agents by the sequence-space Jacobian: one asset by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
+| Markov regime switching to first order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions` |
+| Likelihood of regime switching by Kim's filter, filtered and smoothed regime probabilities, estimation of switching parameters and transition probabilities | `kim_filter`, `MarkovSwitchingProblem` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
 | Ramsey optimal policy under commitment (timeless), validated against Dynare | `ramsey_model` |
@@ -285,10 +290,17 @@ planned.
 - **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.
-- **Global methods are limited** to Chebyshev collocation with up to three states and to time
-  iteration and value function iteration on a Cartesian grid, whose size grows as the product of
-  the points on each axis. There is no endogenous grid method or sparse grid yet.
-- **No Markov regime switching, heterogeneous agents, BVAR or DSGE-VAR.**
+- **Global methods are limited** to Chebyshev collocation and time iteration, on a Cartesian
+  grid or on a Smolyak sparse grid, to value function iteration on a Cartesian grid, whose size
+  grows as the product of the points on each axis, and to the endogenous grid method with one
+  endogenous state. Collocation on a Smolyak grid solves for all the coefficients at once with a
+  dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
+  are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.
+- **Markov regime switching is first order only,** with exogenous transition probabilities, and
+  Newton's method from finitely many starting points cannot prove that a stable solution is
+  unique. Kim's filter is an approximation, whose error the validation measures.
+- **Heterogeneous agents have one endogenous state,** the asset, and a Markov matrix and grid that
+  stay fixed along a path.
 - **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.

@@ -2,10 +2,18 @@
 
 All notable changes to `dsgelab`. Versions follow [semantic versioning](https://semver.org/);
 before 1.0, a minor version may add to the API and a patch version only fixes bugs. The exception
-is the roadmap's milestone 0.8, released in parts: versions 0.7.1 to 0.7.5 each add one of its
-features, without changing the API of an earlier release, and 0.8.0 closes it.
+is the roadmap's milestone 0.8, planned in parts: versions 0.7.1 and 0.7.2 each added one of its
+features, without changing the API of an earlier release. The rest of the milestone, planned as
+0.7.3 to 0.7.5 and 0.8.0, was not published on its own and came out in 0.9.0.
 
 ## Unreleased
+
+## 0.9.0 — 2026-11-05
+
+The rest of the roadmap's milestone 0.8 (global methods): value function iteration, the
+endogenous grid method and Smolyak sparse grids. Milestone 0.9: Markov regime switching,
+heterogeneous agents by the sequence-space Jacobian, and the BVAR and the DSGE-VAR. Also the rest
+of Dynare's figures, at the author's request.
 
 ### Added
 
@@ -24,11 +32,158 @@ features, without changing the API of an earlier release, and 0.8.0 closes it.
   the controls, and against the closed-form value of stochastic growth. As published, dolo's
   `value_iteration` ends in NaN on that model, and `validation/dolo/run_dolo_vfi.py` makes four
   changes, listed there, without editing dolo.
+- `egm`: the endogenous grid method (Carroll, 2006), on an `EGMProgram`, a new declaration of a
+  problem with one endogenous state, its poststate, the expectation in the Euler equation, the
+  direct response that inverts it for the controls, the reverse map from the poststate to the
+  state, the half transition to next period's state and the bounds on the controls. These are
+  dolo's `expectation`, `direct_response_egm`, `reverse_state` and `half_transition` blocks, with
+  `post_decision`, the poststate given the state and the controls, added. The grid is on the
+  poststate, a `CartesianGrid` with one axis, and the other states follow Markov chains, with the
+  shocks integrated as in `time_iteration`. The policy is interpolated linearly or by natural cubic
+  splines between the points of the endogenous grid, one per node of the chain, and held within
+  the bounds, which gives a borrowing limit below the lowest point. `EGMSolution` evaluates and
+  simulates the policy and gives `euler_errors`, relative to the controls.
+  `validation/compare_egm.py` checks it against dolo 0.4.9.20's `egm` on its consumption–savings
+  model, within 9e-13 with iid income and 1.1e-11 with a three-state Markov chain, against
+  `time_iteration` on the same model, whose mean difference falls to 4e-7 and 2e-6 with 1600
+  points, and against the closed form of stochastic growth, whose relative error falls as the
+  square of the spacing, to 1.6e-4 with 80 points. `validation/dolo/run_dolo_egm.py` silences a
+  debugging line in dolo's `egm` and reads its policy only at the points where dolo's resampled
+  rule equals it, without editing dolo.
+- `SmolyakGrid`: Smolyak sparse grids with the nodes and the basis of Judd, Maliar, Maliar and
+  Valero (2014), nested Chebyshev extrema and disjoint sets of Chebyshev polynomials, isotropic or
+  with one level per axis (JMMV's anisotropic grid). It evaluates the basis, the interpolant and
+  the interpolation weights. `solve_projection(..., grid=SmolyakGrid(...))` collocates on it with
+  any number of states, by Newton's method with a Jacobian assembled from the residual's
+  derivatives at each node, and `time_iteration` takes it in place of a `CartesianGrid`.
+  `validation/compare_smolyak.py` checks the nodes and the interpolation weights against Tasmanian
+  8.2, built from source by `validation/tasmanian/setup.sh`, on 40 grids in one to six
+  dimensions, within 9e-16 and 2e-14. On stochastic growth with three to five capital stocks, log
+  utility and full depreciation, whose investment policy is a constant share of output in any
+  dimension, the error falls by a factor of 37 or more per level, to 2e-8 with four states and
+  3e-8 with six at level 4, and projection and time iteration agree within 2.3e-9.
+- The rest of Dynare's figures, each from an object the package already returns: `plot_priors`
+  (`plot_priors`), `trace_plot` (`trace_plot`, with its moving average),
+  `plot_mh_autocorrelation` (`mh_autocorrelation_function`), `plot_brooks_gelman` (the univariate
+  and multivariate diagnostics of `mcmc_diagnostics`), `plot_mode_check` (`mode_check`),
+  `plot_smoothed_shocks` and `plot_smoothed_observables` (the smoother's "Smoothed shocks",
+  "Smoothed observation errors" and "Historical and smoothed variables"), `plot_posterior_irf`
+  (`bayesian_irf`), `plot_conditional_forecast`, `plot_occbin` and `plot_occbin_regimes`
+  (`occbin_graph` and `occbin.plot_regimes`), `plot_identification` (the collinearity patterns of
+  `identification`) and `plot_filtering` (`scatter_mcf` and `stability_mapping_univariate` of the
+  sensitivity toolbox). `plot_decomposition` gains `groups`, `steady_state` and `detail`
+  (`use_shock_groups`, `steadystate` and `detail_plot`), `plot_posterior` Dynare's axis limits,
+  and `plot_paths` accepts a `TransitionPath`. The numbers these figures draw that the package did
+  not compute before are computed as Dynare computes them, without matplotlib: `brooks_gelman`
+  (returning a `BrooksGelman`), `mh_autocorrelation`, `mode_check`, on Dynare's grid, and
+  `posterior_irf`, with the HPD interval and deciles of `posterior_moments`.
+  `validation/compare_plots.py` estimates `fs2000.mod` in Dynare with `mode_check`, two chains
+  and `bayesian_irf`, records the data of Dynare's own figures as they are drawn, and compares
+  them on the same draws: the Brooks and Gelman statistics within 8e-14, the moving average and
+  the autocorrelations within 3e-15, the `mode_check` grid within 9e-16 and its kernels within
+  6e-11 where the prior is bounded, and the posterior IRFs on Dynare's 1,200 parameter draws
+  within 3e-10 of the largest response. Dynare's identification-strength and sensitivity bars
+  need the information matrix, which the package does not compute, and are left out, as are the
+  annualised and vintage shock decompositions and the bands of conditional forecasts.
+- `bvar` and `bvar_density`: a VAR with the prior of Sims and Zha (1998), as Dynare's
+  `bvar_density` and `bvar_forecast` build it, from dummy observations with Dynare's
+  hyperparameters (`tau`, `decay`, `lambda_`, `mu`, `omega`, `flat`, `train`) and options
+  (`first_obs`, `presample`, `nobs`, `noconstant` as `constant=False`, `prefilter`). `BVAR` holds
+  the normal-inverse-Wishart prior and posterior (`NormalInverseWishart`, with draws and the
+  integrating constant), the log marginal density and the RMSE Dynare prints, and
+  `BVAR.forecast` draws paths with and without shocks, with the normal draws in Dynare's order.
+  `validation/compare_bvar.py` runs Dynare 7.2's `tests/bvar_a_la_sims` as they are, apart from
+  the IRFs and the Metropolis of one of them: on lag lengths 1 to 2 and 1 to 8 the priors and
+  posteriors agree within 1.8e-14, relative, and the log marginal densities within 1.8e-12.
+  With the normal draws Octave took, the 1001 and 2001 forecast paths agree within 2.1e-16, draw
+  by draw.
+- The DSGE-VAR of Del Negro and Schorfheide (2004), as Dynare's `estimation(dsge_var=...)`:
+  `EstimationProblem` takes `dsge_var` (the weight `lambda` of the model's prior, `inf`
+  included), `dsge_varlag` and `dsge_var_constant`, or estimates the weight under the name
+  `"dsge_prior_weight"`. The likelihood is that of the VAR with its coefficients and covariance
+  integrated out, from the model's population moments at first order, and
+  `dsge_var_prior` and `dsge_var_posterior` give the VAR's prior and posterior at given
+  parameters. `ModFile.estimation_problem` reads `dsge_var`, `dsge_varlag` and `noconstant`.
+  The suite checks the likelihood against conjugate updating, one observation at a time.
+  `validation/compare_bvar.py` runs Dynare 7.2's `tests/dsge-var`, with `lambda = 0.8` and with
+  `lambda` estimated, without Metropolis. Dynare counts the `dsge_varlag` initial observations
+  in the likelihood's `T` (94 for 90 rows), and with that `T` the log posterior agrees within
+  4.9e-12 at 11 points, and the mode `dsgelab` finds has a kernel at least as high as Dynare's,
+  within 1e-4 posterior standard deviations of it. With `dsgelab`'s `T`, the number of rows,
+  the mode moves by up to 0.18 and 0.39 posterior standard deviations, and the estimated
+  `lambda` from 0.533 to 0.568.
+- Heterogeneous agents by the sequence-space Jacobian method of Auclert, Bardóczy, Rognlie and
+  Straub (2021), in a module of its own, `dsgelab.heterogeneous`; `Model` and `vec` are unchanged.
+  A `HetBlock` holds a continuum of agents on a grid of one asset by the nodes of a Markov chain,
+  with one step of their backward iteration written by the user, for example by the endogenous
+  grid method with `interpolate_rows`, and the distribution moved by Young's (2010) lottery. The
+  stationary distribution is found by one sparse solve. The block's Jacobians come from the
+  fake-news algorithm, `T` backward steps per input, or, to check them, from the nonlinear path
+  differentiated once for every date. `SimpleBlock` (and the decorator `simple`) holds equations
+  in the aggregates with lags and leads, `x(-1)` and `x(+1)`, with Jacobians by the complex step,
+  and `SolvedBlock` solves a model of blocks for some of its inputs. `BlockModel` joins the blocks
+  by the names of their inputs and outputs, solves the steady state for unknowns that hit targets,
+  and gives the Jacobians along the graph, the general-equilibrium Jacobians `G`, linear impulse
+  responses and the nonlinear perfect-foresight transition by a quasi-Newton iteration. `log_grid`
+  gives sequence-jacobian's asset grid. `validation/compare_heterogeneous.py` solves
+  sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at the
+  v1.0.0 tag, on 7 by 500 points: the steady states agree within 7.6e-10, the household
+  Jacobians within 2.5e-10, `G` within 1.7e-10 and the linear and nonlinear impulse responses
+  within 1.9e-10, relative to the largest value compared. The fake-news Jacobians agree with the
+  direct ones within 4.1e-8, and Krusell–Smith's nonlinear transition approaches the linear
+  response as the square of the shock. sequence-jacobian runs in an environment of its own,
+  created by `validation/sequence_jacobian/setup.sh` with the versions pinned.
+
+- `solve_markov_switching`: the first-order solution of a `Model` whose parameters switch with a
+  Markov chain, from milestone 0.9. A switching parameter takes the value of the regime at `t` or,
+  with `next_regime=`, at `t+1`. The approximation point is the steady state of the ergodic-mean
+  parameters, and the parameters that move it are perturbed and enter as constants per regime,
+  the partition principle of Foerster, Rubio-Ramírez, Waggoner and Zha (2016). The quadratic
+  system of the minimum-state-variable solution (Farmer, Waggoner and Zha, 2011) is solved by
+  Newton's method from the Klein solutions and from random points, in real or complex arithmetic
+  (`msv_solutions`), and every distinct solution is kept, with its mean-square stability radius
+  (`mean_square_stability`, Costa, Fragoso and Marques, 2005). `MarkovSwitchingSolution` gives
+  impulse responses with the regime held, along a regime path or averaged over regimes,
+  simulation of regimes and states, and exact unconditional and regime-conditional moments.
+  `MarkovSwitchingError` reports when no stable solution is found, with what was found.
+- `kim_filter`: the likelihood of a Markov-switching state space (`switching_state_space`) by
+  Kim's (1994) filter, with filtered and smoothed regime probabilities, and
+  `enumerated_likelihood`, the exact likelihood over every regime path on short samples.
+  `MarkovSwitchingProblem` estimates switching parameters (`"psi[1]"`) and transition
+  probabilities (`"p[0,1]"`) with `posterior_mode`, `maximum_likelihood`, `metropolis_hastings`
+  and `smc`.
+- RISE runs only in MATLAB, since its current release and its `v2019` tag are distributed as MATLAB
+  P-code, which GNU Octave cannot execute, so the validation uses the references that exist without
+  it. `validation/compare_switching.py` finds the nine solutions, three of them real, that Foerster
+  et al. (2013) print for a New Keynesian model under two parameterizations, with the same one and
+  two stable solutions. Of the 108 printed entries, 106 agree within a unit of the last printed
+  digit, and the real part of the pair (4)–(5) in the second table is printed as -0.7000 where it is
+  -0.66695 here. For the RBC of Foerster et al. (2016) it finds the four solutions they report, one
+  of them stable, whose first-order coefficients agree in 23 of 24 entries once truncated to four
+  decimals, as the paper prints them, and the constant of consumption in regime 1 is printed as
+  0.000049 where it is 0.0000459 here. The script also checks closed forms, and the Klein solution
+  when the regimes are identical. `validation/compare_kim.py` checks Kim's filter against
+  statsmodels 0.14.4, in an environment of its own (`validation/statsmodels/setup.sh`). With an
+  i.i.d. state it is Hamilton's filter, and the log likelihood, the filtered and the smoothed
+  probabilities agree within 3e-14, 4e-16 and 2e-15; maximum likelihood in the model's parameters
+  reaches statsmodels' maximum within 8e-10. In Hamilton's (1989) autoregression they agree within
+  1e-9, 6e-11 and 4e-11. Against the exact likelihood over all regime paths, Kim's approximation
+  errs by up to 0.018 on samples of 14 dates with large measurement errors, and by 9e-4 on the New
+  Keynesian model with inflation observed.
 
 ### Changed
 
+- `perfect_foresight`: when the model's residuals or derivatives raise, the exception keeps its
+  type and message and carries a note with the dates whose equations failed, the Newton
+  iteration, and the variables at both dates. A residual that solves an inner problem, such as
+  cgelab's period equilibrium, used to fail without saying where on the path.
+- `posterior_mode` and `maximum_likelihood` use the analytic gradient only for an
+  `EstimationProblem`, so that they also accept a `MarkovSwitchingProblem`.
 - `time_iteration` and `value_iteration` share the construction of the product Markov chain and of
   the shocks' quadrature. `time_iteration`'s results are unchanged.
+- `time_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a `CartesianGrid`,
+  so that a `SmolyakGrid` can refuse a value. `solve_projection`'s `bounds` defaults to `None`,
+  for the call with `grid=`. Calls that worked before give the same results.
 
 ## 0.7.2 — 2026-10-31
 

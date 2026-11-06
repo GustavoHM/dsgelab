@@ -278,7 +278,7 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
     options : dict, optional
         Passed to the optimiser for ``"mode"`` and ``"ml"``.
     """
-    if problem.order != 1:
+    if problem.order != 1 or getattr(problem, "is_dsge_var", False):
         raise ValueError("forecast evaluation works on the first-order (Kalman) problem")
     Y = problem.Y
     T, m = Y.shape

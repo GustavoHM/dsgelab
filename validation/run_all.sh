@@ -5,6 +5,8 @@
 # Usage:  bash run_all.sh            (everything)
 #         SKIP_JULIA=1 bash run_all.sh
 #         SKIP_DOLO=1 bash run_all.sh
+#         SKIP_SSJ=1 bash run_all.sh   (skips sequence-jacobian, the heterogeneous-agent reference)
+#         SKIP_TASMANIAN=1 bash run_all.sh   (skips Tasmanian, the sparse-grid reference)
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
@@ -12,8 +14,13 @@
 # in macromodelling/ pins the versions of MacroModelling.jl. The Python that runs the compare_*.py
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
-# compare_time_iteration.py and compare_value_iteration.py, runs in a Python 3.11 environment of its
-# own that dolo/setup.sh creates with uv.
+# compare_time_iteration.py, compare_value_iteration.py and compare_egm.py, runs in a Python 3.11
+# environment of its own that dolo/setup.sh creates with uv, and so does sequence-jacobian, the
+# reference of compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates. Tasmanian,
+# the reference of compare_smolyak.py, is built from source, with CMake and the system's C++
+# compiler, in a Python 3.12 environment that tasmanian/setup.sh creates with uv, and statsmodels,
+# the reference of compare_kim.py, runs in a Python 3.12 environment that statsmodels/setup.sh
+# creates.
 #
 # A step that fails does not stop the following ones. The summary at the end says which failed,
 # and the exit status is nonzero if any did. Heutel's (2012) MATLAB files come from the public copy
@@ -101,24 +108,53 @@ step "Dynare: calibration restrictions" bash run_restrictions.sh
 step "compare_restrictions.py" "$PYTHON" compare_restrictions.py
 step "Dynare and R: forecast evaluation" bash run_forecast_eval.sh
 step "compare_forecast_eval.py" "$PYTHON" compare_forecast_eval.py
+step "Dynare: BVAR and DSGE-VAR" bash run_bvar.sh
+step "compare_bvar.py"     "$PYTHON" compare_bvar.py
 step "Dynare: stability mapping" bash run_gsa.sh
 step "compare_gsa.py"       "$PYTHON" compare_gsa.py
 step "Dynare: mixed frequency" bash run_mixed.sh
 step "compare_mixed.py"     "$PYTHON" compare_mixed.py
-step "Dynare: plot densities" bash run_plots.sh
+step "Dynare: plots"        bash run_plots.sh
 step "compare_plots.py"     "$PYTHON" compare_plots.py
 step "compare_markov.py"    "$PYTHON" compare_markov.py
 if [ -n "${SKIP_DOLO:-}" ]; then
   results+=("skipped  dolo (SKIP_DOLO)")
 else
   # without deleting it, a failed dolo run would let the comparison read an earlier result
-  rm -f out_time_iteration/dolo.json out_value_iteration/dolo.json
+  rm -f out_time_iteration/dolo.json out_value_iteration/dolo.json out_egm/dolo.json
   step "dolo: environment"  bash dolo/setup.sh
   step "dolo: time iteration" dolo/.venv/bin/python dolo/run_dolo.py
   step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
+  step "dolo: endogenous grid method" dolo/.venv/bin/python dolo/run_dolo_egm.py
+  step "compare_egm.py"       "$PYTHON" compare_egm.py
 fi
+if [ -n "${SKIP_SSJ:-}" ]; then
+  results+=("skipped  sequence-jacobian (SKIP_SSJ)")
+else
+  # without deleting it, a failed run would let the comparison read an earlier result
+  rm -f out_heterogeneous/ssj.npz
+  step "sequence-jacobian: environment" bash sequence_jacobian/setup.sh
+  step "sequence-jacobian: Krusell-Smith and HANK" sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py
+  step "compare_heterogeneous.py" "$PYTHON" compare_heterogeneous.py
+fi
+if [ -n "${SKIP_TASMANIAN:-}" ]; then
+  results+=("skipped  Tasmanian (SKIP_TASMANIAN)")
+else
+  # without deleting it, a failed Tasmanian run would let the comparison read an earlier result
+  rm -f out_smolyak/tasmanian.json
+  step "Tasmanian: environment" bash tasmanian/setup.sh
+  step "Tasmanian: Smolyak grids" tasmanian/.venv/bin/python tasmanian/run_tasmanian.py
+  step "compare_smolyak.py"  "$PYTHON" compare_smolyak.py
+fi
+step "compare_switching.py"  "$PYTHON" compare_switching.py
+# without deleting it, a failed statsmodels run would let the comparison read an earlier result
+rm -f out_kim/statsmodels.json
+step "Kim: series"           "$PYTHON" compare_kim.py --prepare
+step "statsmodels: environment" bash statsmodels/setup.sh
+step "statsmodels: Hamilton filter" statsmodels/.venv/bin/python statsmodels/run_statsmodels.py
+step "compare_kim.py"        "$PYTHON" compare_kim.py
 # after run_examples.sh: the steady_state_model part reads out_import/fs2000.mat
 step "compare_diagnostics.py" "$PYTHON" compare_diagnostics.py
 

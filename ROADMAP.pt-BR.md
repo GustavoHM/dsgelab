@@ -73,6 +73,19 @@ tempo numa grade cartesiana, com limites sobre os controles impostos por complem
 concorda com o `time_iteration` do dolo em três modelos publicados com ele e com a forma fechada do
 crescimento estocástico.
 
+A versão 0.9.0, lançada em 5 de novembro de 2026, fecha o marco 0.8 e traz o marco 0.9. As versões
+0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem nela. Numa grade, o
+pacote agora também resolve por iteração da função valor com os passos de Howard, pelo método da
+grade endógena, e por colocação e iteração temporal em grades esparsas de Smolyak com qualquer
+número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o Tasmanian e a forma
+fechada do crescimento estocástico com até seis estoques de capital. A mudança de regime markoviana
+é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no MATLAB, e por isso a
+conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha publicam e contra o
+statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no espaço das
+sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O BVAR e o
+DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos do Dynare
+entraram a pedido do autor, e os números que eles desenham concordam com os do próprio Dynare.
+
 ## O que conta como pronto
 
 Um item só sai do roadmap quando cumpre as seis condições abaixo. O padrão do pacote é que cada
@@ -350,8 +363,8 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   `prior_density` concorda com `draw_prior_density` nas nove prioris do `fs2000` até `1.9e-12`, e
   `posterior_density` com a estimativa de núcleo de `posterior_moments`, com a largura de banda
   corrigida para sorteios repetidos, até `8.9e-16` (30 de outubro de 2026). A suíte de testes
-  confere que cada figura desenha os números que recebe. Ficam de fora os gráficos de diagnóstico
-  do MCMC e os gráficos de identificação e de sensibilidade do Dynare.
+  confere que cada figura desenha os números que recebe. Os gráficos de diagnóstico do MCMC e os
+  gráficos de identificação e de sensibilidade do Dynare ficaram de fora e vieram na 0.9 (abaixo).
 
 ### 0.7 — terceira ordem completa e derivadas
 
@@ -418,7 +431,8 @@ A colocação de Chebyshev com até três estados já existe e reproduz a soluç
 estocástico. Seus choques são i.i.d. e integrados por Gauss–Hermite, e a política não tem limites.
 O marco sai em partes, um recurso por versão de correção, da 0.7.1 à 0.7.5, cada uma publicada só
 depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma anterior. A versão
-0.8.0 fecha o marco, sem recurso novo próprio.
+0.8.0 fecha o marco, sem recurso novo próprio. Só a 0.7.1 e a 0.7.2 foram publicadas à parte. Os
+itens a partir da 0.7.3 saíram na 0.9.0.
 
 - [x] **0.7.1 — discretização de processos.** `tauchen` e `rouwenhorst` transformam um AR(1) em
   uma `MarkovChain` com nós, matriz de transição, distribuição estacionária, momentos e simulação.
@@ -460,17 +474,39 @@ depois de cumprir as seis condições acima. Nenhuma versão altera a API de uma
   estocástico com utilidade logarítmica e depreciação total, o erro do valor contra a forma fechada
   cai pelo menos 3,4 vezes quando o espaçamento cai à metade, até 1e-4 com 80 pontos de capital e
   interpolação linear e 3e-9 com a cúbica.
-- [ ] **0.7.4 — método da grade endógena** (Carroll, 2006), para problemas cuja equação de Euler
-  se inverte em forma fechada dada a política do período seguinte, com a inversa fornecida pelo
-  usuário. Referência: o `egm` do dolo no modelo de consumo e poupança, e a solução por iteração
-  temporal da 0.7.2 na mesma grade.
-- [ ] **0.7.5 — grades esparsas.** Colocação de Smolyak (Judd, Maliar, Maliar e Valero, 2014),
-  isotrópica e anisotrópica, para que a projeção e a iteração temporal rodem com mais de três
-  estados. Referência: os nós e os pesos de interpolação de Smolyak do Tasmanian, e a forma
-  fechada do crescimento estocástico com vários estoques de capital, um problema do planejador com
-  utilidade logarítmica e depreciação total, cuja política é conhecida em qualquer dimensão.
-- [ ] **0.8.0** — o marco completo: a linha da comparação e o README atualizados, e o lançamento
-  feito da mesma forma que o da 0.7.0.
+- [x] **0.7.4 — método da grade endógena.** `egm` resolve um `EGMProgram`, uma declaração nova
+  com um estado endógeno, a sua variável pós-decisão, a expectativa da equação de Euler, a
+  resposta direta que a inverte para os controles e o mapa reverso da variável pós-decisão para o
+  estado, pelo método da grade endógena (Carroll, 2006). A grade fica na variável pós-decisão, os
+  demais estados seguem cadeias de Markov, e a política fica dentro dos seus limites, o que dá um
+  limite de endividamento. No modelo de consumo e poupança do dolo, com a mesma grade, o `egm` do
+  dolo 0.4.9.20 e o do `dsgelab` concordam dentro de 9e-13 com renda iid e de 1,1e-11 com a renda
+  numa cadeia de Markov de três estados. O dolo roda tal como publicado depois de silenciada uma
+  linha de depuração, e a sua política é lida onde a regra que ele reamostra coincide com ela. A
+  iteração temporal no mesmo modelo tem a mesma solução, mas não a mesma discretização, e nas
+  grades de 100 pontos do dolo as duas diferem em até 3,4e-4 com renda iid e 2,8e-3 com a cadeia,
+  mais perto da quina em que o limite de endividamento deixa de se impor. Com as duas grades
+  estendidas até recursos iguais a 8, a diferença média cai a 4,3e-7 e 1,9e-6 com 1600 pontos. No
+  crescimento estocástico com utilidade logarítmica e depreciação total, o erro relativo da
+  política contra a forma fechada cai de 3,9 a 4,0 vezes quando o espaçamento cai à metade, até
+  1,6e-4 com 80 pontos e interpolação linear e 5,4e-5 com a cúbica.
+- [x] **0.7.5 — grades esparsas.** `SmolyakGrid` constrói a grade de Smolyak de Judd, Maliar,
+  Maliar e Valero (2014), com extremos de Chebyshev aninhados e conjuntos disjuntos de polinômios
+  de Chebyshev, isotrópica ou com um nível por eixo, e `solve_projection` e `time_iteration` a
+  recebem no lugar das suas grades, com qualquer número de estados. A projeção resolve todos os
+  coeficientes pelo método de Newton, com uma jacobiana montada a partir das derivadas do resíduo
+  em cada nó. Contra as grades globais do Tasmanian 8.2 na regra de Clenshaw–Curtis e do tipo
+  `level`, compilado a partir do código-fonte num ambiente próprio, 40 grades em uma a seis
+  dimensões nos níveis 0 a 6, anisotrópicas incluídas, têm o mesmo número de pontos, e os nós
+  concordam dentro de 9e-16 e os pesos de interpolação dentro de 2e-14. No crescimento
+  estocástico com três a cinco estoques de capital, utilidade logarítmica e depreciação total, em
+  que o investimento em cada estoque é uma fração constante do produto, o erro da política cai por
+  um fator de pelo menos 37 a cada nível, até 2e-8 com quatro estados e 3e-8 com seis no nível 4
+  (1457 pontos), e a projeção e a iteração temporal concordam dentro de 2,3e-9. Com seis estados,
+  o nível 1 na produtividade, em que a política é linear, mantém o erro da grade isotrópica com
+  1283 pontos em vez de 1457.
+- [x] **0.8.0** — o marco completo: a linha da comparação e o README atualizados. O lançamento é o
+  da 0.9.0, feito da mesma forma que o da 0.7.0, junto com o marco 0.9.
 
 O dolo 0.4.9.20 só se instala no Python 3.11, com pandas abaixo de 2.0. Em 30 de outubro de 2026,
 num ambiente assim, o seu `time_iteration` resolveu o crescimento estocástico com utilidade
@@ -481,12 +517,77 @@ projeto Julia já usado para o MacroModelling.jl.
 
 ### 0.9 — a fronteira
 
-- [ ] **Mudança de regime markoviana** na solução e na estimação. Validação contra o RISE.
-- [ ] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências, validados contra
+- [x] **Mudança de regime markoviana** na solução e na estimação. A validação não pôde usar o RISE:
+  no commit 9bdcd74 do seu repositório (27 de setembro de 2026), e na tag `v2019`, o toolbox é
+  distribuído como P-code do MATLAB, com arquivos `.m` que contêm só o texto de ajuda, e o GNU
+  Octave 11.3 não executa P-code. Ela usa no lugar as soluções publicadas, o statsmodels e a
+  verossimilhança exata. `solve_markov_switching` resolve em primeira ordem com a perturbação por
+  partição de Foerster, Rubio-Ramírez, Waggoner e Zha (2016): os parâmetros que deslocam o estado
+  estacionário são perturbados e entram como constantes por regime, e os outros mantêm o seu valor
+  em cada regime. O sistema quadrático é resolvido pelo método de Newton (Farmer, Waggoner e Zha,
+  2011) a partir das soluções de Klein e de pontos aleatórios, toda solução distinta é guardada, e a
+  usada é a primeira estável em média quadrática (Costa, Fragoso e Marques, 2005). No modelo
+  novo-keynesiano de Foerster et al. (2013), o Newton complexo a partir de 400 pontos encontra as
+  nove soluções que eles obtêm com bases de Gröbner, nas duas parametrizações, com as mesmas uma e
+  duas soluções estáveis; 106 das 108 entradas impressas concordam a menos de uma unidade do último
+  dígito, e as outras duas, um par conjugado, aparecem impressas como -0,7000 onde aqui são
+  -0,66695. No RBC de 2016, encontra as quatro soluções que eles relatam, uma delas estável, e dos
+  seus 24 coeficientes de primeira ordem, 23 concordam depois de truncados em quatro casas, como o
+  artigo os imprime, e a constante do consumo no regime 1 aparece como 0,000049 onde aqui é
+  0,0000459. Regimes idênticos dão a solução de Klein a menos de 2e-15. `kim_filter` calcula a
+  verossimilhança de Kim (1994), com as probabilidades filtradas e suavizadas dos regimes, e
+  `MarkovSwitchingProblem` a leva à moda a posteriori e aos amostradores, com parâmetros que mudam
+  de regime e probabilidades de transição. Onde o filtro de Kim é exato, ele concorda com o filtro
+  de Hamilton do statsmodels 0.14.4 a menos de 3e-14 na log-verossimilhança e de 2e-15 nas
+  probabilidades, e com a sua autorregressão a menos de 1e-9, e a máxima verossimilhança alcança o
+  máximo do statsmodels a menos de 8e-10. Contra a verossimilhança exata sobre todas as trajetórias
+  de regime, a aproximação de Kim erra em até 0,018 em amostras de 14 datas com erros de medida
+  grandes. Ordens mais altas e probabilidades de transição endógenas, que o RISE tem, continuam fora
+  do pacote.
+- [x] **Agentes heterogêneos** pelo método do jacobiano no espaço de sequências, validados contra
   o sequence-jacobian. *O requisito de projeto, herdado da exclusão anterior, é que* `vec`
   continue sendo a forma de escrever um número finito de grupos, e que uma distribuição seja outro
-  algoritmo, num módulo próprio.
-- [ ] **BVAR e DSGE-VAR**, a serem conferidos contra o `+bvar` e o `dsge_var` do Dynare.
+  algoritmo, num módulo próprio. O módulo é o `dsgelab.heterogeneous`: `HetBlock` para um contínuo
+  de agentes num ativo por uma cadeia de Markov, com a loteria de Young e o algoritmo das notícias
+  falsas, `SimpleBlock` e `SolvedBlock` para os agregados, e `BlockModel` para o estado
+  estacionário com calibração, os jacobianos de equilíbrio geral, as respostas a impulso lineares
+  e a transição não linear por quase-Newton. Nos modelos de Krusell–Smith e HANK de um ativo do
+  próprio sequence-jacobian 1.0.0, dos cadernos na tag v1.0.0, em 7 por 500 pontos, os estados
+  estacionários (incógnitas, políticas, distribuição, agregados) concordam até 7,6e-10, os
+  jacobianos da família até 2,5e-10, o `G` até 1,7e-10 e as respostas a impulso lineares e não
+  lineares até 1,9e-10, em relação ao maior valor comparado, com as iterações dos dois pacotes
+  apertadas para 1e-12. Os jacobianos das notícias falsas concordam com os de força bruta até
+  4,1e-8, e a transição não linear do Krusell–Smith se aproxima da resposta linear com o quadrado
+  do choque. Dois estados endógenos, como no HANK de dois ativos, e matrizes de Markov que se
+  movem ao longo da trajetória ficam de fora.
+- [x] **Os demais gráficos do Dynare**, acrescentados a pedido do autor: prioris, gráficos de
+  traço, a autocorrelação dos sorteios, os diagnósticos de convergência de Brooks e Gelman, o
+  `mode_check`, os choques e as variáveis do suavizador, IRFs a posteriori com bandas HPD,
+  decomposições de choques agrupadas e detalhadas, previsões condicionais, OccBin, a colinearidade
+  da identificação e os gráficos de filtragem da análise de sensibilidade. No `fs2000.mod`, com as
+  figuras do próprio Dynare registradas enquanto são desenhadas e comparadas nos mesmos sorteios,
+  as estatísticas de Brooks e Gelman concordam até 8e-14, as autocorrelações até 3e-15, os núcleos
+  do `mode_check` até 6e-11 onde a priori é limitada, e as IRFs a posteriori nos 1.200 sorteios de
+  parâmetros do Dynare até 3e-10 da maior resposta. Ficam de fora as barras de força da
+  identificação, que exigem a matriz de informação, as decomposições de choques anualizadas e por
+  safra e as bandas das previsões condicionais.
+- [x] **BVAR e DSGE-VAR**, conferidos contra o `+bvar` e o `dsge_var` do Dynare. `bvar` e
+  `bvar_density` montam o VAR com a priori de observações artificiais de Sims e Zha (1998) como o
+  `bvar_density` do Dynare, com os hiperparâmetros e a amostra de treino dele, e
+  `BVAR.forecast` sorteia como o `bvar_forecast`. `EstimationProblem(dsge_var=...)` dá a
+  verossimilhança do DSGE-VAR de Del Negro e Schorfheide (2004), com o peso fixo ou estimado como
+  `dsge_prior_weight`, para a moda e os amostradores. Validados contra os `tests/bvar_a_la_sims` e
+  `tests/dsge-var` do Dynare 7.2 (3 de novembro de 2026). Com 1 a 2 e 1 a 8 defasagens, prioris e
+  posterioris coincidem em 1,8e-14, em termos relativos, e as densidades marginais em log em
+  1,8e-12. Com os sorteios normais que o Octave fez, as 3002 trajetórias de previsão simuladas
+  coincidem em 2,1e-16, sorteio a sorteio. Nos dois testes do DSGE-VAR, com `lambda = 0.8` e com
+  `lambda` estimado, a posteriori em log coincide em 4,9e-12 em 11 pontos, e a moda posterior do
+  `dsgelab` tem núcleo pelo menos igual ao do Dynare, a menos de 1e-4 desvio-padrão posterior
+  dela. As duas coisas valem com o `T` contado como o Dynare 7.2 conta, as 90 linhas do VAR mais
+  as 4 observações iniciais. O `T` do `dsgelab` é o número de linhas, aquele com que a
+  verossimilhança é o produto das densidades preditivas de um passo do VAR, verificação que está
+  na suíte. Com ele a moda se desloca até 0,39 desvio-padrão posterior, e o `lambda` estimado
+  passa de 0,533 a 0,568. As IRFs do `bvar_irf` e do DSGE-VAR (`bayesian_irf`) ficam de fora.
 
 ### 1.0
 

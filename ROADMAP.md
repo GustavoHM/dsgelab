@@ -68,6 +68,19 @@ Cartesian grid, with bounds on the controls imposed by complementarity. It agree
 `time_iteration` on three models from the dolo repository and with the closed form of stochastic
 growth.
 
+Version 0.9.0, released on 5 November 2026, closes milestone 0.8 and brings milestone 0.9.
+Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features come out in
+it. On a grid, the package now also solves by value function iteration with Howard's steps, by the
+endogenous grid method, and by collocation and time iteration on Smolyak sparse grids with any
+number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed form of
+stochastic growth with up to six capital stocks. Markov regime switching is solved at first order
+and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the solutions
+Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous agents are
+solved by the sequence-space Jacobian method and agree with sequence-jacobian on its Krusell–Smith
+and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and `dsge_var`. The
+rest of Dynare's figures came in at the author's request, and the numbers they draw agree with
+Dynare's own.
+
 ## What counts as done
 
 An item leaves the roadmap only when it meets the six conditions below. The package's standard
@@ -335,7 +348,7 @@ warning that lasts at least one minor version. The public API is what is in `__a
   `1.9e-12`, and `posterior_density` with the kernel estimate of `posterior_moments`, bandwidth
   corrected for repeated draws, within `8.9e-16` (30 October 2026). The test suite checks that
   each figure draws the numbers it is given. MCMC diagnostic plots and Dynare's identification
-  and sensitivity plots are left out.
+  and sensitivity plots were left out, and came in 0.9 (below).
 
 ### 0.7 — complete third order and derivatives
 
@@ -400,7 +413,8 @@ Chebyshev collocation with up to three states already exists and reproduces the 
 solution of stochastic growth. Its shocks are i.i.d. and integrated by Gauss–Hermite, and its
 policy has no bounds. The milestone is released in parts, one feature per patch version from
 0.7.1 to 0.7.5, each published only after it meets the six conditions above. No release changes the
-API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own.
+API of an earlier one. Version 0.8.0 closes the milestone, with no new feature of its own. Only
+0.7.1 and 0.7.2 were published on their own. The items from 0.7.3 on came out in 0.9.0.
 
 - [x] **0.7.1 — process discretisation.** `tauchen` and `rouwenhorst` turn an AR(1) into a
   `MarkovChain` with nodes, transition matrix, stationary distribution, moments and simulation.
@@ -439,17 +453,37 @@ API of an earlier one. Version 0.8.0 closes the milestone, with no new feature o
   changes to run it, without editing dolo. On stochastic growth with log utility and full
   depreciation, the value's error against the closed form falls by at least 3.4 when the spacing
   halves, to 1e-4 with 80 capital points and linear interpolation and 3e-9 with cubic.
-- [ ] **0.7.4 — the endogenous grid method** (Carroll, 2006), for problems whose Euler equation
-  inverts in closed form given the next period's policy, with the inverse supplied by the user.
-  Reference: dolo's `egm` on the consumption–savings model, and the time-iteration solution of
-  0.7.2 on the same grid.
-- [ ] **0.7.5 — sparse grids.** Smolyak collocation (Judd, Maliar, Maliar and Valero, 2014),
-  isotropic and anisotropic, so that projection and time iteration run with more than three
-  states. Reference: Tasmanian's Smolyak nodes and interpolation weights, and the closed form of
-  stochastic growth with several capital stocks, a planner's problem with log utility and full
-  depreciation, whose policy is known in any dimension.
-- [ ] **0.8.0** — the milestone complete: the comparison row and the README updated, and the
-  release made in the same way as 0.7.0.
+- [x] **0.7.4 — the endogenous grid method.** `egm` solves an `EGMProgram`, a new declaration
+  with one endogenous state, its poststate, the expectation in the Euler equation, the direct
+  response that inverts it for the controls and the reverse map from the poststate to the state,
+  by the endogenous grid method (Carroll, 2006). The grid is on the poststate, the other states
+  follow Markov chains, and the policy is held within its bounds, which gives a borrowing limit.
+  On dolo's consumption–savings model, with the same grid, dolo 0.4.9.20's `egm` and `dsgelab`'s
+  agree within 9e-13 with iid income and 1.1e-11 with income a three-state Markov chain. dolo
+  runs as published once a debugging line is silenced, and its policy is read where its resampled
+  rule equals it. Time iteration on the same model shares the solution but not the discretisation,
+  and on dolo's grids of 100 points the two differ by up to 3.4e-4 with iid income and 2.8e-3
+  with the chain, most near the kink where the borrowing limit stops binding. With both grids
+  extended to cash on hand 8, the mean difference falls to 4.3e-7 and 1.9e-6 with 1600 points. On
+  stochastic growth with log utility and full depreciation, the policy's relative error against
+  the closed form falls by 3.9 to 4.0 when the spacing halves, to 1.6e-4 with 80 points and
+  linear interpolation and 5.4e-5 with cubic.
+- [x] **0.7.5 — sparse grids.** `SmolyakGrid` builds the Smolyak grid of Judd, Maliar, Maliar
+  and Valero (2014), with nested Chebyshev extrema and disjoint sets of Chebyshev polynomials,
+  isotropic or with one level per axis, and `solve_projection` and `time_iteration` take it in
+  place of their grids, with any number of states. The projection solves for all the coefficients
+  by Newton's method, with a Jacobian assembled from the residual's derivatives at each node.
+  Against Tasmanian 8.2's Clenshaw–Curtis global grids of type `level`, built from source in an
+  environment of their own, 40 grids in one to six dimensions at levels 0 to 6, anisotropic ones
+  included, have the same number of points, and the nodes agree within 9e-16 and the
+  interpolation weights within 2e-14. On stochastic growth with three to five capital stocks, log
+  utility and full depreciation, where each stock's investment is a constant share of output, the
+  error of the policy falls by a factor of at least 37 per level, to 2e-8 with four states and
+  3e-8 with six at level 4 (1457 points), and projection and time iteration agree within 2.3e-9.
+  With six states, level 1 along productivity, in which the policy is linear, keeps the error of
+  the isotropic grid with 1283 points instead of 1457.
+- [x] **0.8.0** — the milestone complete: the comparison row and the README updated. The release
+  is 0.9.0, made in the same way as 0.7.0, together with milestone 0.9.
 
 dolo 0.4.9.20 only installs on Python 3.11, with pandas below 2.0. On 30 October 2026, in such an
 environment, its `time_iteration` solved stochastic growth with log utility and full depreciation
@@ -460,12 +494,74 @@ MacroModelling.jl.
 
 ### 0.9 — the frontier
 
-- [ ] **Markov regime switching** in solution and estimation. Validation against RISE.
-- [ ] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
+- [x] **Markov regime switching** in solution and estimation. The validation could not use RISE: at
+  commit 9bdcd74 of its repository (27 September 2026), and at its `v2019` tag, the toolbox is
+  distributed as MATLAB P-code, with `.m` files that hold only the help text, and GNU Octave 11.3
+  cannot execute P-code. It uses instead the published solutions, statsmodels and the exact
+  likelihood. `solve_markov_switching` solves to first order with the partition perturbation of
+  Foerster, Rubio-Ramírez, Waggoner and Zha (2016): the parameters that move the steady state are
+  perturbed and enter as constants per regime, and the others keep their value in each regime. The
+  quadratic system is solved by Newton's method (Farmer, Waggoner and Zha, 2011) from the Klein
+  solutions and from random points, every distinct solution is kept, and the one used is the first
+  that is mean-square stable (Costa, Fragoso and Marques, 2005). For the New Keynesian model of
+  Foerster et al. (2013), complex Newton from 400 points finds the nine solutions they obtain with
+  Gröbner bases, under both of their parameterizations, with the same one and two stable solutions;
+  106 of the 108 printed entries agree within a unit of the last digit, and the other two, a
+  conjugate pair, are printed as -0.7000 where they are -0.66695 here. For their 2016 RBC it finds
+  the four solutions they report, one of them stable, and of its 24 first-order coefficients, 23
+  agree once truncated to four decimals, as the paper prints them, and the constant of consumption
+  in regime 1 is printed as 0.000049 where it is 0.0000459. Identical regimes give the Klein
+  solution within 2e-15. `kim_filter` computes Kim's (1994) likelihood, with filtered and smoothed
+  regime probabilities, and `MarkovSwitchingProblem` takes it to the posterior mode and the
+  samplers, with switching parameters and transition probabilities. Where Kim's filter is exact, it
+  agrees with statsmodels 0.14.4's Hamilton filter within 3e-14 in the log likelihood and 2e-15 in
+  the probabilities, and with its autoregression within 1e-9, and maximum likelihood reaches
+  statsmodels' maximum within 8e-10. Against the exact likelihood over every regime path, Kim's
+  approximation errs by up to 0.018 on samples of 14 dates with large measurement errors. Higher
+  orders and endogenous transition probabilities, which RISE has, remain outside the package.
+- [x] **Heterogeneous agents** by the sequence-space Jacobian method, validated against
   sequence-jacobian. *The design requirement, inherited from the earlier exclusion, is that* `vec`
   remains the way to write a finite number of groups, and that a distribution is a different
-  algorithm, in a module of its own.
-- [ ] **BVAR and DSGE-VAR**, to be checked against Dynare's `+bvar` and `dsge_var`.
+  algorithm, in a module of its own. The module is `dsgelab.heterogeneous`: `HetBlock` for a
+  continuum of agents on one asset by a Markov chain, with Young's lottery and the fake-news
+  algorithm, `SimpleBlock` and `SolvedBlock` for the aggregates, and `BlockModel` for the steady
+  state with calibration, the general-equilibrium Jacobians, linear impulse responses and the
+  nonlinear transition by quasi-Newton. On sequence-jacobian 1.0.0's own Krusell–Smith and
+  one-asset HANK, from its notebooks at the v1.0.0 tag, on 7 by 500 points, the steady states
+  (unknowns, policies, distribution, aggregates) agree within 7.6e-10, the household Jacobians
+  within 2.5e-10, `G` within 1.7e-10 and the linear and nonlinear impulse responses within 1.9e-10,
+  relative to the largest value compared, with both packages' iterations tightened to 1e-12. The
+  fake-news Jacobians agree with the brute-force ones within 4.1e-8, and Krusell–Smith's nonlinear
+  transition approaches the linear response as the square of the shock. Two endogenous states, as
+  in the two-asset HANK, and Markov matrices that move along a path remain outside.
+- [x] **The rest of Dynare's figures**, added at the author's request: priors, trace plots, the
+  autocorrelation of the draws, Brooks and Gelman's convergence diagnostics, `mode_check`, the
+  smoother's shocks and variables, posterior IRFs with HPD bands, grouped and detailed shock
+  decompositions, conditional forecasts, OccBin, identification collinearity and the sensitivity
+  toolbox's filtering plots. On `fs2000.mod`, with Dynare's own figures recorded as they are drawn
+  and compared on the same draws, the Brooks and Gelman statistics agree within 8e-14, the
+  autocorrelations within 3e-15, the `mode_check` kernels within 6e-11 where the prior is bounded,
+  and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
+  The identification-strength bars, which need the information matrix, the annualised and vintage
+  shock decompositions and the bands of conditional forecasts are left out.
+- [x] **BVAR and DSGE-VAR**, checked against Dynare's `+bvar` and `dsge_var`. `bvar` and
+  `bvar_density` build the VAR with the Sims–Zha (1998) dummy-observation prior as Dynare's
+  `bvar_density` does, with its hyperparameters and training sample, and `BVAR.forecast` draws
+  as `bvar_forecast` does. `EstimationProblem(dsge_var=...)` gives the likelihood of the
+  DSGE-VAR of Del Negro and Schorfheide (2004), with the weight fixed or estimated as
+  `dsge_prior_weight`, for the mode and the samplers. Validated against Dynare 7.2's
+  `tests/bvar_a_la_sims` and `tests/dsge-var` (3 November 2026). On lag lengths 1 to 2 and
+  1 to 8, the priors and posteriors agree within 1.8e-14, relative, and the log marginal
+  densities within 1.8e-12. With the normal draws Octave took, the 3002 simulated forecast paths
+  agree within 2.1e-16, draw by draw. In the two DSGE-VAR tests, with `lambda = 0.8` and with
+  `lambda` estimated, the log posterior agrees within 4.9e-12 at 11 points, and `dsgelab`'s
+  posterior mode has a kernel at least as high as Dynare's, within 1e-4 posterior standard
+  deviations of it. Both hold with `T` counted as Dynare 7.2 counts it, the 90 rows of the VAR
+  plus its 4 initial observations. `dsgelab`'s `T` is the number of rows, the one under which
+  the likelihood equals the product of the VAR's one-step predictive densities, a check in the
+  suite. With it the mode moves by up to 0.39 posterior standard deviations, and the estimated
+  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) are
+  left out.
 
 ### 1.0
 

@@ -1,0 +1,8 @@
+# The environment in which statsmodels runs Hamilton's filter for compare_kim.py. These are the
+# versions resolved on 3 November 2026, frozen so that the reference does not move.
+statsmodels==0.14.4
+numpy==2.1.3
+scipy==1.14.1
+pandas==2.2.3
+patsy==1.0.1
+packaging==24.2

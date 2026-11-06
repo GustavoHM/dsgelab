@@ -21,7 +21,9 @@ function (Fischer, 1992), in the box form of Billups (1995), which is smooth whe
 solution is not exactly at a bound with a zero residual.
 
 The policy is interpolated between the grid points, linearly or by a natural cubic spline along
-each axis, and extrapolated linearly from the ends of the grid in both cases.
+each axis, and extrapolated linearly from the ends of the grid in both cases. On a
+:class:`SmolyakGrid` it is the grid's polynomial instead, which takes more than three continuous
+states.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from numpy.typing import ArrayLike
 
 from .markov import MarkovChain
 from .model import Covariance, Model, Params, Point, VarView
+from .smolyak import SmolyakGrid
 from .solution import shock_covariance
 
 __all__ = ["CartesianGrid", "TimeIterationSolution", "time_iteration"]
@@ -202,7 +205,7 @@ class TimeIterationSolution:
 
     model: Model
     params: Params
-    grid: CartesianGrid
+    grid: CartesianGrid | SmolyakGrid
     chain: MarkovChain | None
     markov_states: list[str]
     values: np.ndarray                 # (n_nodes, grid.n, n_jumps)
@@ -298,11 +301,12 @@ class TimeIterationSolution:
         return {"states": states, "jumps": jumps, "nodes": path}
 
 
-def time_iteration(model: Model, params: Params, *, grid: CartesianGrid | Mapping[str, Any],
+def time_iteration(model: Model, params: Params, *,
+                   grid: CartesianGrid | SmolyakGrid | Mapping[str, Any],
                    markov: Mapping[str, MarkovChain] | None = None, cov: Covariance = None,
                    n_quad: int = 5, quadrature: tuple[ArrayLike, ArrayLike] | None = None,
                    bounds: Mapping[str, tuple[Bound, Bound]] | None = None,
-                   interpolation: str = "linear",
+                   interpolation: str | None = None,
                    initial: Any = None, guess: Point | None = None, steady: Any = None,
                    positive: Sequence[str] = (), tol: float = 1e-8, max_iter: int = 1000,
                    inner_tol: float = 1e-12, inner_max_iter: int = 50) -> TimeIterationSolution:
@@ -311,8 +315,8 @@ def time_iteration(model: Model, params: Params, *, grid: CartesianGrid | Mappin
     Parameters
     ----------
     grid :
-        A :class:`CartesianGrid` of the continuous states, or the mapping that builds one. Every
-        state not given by a Markov chain needs an axis.
+        A :class:`CartesianGrid` of the continuous states, or the mapping that builds one, or a
+        :class:`SmolyakGrid`. Every state not given by a Markov chain needs an axis.
     markov :
         Exogenous states given by Markov chains, by name; the chain's nodes are the state's values
         in levels. Several chains are taken as independent.
@@ -325,7 +329,9 @@ def time_iteration(model: Model, params: Params, *, grid: CartesianGrid | Mappin
         ``{jump: (lower, upper)}``, each bound a number, ``None``, or a function of today's states
         and the parameters. The equilibrium condition in the jump's position is its complement.
     interpolation :
-        ``"linear"`` or ``"cubic"`` (a natural spline along each axis).
+        ``"linear"`` (the default) or ``"cubic"`` (a natural spline along each axis), on a
+        :class:`CartesianGrid`. A :class:`SmolyakGrid` interpolates by its own polynomial and
+        takes no value here.
     initial :
         The policy the iteration starts from: a :class:`TimeIterationSolution` (to refine on a new
         grid), ``initial(states, params)`` returning the jumps in model order, or a mapping from
@@ -334,8 +340,15 @@ def time_iteration(model: Model, params: Params, *, grid: CartesianGrid | Mappin
     tol :
         The iteration stops when no control moves by more than ``tol`` at any grid point.
     """
-    if not isinstance(grid, CartesianGrid):
-        grid = CartesianGrid(grid)
+    if isinstance(grid, SmolyakGrid):
+        if interpolation is not None:
+            raise ValueError("a SmolyakGrid interpolates by its own polynomial; leave "
+                             "interpolation unset")
+        interpolation = "smolyak"
+    else:
+        if not isinstance(grid, CartesianGrid):
+            grid = CartesianGrid(grid)
+        interpolation = "linear" if interpolation is None else interpolation
     pb = _Problem(model, params, grid, dict(markov or {}), cov, n_quad, quadrature,
                   dict(bounds or {}), interpolation)
     U = pb.initial_policy(initial, guess, steady, positive)
@@ -371,7 +384,8 @@ class _Problem:
                  interpolation):
         self.model, self.params, self.grid = model, params, grid
         self.kind = interpolation
-        if interpolation not in ("linear", "cubic"):
+        if interpolation not in ("linear", "cubic") and not (
+                interpolation == "smolyak" and isinstance(grid, SmolyakGrid)):
             raise ValueError(f"interpolation must be 'linear' or 'cubic', not {interpolation!r}")
         if model.n_jumps == 0:
             raise ValueError("time iteration needs at least one jump: a model with no control "

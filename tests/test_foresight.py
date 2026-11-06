@@ -62,3 +62,29 @@ def test_boundary_conditions_are_counted_correctly():
     assert path["k"][0] == pytest.approx(k0, rel=1e-14)
     assert path["a"][0] == pytest.approx(1.0, rel=1e-14)
     assert path["c"][-1] == pytest.approx(ss["c"], rel=1e-9)
+
+
+def test_a_failing_residual_is_located_on_the_path():
+    """An exception from the model's own code names the date and the iterate it failed at.
+
+    A residual that solves an inner problem -- a SAM period equilibrium, say --
+    fails at one date; without the note the caller sees only its own message.
+    """
+    from dsgelab.examples.rbc import _equations
+
+    model, p, guess = rbc.build()
+    ss = dsg.steady_state(model, guess, p)
+
+    def equations(nxt, cur, eps, params, ctx):
+        if ctx == 7:
+            raise ValueError("inner solve failed")
+        return _equations(nxt, cur, eps, params)
+
+    fragile = dsg.Model(states=["k", "a"], jumps=["c"], shocks=["eps_a"], equations=equations)
+    with pytest.raises(ValueError, match="inner solve failed") as info:
+        dsg.perfect_foresight(fragile, ss, ss, params=p, ctx=lambda t: t, T=20,
+                              initial_states=[0.9 * ss["k"], 1.0])
+    note = "\n".join(info.value.__notes__)
+    assert "residuals raised in the equations linking date 7 to date 8" in note
+    assert "Newton iteration 0" in note
+    assert f"k={ss['k']:.6g}" in note and "c=" in note
