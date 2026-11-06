@@ -48,7 +48,8 @@ import numpy as np
 import scipy.sparse as sp
 
 import dsgelab as dsg
-from dsgelab import BlockModel, HetBlock, interpolate_rows, log_grid, simple
+from dsgelab import (BlockModel, HetBlock, SimpleBlock, SolvedBlock, interpolate_rows, log_grid,
+                     simple)
 from dsgelab.heterogeneous import _Lottery
 
 HERE = Path(__file__).resolve().parent
@@ -279,6 +280,227 @@ def labor_search():
         return A - B
 
     return hh, BlockModel([hh, bond_market], name="Labor search")
+
+
+def get_Psi_and_deriv(ap, a, ra, chi0, chi1, chi2):
+    """The adjustment cost Psi(ap, a) and its derivatives with respect to ap and to a, as
+    hetblocks.hh_twoasset writes them."""
+    a_with_return = (1 + ra) * a
+    a_change = ap - a_with_return
+    abs_a_change = np.abs(a_change)
+    sign_change = np.sign(a_change)
+    adj_denominator = a_with_return + chi0
+    core_factor = (abs_a_change / adj_denominator) ** (chi2 - 1)
+    Psi = chi1 / chi2 * abs_a_change * core_factor
+    Psi1 = chi1 * sign_change * core_factor
+    Psi2 = -(1 + ra) * (Psi1 + (chi2 - 1) * Psi / adj_denominator)
+    return Psi, Psi1, Psi2
+
+
+def lhs_equals_rhs(lhs, rhs):
+    """For each j, the bracket of the first i at which lhs[..., i] falls below rhs[i, j], and the
+    weight on its lower point that makes the two equal by linear interpolation: the result of
+    hh_twoasset's lhs_equals_rhs_interpolate, written for numpy. Where lhs starts below rhs, the
+    index is 0 and the weight 1, and where it never falls below, the last bracket extrapolates."""
+    n = rhs.shape[0]
+    below = lhs[..., :, None] < rhs                       # (..., i, j)
+    first = np.where(below.any(axis=-2), below.argmax(axis=-2), n - 1)
+    lower = np.maximum(first - 1, 0)
+    j = np.arange(rhs.shape[1])
+    err_upper = rhs[first, j] - np.take_along_axis(lhs, first, axis=-1)
+    err_lower = rhs[lower, j] - np.take_along_axis(lhs, lower, axis=-1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pi = np.where(first == 0, 1.0, err_upper / (err_upper - err_lower))
+    return lower, pi
+
+
+def apply_coord(i, pi, y):
+    """pi y[i] + (1 - pi) y[i + 1] along the last axis, as sequence-jacobian's apply_coord."""
+    y = np.broadcast_to(y, i.shape[:-1] + y.shape[-1:])
+    return (pi * np.take_along_axis(y, i, axis=-1)
+            + (1 - pi) * np.take_along_axis(y, i + 1, axis=-1))
+
+
+def two_asset():
+    """The two-asset HANK of two_asset.ipynb, with the household of hetblocks.hh_twoasset
+    written again with numpy, and the aggregate blocks of examples.two_asset."""
+    def hh_init(b_grid, a_grid, z_grid, eis):
+        Va = ((0.6 + 1.1 * b_grid[:, np.newaxis] + a_grid) ** (-1 / eis)
+              * np.ones((z_grid.shape[0], 1, 1)))
+        Vb = ((0.5 + b_grid[:, np.newaxis] + 1.2 * a_grid) ** (-1 / eis)
+              * np.ones((z_grid.shape[0], 1, 1)))
+        return Va, Vb
+
+    def hh(Va_p, Vb_p, a_grid, b_grid, z_grid, e_grid, k_grid, beta, eis, rb, ra, chi0, chi1,
+           chi2, Psi1):
+        # the expected marginal values of the two assets, on the grid of (z, b', a')
+        Wb = beta * Vb_p
+        Wa = beta * Va_p
+        W_ratio = Wa / Wb
+        # unconstrained: a'(z, b', a) from W_ratio = 1 + Psi1(a', a), then b(z, b', a) from the
+        # budget, inverted to b'(z, b, a) and a'(z, b, a)
+        i, pi = lhs_equals_rhs(W_ratio, 1 + Psi1)
+        a_endo_unc = apply_coord(i, pi, a_grid)
+        c_endo_unc = apply_coord(i, pi, Wb) ** (-eis)
+        b_endo = (c_endo_unc + a_endo_unc
+                  + (-z_grid[:, None, None] + b_grid[:, None] - (1 + ra) * a_grid)
+                  + get_Psi_and_deriv(a_endo_unc, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+        a_unc = interpolate_rows(b_endo.swapaxes(1, 2), b_grid,
+                                 a_endo_unc.swapaxes(1, 2)).swapaxes(1, 2)
+        b_unc = interpolate_rows(b_endo.swapaxes(1, 2), b_grid, b_grid).swapaxes(1, 2)
+        # constrained at b' = b_grid[0], with kappa the multiplier of the liquid constraint
+        lhs_con = W_ratio[:, 0:1, :] / (1 + k_grid[np.newaxis, :, np.newaxis])
+        i, pi = lhs_equals_rhs(lhs_con, 1 + Psi1)
+        a_endo_con = apply_coord(i, pi, a_grid)
+        c_endo_con = ((1 + k_grid[np.newaxis, :, np.newaxis]) ** (-eis)
+                      * apply_coord(i, pi, Wb[:, 0:1, :]) ** (-eis))
+        b_endo = (c_endo_con + a_endo_con
+                  + (-z_grid[:, None, None] + b_grid[0] - (1 + ra) * a_grid)
+                  + get_Psi_and_deriv(a_endo_con, a_grid, ra, chi0, chi1, chi2)[0]) / (1 + rb)
+        a_con = interpolate_rows(b_endo.swapaxes(1, 2), b_grid,
+                                 a_endo_con.swapaxes(1, 2)).swapaxes(1, 2)
+        # the constrained solution where the unconstrained one goes below the liquid limit
+        a, b = a_unc.copy(), b_unc.copy()
+        b[b <= b_grid[0]] = b_grid[0]
+        a[b <= b_grid[0]] = a_con[b <= b_grid[0]]
+        Psi, _, Psi2 = get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)
+        c = (z_grid[:, None, None] + (1 + rb) * b_grid[:, None] + (1 + ra) * a_grid
+             - Psi - a - b)
+        uc = c ** (-1 / eis)
+        uce = e_grid[:, np.newaxis, np.newaxis] * uc
+        Va = (1 + ra - Psi2) * uc
+        Vb = (1 + rb) * uc
+        return Va, Vb, a, b, c, uce
+
+    def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
+        b_grid = log_grid(0.0, bmax, nB)
+        a_grid = log_grid(0.0, amax, nA)
+        k_grid = log_grid(0.0, kmax, nK)[::-1].copy()
+        e_grid, _, Pi = income_chain(rho_z, sigma_z, nZ)
+        return b_grid, a_grid, k_grid, e_grid, Pi
+
+    def income(e_grid, tax, w, N):
+        return (1 - tax) * w * N * e_grid
+
+    def marginal_cost_grid(a_grid, ra, chi0, chi1, chi2):
+        return get_Psi_and_deriv(a_grid[:, np.newaxis], a_grid[np.newaxis, :], ra, chi0, chi1,
+                                 chi2)[1]
+
+    def adjustment_costs(a, a_grid, ra, chi0, chi1, chi2):
+        return get_Psi_and_deriv(a, a_grid, ra, chi0, chi1, chi2)[0]
+
+    household = HetBlock(hh, ["Va", "Vb", "a", "b", "c", "uce"], backward=["Va", "Vb"],
+                         policy=["b", "a"], init=hh_init,
+                         hetinputs=[(make_grids, ["b_grid", "a_grid", "k_grid", "e_grid", "Pi"]),
+                                    (income, "z_grid"), (marginal_cost_grid, "Psi1")],
+                         hetoutputs=[(adjustment_costs, "chi")], backward_tol=BACKWARD_TOL,
+                         backward_max_iter=100_000, name="hh")
+
+    def nkpc_residual(pi, mc, r, Y, kappap, mup):
+        return (kappap * (mc - 1 / mup) + Y(+1) / Y * np.log(1 + pi(+1)) / (1 + r(+1))
+                - np.log(1 + pi))
+
+    pricing_solved = SolvedBlock(SimpleBlock(nkpc_residual, "nkpc"),
+                                 unknowns={"pi": (-0.1, 0.1)}, targets=["nkpc"],
+                                 name="pricing_solved")
+
+    @simple("equity")
+    def arbitrage(div, p, r):
+        return div(+1) + p(+1) - p * (1 + r(+1))
+
+    arbitrage_solved = SolvedBlock(arbitrage, unknowns={"p": (5, 15)}, targets=["equity"],
+                                   name="arbitrage_solved")
+
+    @simple("N", "mc")
+    def labor(Y, w, K, Z, alpha):
+        N = (Y / Z / K(-1) ** alpha) ** (1 / (1 - alpha))
+        mc = w * N / (1 - alpha) / Y
+        return N, mc
+
+    @simple("inv", "val")
+    def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
+        inv = (K / K(-1) - 1) / (delta * epsI) + 1 - Q
+        val = (alpha * Z(+1) * (N(+1) / K) ** (1 - alpha) * mc(+1)
+               - (K(+1) / K - (1 - delta) + (K(+1) / K - 1) ** 2 / (2 * delta * epsI))
+               + K(+1) / K * Q(+1) - (1 + r(+1)) * Q)
+        return inv, val
+
+    production_solved = SolvedBlock([labor, investment], unknowns={"Q": 1.0, "K": 10.0},
+                                    targets=["inv", "val"], name="production_solved")
+
+    @simple("psip", "I", "div")
+    def dividend(Y, w, N, K, pi, mup, kappap, delta, epsI):
+        psip = mup / (mup - 1) / 2 / kappap * np.log(1 + pi) ** 2 * Y
+        k_adjust = K(-1) * (K / K(-1) - 1) ** 2 / (2 * delta * epsI)
+        I = K - (1 - delta) * K(-1) + k_adjust
+        div = Y - w * N - I - psip
+        return psip, I, div
+
+    @simple("i")
+    def taylor(rstar, pi, phi):
+        return rstar + phi * pi
+
+    @simple("tax")
+    def fiscal(r, w, N, G, Bg):
+        return (r * Bg + G) / w / N
+
+    @simple("rb", "ra", "fisher")
+    def finance(i, p, pi, r, div, omega, pshare):
+        rb = r - omega
+        ra = pshare(-1) * (div + p) / p(-1) + (1 - pshare(-1)) * (1 + r) - 1
+        fisher = 1 + i(-1) - (1 + r) * (1 + pi)
+        return rb, ra, fisher
+
+    @simple("piw")
+    def wage(pi, w):
+        return (1 + pi) * w / w(-1) - 1
+
+    @simple("wnkpc")
+    def union(piw, N, tax, w, UCE, kappaw, muw, vphi, frisch, beta):
+        return (kappaw * (vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * N * UCE / muw)
+                + beta * np.log(1 + piw(+1)) - np.log(1 + piw))
+
+    @simple("asset_mkt", "wealth", "goods_mkt")
+    def mkt_clearing(p, A, B, Bg, C, I, G, CHI, psip, omega, Y):
+        wealth = A + B
+        asset_mkt = p + Bg - wealth
+        goods_mkt = C + I + G + CHI + psip + omega * B - Y
+        return asset_mkt, wealth, goods_mkt
+
+    @simple("pshare")
+    def share_value(p, tot_wealth, Bh):
+        return p / (tot_wealth - Bh)
+
+    @simple("p", "mc", "mup", "alpha", "Z", "w")
+    def partial_ss(Y, N, K, r, tot_wealth, Bg, delta):
+        p = tot_wealth - Bg
+        mc = 1 - r * (p - K) / Y
+        mup = 1 / mc
+        alpha = (r + delta) * K / Y / mc
+        Z = Y * K ** (-alpha) * N ** (alpha - 1)
+        w = mc * (1 - alpha) * Y / N
+        return p, mc, mup, alpha, Z, w
+
+    @simple("vphi", "wnkpc")
+    def union_ss(tax, w, UCE, N, muw, frisch):
+        vphi = (1 - tax) * w * UCE / muw / N ** (1 + 1 / frisch)
+        wnkpc = vphi * N ** (1 + 1 / frisch) - (1 - tax) * w * UCE / muw
+        return vphi, wnkpc
+
+    model = BlockModel([household, production_solved, pricing_solved, arbitrage_solved,
+                        dividend, taylor, fiscal, share_value, finance, wage, union,
+                        mkt_clearing], name="Two-Asset HANK")
+    model_ss = BlockModel([household, partial_ss, union_ss, dividend, taylor, fiscal,
+                           share_value, finance, mkt_clearing], name="Two-Asset HANK SS")
+    return household, model_ss, model
+
+
+def calibration_two_asset():
+    return {"Y": 1.0, "N": 1.0, "K": 10.0, "r": 0.0125, "rstar": 0.0125, "tot_wealth": 14,
+            "delta": 0.02, "pi": 0.0, "kappap": 0.1, "muw": 1.1, "Bh": 1.04, "Bg": 2.8,
+            "G": 0.2, "eis": 0.5, "frisch": 1.0, "chi0": 0.25, "chi2": 2, "epsI": 4,
+            "omega": 0.005, "kappaw": 0.1, "phi": 1.5, "nZ": 3, "nB": 50, "nA": 70, "nK": 50,
+            "bmax": 50, "amax": 4000, "kmax": 1, "rho_z": 0.966, "sigma_z": 0.92}
 
 
 # --- comparisons -----------------------------------------------------------------------------

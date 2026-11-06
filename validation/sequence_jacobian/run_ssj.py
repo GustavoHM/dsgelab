@@ -1,4 +1,4 @@
-"""run_ssj.py: sequence-jacobian on three of its own models, for compare_heterogeneous.py.
+"""run_ssj.py: sequence-jacobian on four of its own models, for compare_heterogeneous.py.
 
 Runs in the environment that setup.sh creates (Python 3.11, sequence-jacobian 1.0.0) and writes
 validation/out_heterogeneous/ssj.npz: for each model, the steady state (aggregates, policies,
@@ -19,13 +19,21 @@ general-equilibrium Jacobians, and the linear and nonlinear impulse responses of
         assets at the steady state, the interest rate as the unknown and the bond market as the
         target, a shock to s of 0.02 0.8^t, and the return to the steady state from the
         distribution of the steady state with s = 0.12 (ss_initial).
+  two   two_asset.ipynb: the two-asset HANK of Auclert, Bardoczy, Rognlie and Straub (2021), with
+        a liquid and an illiquid asset and a convex cost of adjusting the illiquid one, on 3
+        income states by 50 liquid by 70 illiquid points; the steady state solved for beta and
+        chi1; r, w and Y as the unknowns and asset market clearing, the Fisher equation and the
+        wage Phillips curve as the targets; a shock to rstar of -0.0025 0.6^t.
 
-The model code below is copied from the three notebooks at sequence-jacobian's v1.0.0 tag, which
+The model code below is copied from the four notebooks at sequence-jacobian's v1.0.0 tag, which
 setup.sh downloads, and the script checks that each piece appears in them verbatim before running
-it. The household of the HANK model, hetblocks.hh_labor.hh, is part of the package. Two settings
-differ from the notebooks: the household's backward iteration stops at 1e-12 instead of 1e-8 and
-its forward iteration at 1e-14 instead of 1e-10, so that the steady state is close enough to its
-fixed point for the comparison, and the nonlinear transitions stop at 1e-11 instead of 1e-8.
+it. The households of the two HANK models, hetblocks.hh_labor.hh and hetblocks.hh_twoasset.hh, and
+the aggregate blocks of the two-asset model, examples.two_asset, are part of the package. Some
+settings differ from the notebooks: the household's backward iteration stops at 1e-12 instead of
+1e-8 and its forward iteration at 1e-14 instead of 1e-10, so that the steady state is close
+enough to its fixed point for the comparison, and the nonlinear transitions stop at 1e-11 instead
+of 1e-8. In the two-asset model, the steady state is solved by hybr instead of broyden_custom,
+and the solved blocks' own transitions stop at 1e-12.
 
 Usage:  validation/sequence_jacobian/.venv/bin/python validation/sequence_jacobian/run_ssj.py
 """
@@ -46,7 +54,7 @@ NONLINEAR_TOL = 1e-11
 
 PREAMBLE = """
 import numpy as np
-from sequence_jacobian import het, simple, create_model
+from sequence_jacobian import het, simple, solved, combine, create_model
 from sequence_jacobian import interpolate, grids, misc, hetblocks
 """
 
@@ -245,6 +253,86 @@ def bond_market(A, B):
 ls = create_model([hh, bond_market], name="Labor search")
 '''
 
+TWO_ASSET_CELLS = [
+r'''@solved(unknowns={'pi': (-0.1, 0.1)}, targets=['nkpc'], solver="brentq")
+def pricing_solved(pi, mc, r, Y, kappap, mup):
+    nkpc = kappap * (mc - 1/mup) + Y(+1) / Y * (1 + pi(+1)).apply(np.log) / \
+           (1 + r(+1)) - (1 + pi).apply(np.log)
+    return nkpc''',
+r'''@solved(unknowns={'p': (5, 15)}, targets=['equity'], solver="brentq")
+def arbitrage_solved(div, p, r):
+    equity = div(+1) + p(+1) - p * (1 + r(+1))
+    return equity''',
+r'''@simple
+def labor(Y, w, K, Z, alpha):
+    N = (Y / Z / K(-1) ** alpha) ** (1 / (1 - alpha))
+    mc = w * N / (1 - alpha) / Y
+    return N, mc
+
+
+@simple
+def investment(Q, K, r, N, mc, Z, delta, epsI, alpha):
+    inv = (K / K(-1) - 1) / (delta * epsI) + 1 - Q
+    val = alpha * Z(+1) * (N(+1) / K) ** (1 - alpha) * mc(+1) -\
+        (K(+1) / K - (1 - delta) + (K(+1) / K - 1) ** 2 / (2 * delta * epsI)) +\
+        K(+1) / K * Q(+1) - (1 + r(+1)) * Q
+    return inv, val
+
+
+production = combine([labor, investment])                              # create combined block
+production_solved = production.solved(unknowns={'Q': 1., 'K': 10.},    # turn it into solved block
+                                      targets=['inv', 'val'],
+                                      solver='broyden_custom')''',
+r'''def make_grids(bmax, amax, kmax, nB, nA, nK, nZ, rho_z, sigma_z):
+    b_grid = grids.agrid(amax=bmax, n=nB)
+    a_grid = grids.agrid(amax=amax, n=nA)
+    k_grid = grids.agrid(amax=kmax, n=nK)[::-1].copy()
+    e_grid, _, Pi = grids.markov_rouwenhorst(rho=rho_z, sigma=sigma_z, N=nZ)
+    return b_grid, a_grid, k_grid, e_grid, Pi
+
+
+def income(e_grid, tax, w, N):
+    z_grid = (1 - tax) * w * N * e_grid
+    return z_grid
+
+hh = hetblocks.hh_twoasset.hh
+hh_ext = hh.add_hetinputs([income, make_grids])''',
+r'''import sequence_jacobian.examples.two_asset as m
+
+blocks = [hh_ext, production_solved, pricing_solved, arbitrage_solved,
+          m.dividend, m.taylor, m.fiscal, m.share_value,
+          m.finance, m.wage, m.union, m.mkt_clearing]
+
+hank = create_model(blocks, name='Two-Asset HANK')''',
+r'''blocks_ss = [hh_ext, m.partial_ss, m.union_ss,
+             m.dividend, m.taylor, m.fiscal, m.share_value, m.finance, m.mkt_clearing]
+
+hank_ss = create_model(blocks_ss, name='Two-Asset HANK SS')''',
+r'''calibration = {'Y': 1., 'N': 1.0, 'K': 10., 'r': 0.0125, 'rstar': 0.0125, 'tot_wealth': 14,
+               'delta': 0.02, 'pi': 0., 'kappap': 0.1, 'muw': 1.1, 'Bh': 1.04, 'Bg': 2.8,
+               'G': 0.2, 'eis': 0.5, 'frisch': 1., 'chi0': 0.25, 'chi2': 2, 'epsI': 4,
+               'omega': 0.005, 'kappaw': 0.1, 'phi': 1.5, 'nZ': 3, 'nB': 50, 'nA': 70, 'nK': 50,
+               'bmax': 50, 'amax': 4000, 'kmax': 1, 'rho_z': 0.966, 'sigma_z': 0.92}
+
+unknowns_ss = {'beta': 0.976, 'chi1': 6.5}
+targets_ss = {'asset_mkt': 0., 'B': 'Bh'}''',
+r'''exogenous = ['rstar', 'Z', 'G']
+unknowns = ['r', 'w', 'Y']
+targets = ['asset_mkt', 'fisher', 'wnkpc']''',
+]
+
+
+# what the two-asset model saves: aggregates, the household's internals, the outputs of G and the
+# variables of the impulse responses
+TWO_SS = ["beta", "chi1", "vphi", "mup", "alpha", "Z", "w", "p", "mc", "pi", "Q", "ra", "rb",
+          "tax", "div", "I", "psip", "pshare", "A", "B", "C", "UCE", "CHI", "wealth",
+          "asset_mkt", "goods_mkt", "wnkpc", "fisher", "nkpc", "equity", "inv", "val"]
+TWO_INTERNALS = ["a", "b", "c", "uce", "chi", "Va", "Vb", "D", "Dbeg", "a_grid", "b_grid",
+                 "k_grid", "e_grid", "z_grid", "Pi", "Psi1"]
+TWO_G = ["r", "w", "Y", "pi", "p", "K", "Q", "N", "mc", "I", "div", "ra", "rb", "tax", "A",
+         "B", "C", "CHI", "goods_mkt"]
+TWO_IRF = ["r", "w", "Y", "pi", "p", "K", "N", "I", "ra", "rb", "A", "B", "C", "div"]
+
 
 def notebook_code(name: str) -> str:
     cells = json.loads((HERE / "notebooks" / name).read_text())["cells"]
@@ -390,6 +478,42 @@ def main() -> None:
                                       tol=NONLINEAR_TOL, maxit=50, verbose=False,
                                       ss_initial=ss_initial)
     save(out, "ls/from_initial", {k: back[k] for k in names})
+
+    ns = load("two_asset.ipynb", TWO_ASSET_CELLS)
+    hank_ss, hank, hh = ns["hank_ss"], ns["hank"], ns["hh_ext"]
+    # SolvedBlock._steady_state passes its options where solve_steady_state takes dissolve, so
+    # options cannot reach the household through the solved blocks: they become its defaults
+    for model in (hank_ss, hank):
+        model["hh"].steady_state_options = {**model["hh"].steady_state_options,
+                                            "backward_tol": BACKWARD_TOL,
+                                            "forward_tol": FORWARD_TOL,
+                                            "backward_maxit": 100_000, "forward_maxit": 1_000_000}
+    t0 = time.perf_counter()
+    cali = hank_ss.solve_steady_state(ns["calibration"], ns["unknowns_ss"], ns["targets_ss"],
+                                      solver="hybr")
+    ss = hank.steady_state(cali)
+    times["two steady state"] = time.perf_counter() - t0
+    save(out, "two/ss", {k: ss[k] for k in TWO_SS})
+    save(out, "two/internals", {k: ss.internals["hh"][k] for k in TWO_INTERNALS})
+    inputs, outputs = ["N", "ra", "rb", "tax", "w"], ["A", "B", "C", "UCE", "CHI"]
+    t0 = time.perf_counter()
+    save(out, "two/J", jacobians(hh, ss, inputs, outputs))
+    times["two household Jacobians"] = time.perf_counter() - t0
+    save(out, "two/J2", jacobians(hh, ss, inputs, outputs, twosided=True))
+    unknowns, targets = ns["unknowns"], ns["targets"]
+    t0 = time.perf_counter()
+    save(out, "two/G", ge(hank, ss, unknowns, targets, ns["exogenous"], TWO_G))
+    times["two G"] = time.perf_counter() - t0
+    shock = {"rstar": -0.0025 * 0.6 ** np.arange(T)}
+    lin = hank.solve_impulse_linear(ss, unknowns, targets, shock)
+    inner = {k: {"verbose": False, "tol": 1e-12} for k in
+             ["pricing_solved", "arbitrage_solved", "labor_to_investment_combined_solved"]}
+    t0 = time.perf_counter()
+    nonlin = hank.solve_impulse_nonlinear(ss, unknowns, targets, shock, tol=NONLINEAR_TOL,
+                                          maxit=50, verbose=False, options=inner)
+    times["two nonlinear"] = time.perf_counter() - t0
+    save(out, "two/linear", {k: lin[k] for k in TWO_IRF})
+    save(out, "two/nonlinear", {k: nonlin[k] for k in TWO_IRF})
 
     np.savez_compressed(OUT / "ssj.npz", **out)
     from importlib.metadata import version
