@@ -31,7 +31,7 @@ from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, diagnose, steady_state_invariance)
 from .bgp import BalancedGrowth, balanced_growth
-from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density
+from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density, dsge_var_irf
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .identification import Identification, IdentificationCheck, identification
 from .irf_matching import IRFMatchingResult, irf_matching
@@ -134,7 +134,7 @@ __all__ = [
     "plot_filtering", "brooks_gelman", "BrooksGelman", "mh_autocorrelation", "mode_check",
     "posterior_irf",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
-    "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart",
+    "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart", "dsge_var_irf",
     "prior", "Prior",
     "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",

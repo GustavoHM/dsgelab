@@ -26,19 +26,28 @@ with ``dsge_var=`` (the weight ``lambda``) or with ``"dsge_prior_weight"`` among
 estimated names, as in Dynare's ``estimation(dsge_var=...)``. The helpers at the end
 of this module compute the model's moments and the likelihood concentrated over the
 VAR's parameters, formula (A.2) of Del Negro and Schorfheide (2004).
+
+Impulse responses come from draws of the posterior. :meth:`BVAR.irf` is Dynare's
+``bvar_irf``, with the impulses identified by the Cholesky factor or the symmetric
+square root of each draw of ``Sigma``. :func:`dsge_var_irf` is Dynare's
+``bayesian_irf`` with ``dsge_var``: the VAR's impulses are rotated so that, at the
+model's parameters, they reproduce the model's impact matrix (Del Negro and
+Schorfheide, 2004, section 2.4). Both return the statistics in the layout of
+:func:`~dsgelab.posterior_irf`, which :func:`~dsgelab.plot_posterior_irf` draws.
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike
 from scipy.special import gammaln
 
-__all__ = ["NormalInverseWishart", "BVAR", "BVARForecast", "bvar", "bvar_density"]
+__all__ = ["NormalInverseWishart", "BVAR", "BVARForecast", "bvar", "bvar_density",
+           "dsge_var_irf"]
 
 _LOG2PI = math.log(2.0 * math.pi)
 
@@ -134,6 +143,65 @@ class NormalInverseWishart:
         return Phis, Sigmas
 
 
+# ======================================================== impulse responses
+def _companion(Phi: np.ndarray, n: int, lags: int) -> np.ndarray:
+    """The companion matrix of the VAR whose coefficients are ``Phi``."""
+    C = np.zeros((n * lags, n * lags))
+    C[:n] = Phi[:n * lags].T
+    C[n:, :-n] = np.eye(n * (lags - 1))
+    return C
+
+
+def _responses(Phi: np.ndarray, impact: np.ndarray, lags: int, periods: int) -> np.ndarray:
+    """``(periods, n, shocks)``: ``Psi_h B``, the VAR's responses to the impulses ``B``.
+
+    ``Psi_0 = I`` and ``Psi_h = sum_l A_l Psi_{h-l}``, with ``A_l`` the matrix of
+    lag ``l`` in ``Phi``. Period 0 is the impact.
+    """
+    n = impact.shape[0]
+    A = [Phi[l * n:(l + 1) * n].T for l in range(lags)]
+    out = np.zeros((periods, n, impact.shape[1]))
+    out[0] = impact
+    for h in range(1, periods):
+        for l in range(min(h, lags)):
+            out[h] += A[l] @ out[h - 1 - l]
+    return out
+
+
+def _irf_statistics(S: np.ndarray, variables: Sequence[str], shocks: Sequence[str],
+                    mass: float, ddof: int) -> dict:
+    """The statistics of the responses ``S``, ``(draws, periods, variables, shocks)``.
+
+    Mean, median, variance, the HPD interval holding ``mass`` and the deciles, as
+    Dynare's ``posterior_moments``, in the layout of :func:`~dsgelab.posterior_irf`:
+    ``{statistic: {shock: {variable: path}}}``.
+    """
+    from .plots import _posterior_moments
+    st = _posterior_moments(S, mass)
+    st["variance"] = S.var(axis=0, ddof=ddof)
+    out: dict[str, Any] = {key: {e: {v: st[key][:, i, j] for i, v in enumerate(variables)}
+                                 for j, e in enumerate(shocks)}
+                           for key in ("mean", "median", "variance", "lower", "upper",
+                                       "deciles")}
+    out["responses"] = {e: {v: S[:, :, i, j] for i, v in enumerate(variables)}
+                        for j, e in enumerate(shocks)}
+    out["draws"], out["mass"] = len(S), mass
+    return out
+
+
+def _identify(Sigma: np.ndarray, identification: str | Callable) -> np.ndarray:
+    """The impact matrix ``B`` of the orthogonal impulses, with ``B B' = Sigma``."""
+    if callable(identification):
+        return np.asarray(identification(Sigma), dtype=float)
+    how = str(identification).lower()
+    if how == "cholesky":
+        return np.linalg.cholesky(Sigma)
+    if how == "squareroot":
+        w, V = np.linalg.eigh(Sigma)
+        return (V * np.sqrt(np.maximum(w, 0.0))) @ V.T
+    raise ValueError("identification must be 'Cholesky', 'SquareRoot' or a callable")
+
+
 # ========================================================================= BVAR
 @dataclass
 class BVARForecast:
@@ -208,11 +276,7 @@ class BVAR:
         return self.posterior.Phi[-1].copy() if self.constant else np.zeros(len(self.names))
 
     def _companion(self, Phi: np.ndarray) -> np.ndarray:
-        n, p = len(self.names), self.lags
-        C = np.zeros((n * p, n * p))
-        C[:n] = Phi[:n * p].T
-        C[n:, :-n] = np.eye(n * (p - 1))
-        return C
+        return _companion(Phi, len(self.names), self.lags)
 
     def _step(self, history: np.ndarray, Phi: np.ndarray) -> np.ndarray:
         """``x' Phi`` with ``history`` the last ``lags`` values, the oldest first."""
@@ -263,6 +327,65 @@ class BVAR:
                             point={v: point[:, i] for i, v in enumerate(self.names)},
                             paths=paths, paths_no_shock=still, coverage=coverage,
                             explosive=explosive / draws if draws else float("nan"))
+
+    def irf(self, periods: int = 40, draws: int = 2000, *,
+            identification: str | Callable = "Cholesky", seed: Any = 0, coverage: float = 0.6,
+            mass: float = 0.9) -> dict:
+        """Impulse responses over draws from the posterior, Dynare's ``bvar_irf``.
+
+        Each of ``draws`` draws takes ``(Phi, Sigma)`` from the posterior, as
+        :meth:`forecast` does, and computes the responses ``Psi_h B`` for
+        ``h = 0..periods - 1``, period 0 being the impact. ``B`` is the impact
+        matrix of the orthogonal impulses, ``B B' = Sigma``: the lower Cholesky
+        factor (``"Cholesky"``, with the variables in the order of ``names``), the
+        symmetric square root (``"SquareRoot"``), or what a callable
+        ``identification(Sigma)`` returns. Impulse ``j`` is named after the
+        ``j``-th variable, as in Dynare. Explosive draws are kept and counted, as
+        Dynare counts them. ``seed`` is a seed or a numpy ``Generator``.
+
+        Returns, as :func:`~dsgelab.posterior_irf` does, ``{"mean": {shock:
+        {variable: path}}, "median", "variance", "lower", "upper", "deciles",
+        "responses", "draws", "mass"}``, with ``lower`` and ``upper`` the HPD
+        interval holding ``mass``, and also ``"lower_bound"`` and
+        ``"upper_bound"``, the central band holding ``coverage`` (Dynare's
+        ``bvar.conf_sig``), and ``"explosive"``, the share of explosive draws. The
+        median, the variance and the two bounds are those of Dynare's
+        ``oo_.bvar.irf``: the draws ranked ``round(N / 2)`` and ``round((1 -+
+        coverage) N / 2)`` of ``N``, and the variance with divisor ``N``.
+
+        Dynare 7.2 takes the rows of ``B`` as the impulses, and stores the
+        response of variable ``i`` to impulse ``j`` under
+        ``oo_.bvar.irf.Mean.(j).(i)``. With the symmetric square root its numbers
+        are these, with the field names in the order shock, variable. With
+        ``"Cholesky"``, its impulses have
+        covariance ``L'L`` rather than ``Sigma``, and
+        ``identification=lambda S: np.linalg.cholesky(S).T`` reproduces them.
+        """
+        from .plots import _round
+        if periods < 1 or draws < 1:
+            raise ValueError("periods and draws must be positive")
+        if not 0 < coverage < 1:
+            raise ValueError("coverage must lie between 0 and 1")
+        rng = _generator(seed)
+        post = self.posterior
+        S_inv_chol = np.linalg.cholesky(np.linalg.inv(post.S))
+        XXi_chol = np.linalg.cholesky(post.XXi)
+        n = len(self.names)
+        stock = np.empty((draws, periods, n, n))
+        explosive = 0
+        for d in range(draws):
+            Phi, Sigma = post._draw(rng, S_inv_chol, XXi_chol)
+            if np.any(np.abs(np.linalg.eigvals(self._companion(Phi))) > 1.0000000000001):
+                explosive += 1
+            stock[d] = _responses(Phi, _identify(Sigma, identification), self.lags, periods)
+        out = _irf_statistics(stock, self.names, self.names, mass, ddof=0)
+        ranked = np.sort(stock, axis=0)
+        pick = [max(_round((0.5 + c / 2) * draws), 1) - 1 for c in (-coverage, coverage, 0.0)]
+        for key, i in (("lower_bound", pick[0]), ("upper_bound", pick[1]), ("median", pick[2])):
+            out[key] = {e: {v: ranked[i, :, a, b] for a, v in enumerate(self.names)}
+                        for b, e in enumerate(self.names)}
+        out["coverage"], out["explosive"] = coverage, explosive / draws
+        return out
 
     def rmse(self) -> dict:
         """RMSE of the forecast at the posterior mean over ``realized``, as Dynare prints it."""
@@ -561,3 +684,83 @@ def _dsge_var_posterior(population: tuple, sample: tuple, nobs: int,
     Phi = XXi @ B.T
     return NormalInverseWishart(Phi=Phi, XXi=XXi, S=lT * GYY + mYY - B @ Phi,
                                 df=(1 + float(weight)) * nobs - k)
+
+
+def dsge_var_irf(problem: Any, draws: Any, *, periods: int = 40, n_draws: int | None = 1200,
+                 mass: float = 0.9, seed: Any = 0, max_tries: int = 1000) -> dict:
+    """The DSGE-VAR's impulse responses over its posterior, Dynare's ``bayesian_irf``.
+
+    ``problem`` is an :class:`~dsgelab.EstimationProblem` with ``dsge_var`` (or
+    with ``dsge_prior_weight`` estimated) and as many shocks as observables.
+    ``draws`` are the model's parameters, an :class:`~dsgelab.MCMCResult` or a
+    ``(draws, parameters)`` array, of which ``n_draws`` are taken at random (all
+    of them, in order, when ``n_draws`` is None or not smaller). At each
+    ``theta`` one ``(Phi, Sigma)`` is drawn from the VAR's posterior,
+    :meth:`~dsgelab.EstimationProblem.dsge_var_posterior`, and drawn again while
+    the VAR is explosive (a root of modulus above ``1 + 1e-9``, as in Dynare), up
+    to ``max_tries`` times. The impulses are identified as in Del Negro and
+    Schorfheide (2004, section 2.4). With ``A0`` the model's impact matrix on the
+    observables at ``theta``, for one standard deviation of each shock, and
+    ``A0' = Q R`` its QR decomposition with the diagonal of ``R`` positive, the
+    VAR's impact matrix is ``chol(Sigma) Q'``, which equals ``A0`` when
+    ``Sigma = A0 A0'``. The responses ``Psi_h chol(Sigma) Q'``, ``h =
+    0..periods - 1``, are in the units of the data, one per model shock and
+    observable. Draws at which the model cannot be solved are left out.
+    ``seed`` is a seed or a numpy ``Generator``.
+
+    Returns what :func:`~dsgelab.posterior_irf` returns, with the statistics of
+    Dynare's ``posterior_moments`` (``oo_.PosteriorIRF.bvardsge``): ``{"mean":
+    {shock: {variable: path}}, "median", "variance", "lower", "upper",
+    "deciles", "responses", "draws", "mass"}``, with ``lower`` and ``upper`` the
+    HPD interval holding ``mass``, and also ``"explosive"``, the share of the
+    VAR's draws that were explosive and drawn again.
+
+    Dynare 7.2 draws ``Sigma`` with ``floor((1 + lambda) T) - k`` degrees of
+    freedom, to use its sampler for whole numbers, and takes the elementwise
+    square root of the shock covariance in ``A0``. Here the degrees of freedom
+    are the posterior's, ``(1 + lambda) T - k``, and ``A0`` takes the Cholesky
+    factor, which is the same when the shocks are uncorrelated.
+    """
+    if not getattr(problem, "is_dsge_var", False):
+        raise ValueError("dsge_var_irf needs an EstimationProblem with dsge_var")
+    X = np.atleast_2d(np.asarray(draws.draws if hasattr(draws, "draws") else draws, dtype=float))
+    rng = _generator(seed)
+    if n_draws is not None and n_draws < len(X):
+        X = X[rng.choice(len(X), size=n_draws, replace=False)]
+    p = int(problem.dsge_varlag)
+    variables = list(problem.observables)
+    n = len(variables)
+    stock, shocks, tries = [], None, 0
+    for x in X:
+        try:
+            _, space = problem.solve(x)
+            post = problem.dsge_var_posterior(x)
+        except Exception:
+            continue
+        if len(space.shocks) != n:
+            raise ValueError(f"{len(space.shocks)} shocks for {n} observables: the rotation of "
+                             f"a DSGE-VAR needs as many shocks as observables")
+        shocks = list(space.shocks)
+        Se = np.asarray(space.Sigma, dtype=float)
+        if np.count_nonzero(Se - np.diag(np.diag(Se))) == 0:
+            chol_e = np.diag(np.sqrt(np.diag(Se)))
+        else:
+            chol_e = np.linalg.cholesky(Se)
+        Q, R = np.linalg.qr((space.Z @ space.R @ chol_e).T)
+        Q = Q * np.where(np.diag(R) < 0, -1.0, 1.0)
+        S_inv_chol = np.linalg.cholesky(np.linalg.inv(post.S))
+        XXi_chol = np.linalg.cholesky(post.XXi)
+        for _ in range(max_tries):
+            tries += 1
+            Phi, Sigma = post._draw(rng, S_inv_chol, XXi_chol)
+            if not np.any(np.abs(np.linalg.eigvals(_companion(Phi, n, p))) > 1.000000001):
+                break
+        else:
+            raise RuntimeError(f"{max_tries} draws of the VAR in a row were explosive")
+        stock.append(_responses(Phi, np.linalg.cholesky(Sigma) @ Q.T, p, periods))
+    if not stock:
+        raise RuntimeError("no draw could be solved")
+    assert shocks is not None
+    out = _irf_statistics(np.array(stock), variables, shocks, mass, ddof=1)
+    out["explosive"] = 1.0 - len(stock) / tries
+    return out

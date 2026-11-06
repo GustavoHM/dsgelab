@@ -139,3 +139,50 @@ def test_errors():
     with pytest.raises(ValueError, match="DSGE-VAR"):
         dsg.posterior_forecast(_problem(data), np.array([[0.6, 0.3]]), 4)
     assert not _problem(data, dsge_var=None).is_dsge_var
+
+
+def test_irf_with_a_heavy_prior_is_the_model_irf():
+    # the observables follow a VAR(1) with innovations (e1, e2), so the VAR(2) the model implies is
+    # exact, Sigma* = A0 A0', and as lambda grows the DSGE-VAR's responses become the model's
+    data = _data()
+    pb = _problem(data, dsge_var=1e5)
+    theta = np.array([0.7, 0.4])
+    out = dsg.dsge_var_irf(pb, np.tile(theta, (40, 1)), periods=8, n_draws=None, seed=2)
+    assert out["draws"] == 40 and out["explosive"] == 0.0
+    A = np.array([[0.7, 0.0], [0.4, 0.5]])
+    resp = np.diag([0.3, 0.2])
+    for h in range(8):
+        for j, e in enumerate(["e1", "e2"]):
+            for i, v in enumerate(["y", "z"]):
+                assert out["mean"][e][v][h] == pytest.approx(resp[i, j], abs=2e-3)
+        resp = A @ resp
+    assert np.all(out["variance"]["e1"]["y"] < 1e-5)
+
+
+def test_irf_draws_follow_the_posterior_and_the_rotation():
+    data = _data()
+    pb = _problem(data)
+    X = np.array([[0.65, 0.35], [0.55, 0.25], [0.7, 0.3]])
+    out = dsg.dsge_var_irf(pb, X, periods=6, n_draws=None, seed=np.random.default_rng(5))
+    rng = np.random.default_rng(5)
+    for d, theta in enumerate(X):
+        Phi, Sigma = pb.dsge_var_posterior(theta).draw(1, seed=rng)
+        _, space = pb.solve(theta)
+        A0 = space.Z @ space.R @ np.diag(np.sqrt(np.diag(space.Sigma)))
+        B = np.array([[out["responses"][e][v][d, 0] for e in space.shocks] for v in ["y", "z"]])
+        # the impact matrix factors Sigma, and is A0 rotated by the same orthogonal matrix
+        np.testing.assert_allclose(B @ B.T, Sigma[0], rtol=1e-10)
+        Q = np.linalg.solve(np.linalg.cholesky(Sigma[0]), B)
+        np.testing.assert_allclose(Q @ Q.T, np.eye(2), atol=1e-12)
+        Rr = np.linalg.solve(Q.T, A0.T)
+        assert abs(Rr[1, 0]) < 1e-12 and np.all(np.diag(Rr) > 0)
+        A1 = Phi[0][:2].T
+        np.testing.assert_allclose([out["responses"][e]["y"][d, 1] for e in space.shocks],
+                                   (A1 @ B)[0], rtol=1e-10)
+    st = out["responses"]["e1"]["z"]
+    np.testing.assert_allclose(out["variance"]["e1"]["z"], st.var(axis=0, ddof=1), rtol=1e-12)
+    np.testing.assert_allclose(out["median"]["e1"]["z"], np.median(st, axis=0), rtol=1e-12)
+    # a subsample of n_draws, and the refusals
+    assert dsg.dsge_var_irf(pb, np.tile(X, (3, 1)), periods=3, n_draws=4)["draws"] == 4
+    with pytest.raises(ValueError, match="dsge_var"):
+        dsg.dsge_var_irf(_problem(data, dsge_var=None), X, periods=3)

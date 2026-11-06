@@ -1255,13 +1255,23 @@ var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)
 prev = var.forecast(4, 1000, seed=0)                  # 1000 sorteios da posteriori
 prev.point["y"].round(3), prev.mean()["y"].round(3)
 round(var.rmse()["y"], 3)
+irf = var.irf(8, 1000, seed=0)                        # o bvar_irf do Dynare, 1000 sorteios
+irf["mean"]["y"]["y"][:4].round(3)                    # a resposta de y ao próprio impulso
+irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)   # HPD de 90%, 4 períodos depois
+ev_b = dsg.forecast_evaluation(pb, range(320, 400, 10), 4, estimate="fixed", theta=ev.theta,
+                               bvar_lags=1)           # as modas do exemplo 25, e um BVAR(1)
+ev_b.relative_rmse("bvar")["y"].round(2)              # o RMSE do modelo sobre o do BVAR
 
 comum = dict(model=ar, data=dados, params=dict(rho=0.5), observables=["y"], priors=pb.priors,
              guess=dict(a=0, y=1), first_obs=5, dsge_varlag=4)
 {w: round(dsg.EstimationProblem(**comum, dsge_var=w).log_likelihood(moda.x), 1)
  for w in (0.05, 0.5, 2.0, float("inf"))}
 dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
-{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</code></pre>
+moda_dv = dsg.posterior_mode(dv)
+{k: round(v, 3) for k, v in moda_dv.values.items()}
+irf_dv = dsg.dsge_var_irf(dv, np.tile(moda_dv.x, (500, 1)), periods=8, n_draws=None, seed=0)
+irf_dv["mean"]["e"]["y"][:4].round(3)                 # os sorteios do VAR na moda do modelo
+(moda_dv.values["stderr e"] * moda_dv.values["rho"] ** np.arange(4)).round(3)   # as do modelo</code></pre>
 <pre class="output" data-label="Saída"><code><span class="out-expr">{p: round(v, 1) for p, v in dens.items()}</span>
 {1: 365.1, 2: 367.5, 3: 368.5, 4: 368.2}
 <span class="out-expr">var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)</span>
@@ -1270,11 +1280,21 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
 ([1.13 1.108 1.09 1.074], [1.127 1.103 1.085 1.072])
 <span class="out-expr">round(var.rmse()["y"], 3)</span>
 0.09
+<span class="out-expr">irf["mean"]["y"]["y"][:4].round(3)</span>
+[0.095 0.08 0.068 0.057]
+<span class="out-expr">irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)</span>
+(0.038, 0.058)
+<span class="out-expr">ev_b.relative_rmse("bvar")["y"].round(2)</span>
+[1.08 1.17 1.04 0.98]
 <span class="out-expr">{w: round(dsg.EstimationProblem(**comum, dsge_var=w).log_likelihood(moda.x), 1)</span>
  for w in (0.05, 0.5, 2.0, float("inf"))}
 {0.05: 372.7, 0.5: 378.1, 2.0: 379.2, inf: 379.4}
-<span class="out-expr">{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</span>
-{'rho': 0.738, 'stderr e': 0.091}</code></pre>
+<span class="out-expr">{k: round(v, 3) for k, v in moda_dv.values.items()}</span>
+{'rho': 0.738, 'stderr e': 0.091}
+<span class="out-expr">irf_dv["mean"]["e"]["y"][:4].round(3)</span>
+[0.092 0.064 0.048 0.04]
+<span class="out-expr">(moda_dv.values["stderr e"] * moda_dv.values["rho"] ** np.arange(4)).round(3)</span>
+[0.091 0.067 0.049 0.037]</code></pre>
   <p><code>bvar</code> faz o que fazem o <code>bvar_density</code> e o <code>bvar_forecast</code> do
   Dynare: um VAR cuja priori são as observações artificiais de Sims e Zha (1998), com os
   hiperparâmetros do Dynare por padrão (<code>tau=3</code>, <code>decay=0.5</code>,
@@ -1289,10 +1309,25 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
   <code>lambda T</code> observações artificiais do modelo, com os coeficientes integrados fora da
   verossimilhança. Em dados simulados do próprio modelo, a verossimilhança cresce com o peso, de
   372,7 em <code>lambda = 0.05</code> a 379,4 em <code>lambda = inf</code>, onde o VAR é o do
-  modelo. Uma priori para <code>"dsge_prior_weight"</code> estima o peso. A validação reproduz os
+  modelo. Uma priori para <code>"dsge_prior_weight"</code> estima o peso.</p>
+  <p><code>irf</code> é o <code>bvar_irf</code> do Dynare: as respostas sobre sorteios da
+  posteriori, a impulsos identificados pelo fator de Cholesky ou pela raiz quadrada simétrica de
+  cada sorteio da covariância, com a média, a mediana, a variância, o intervalo HPD de 90% e as
+  bandas do Dynare. Com uma variável as duas identificações coincidem, e a resposta média cai de
+  0,095 no impacto à razão de mais ou menos o coeficiente da defasagem por período. Com
+  <code>bvar_lags=1</code>, o <code>forecast_evaluation</code> reestima um BVAR(1) em cada origem do
+  exemplo 25, na mesma janela do modelo. Nessas oito origens, o RMSE do modelo fica de 4% a 17%
+  acima do RMSE do BVAR nos horizontes 1 a 3, e 2% abaixo no horizonte 4. O
+  <code>dsge_var_irf</code> dá as respostas do DSGE-VAR, com o fator de Cholesky do VAR girado de
+  modo a reproduzir a matriz de impacto do modelo (Del Negro e Schorfheide, 2004). Na moda do
+  modelo, onde só o VAR é sorteado, a resposta média começa em 0,092, contra 0,091 no modelo, e
+  fica a menos de 0,003 da resposta do modelo nos quatro primeiros períodos. O
+  <code>plot_posterior_irf</code> desenha os dois resultados. A validação reproduz os
   <code>tests/bvar_a_la_sims</code> e <code>tests/dsge-var</code> do Dynare, inclusive as previsões
-  simuladas, com os mesmos sorteios. O Dynare conta as observações iniciais do VAR em
-  <code>T</code>, e o dsgelab não.</p>
+  simuladas e as respostas a impulso, com os mesmos sorteios. O Dynare conta as observações
+  iniciais do VAR em <code>T</code>, e o dsgelab não. O <code>bvar_irf</code> do Dynare 7.2 toma as
+  linhas do fator de Cholesky como impulsos, e o dsgelab toma as colunas, cuja covariância é a do
+  VAR.</p>
   <h3>35. Krusell–Smith, pelo jacobiano no espaço das sequências</h3>
 <pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
     c_next = 1 / (beta * Va_p)                         # utilidade log: u'(c) = 1 / c
@@ -1666,6 +1701,9 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
       <tr><td>3002 trajetórias de previsão simuladas, sorteio a sorteio, com os sorteios normais do Octave</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
       <tr><td>posteriori em log do DSGE-VAR em 11 pontos, com o <code>T</code> do Dynare</td><td class="num">5e-12</td><td class="ok">OK</td></tr>
       <tr><td>modas posteriores do DSGE-VAR, em desvios-padrão posteriores (núcleo pelo menos o do Dynare)</td><td class="num">5e-5</td><td class="ok">OK</td></tr>
+      <tr><td><code>bvar_irf</code>, 2000 respostas sorteadas (<code>SquareRoot</code>, e <code>Cholesky</code> com os impulsos do Dynare), sorteio a sorteio, relativo</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td><code>bayesian_irf</code> do DSGE-VAR, 2000 respostas sorteadas nos sorteios de parâmetros do Dynare, relativo</td><td class="num">1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>BVAR de referência do <code>forecast_evaluation</code>, erros em 8 janelas contra o <code>bvar.toolbox</code></td><td class="num">2e-16</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
   <p style="font-size:.9rem;color:var(--muted)">O Dynare 7.2 conta as 4 observações iniciais do VAR
