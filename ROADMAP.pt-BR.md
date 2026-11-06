@@ -324,19 +324,19 @@ um aviso de descontinuação que dura pelo menos uma versão menor. A API públi
   (Plagborg-Møller e Wolf, 2021). Ficam de fora o ajuste bayesiano de IRF e a execução de arquivos
   de transformação MATLAB; transformações Python podem ser passadas explicitamente.
 - [x] **Avaliação de previsão fora da amostra**: estimação recursiva em janela crescente, RMSE
-  contra o passeio aleatório, o teste de Diebold–Mariano, e a transformada integral de
-  probabilidade e a cobertura da densidade preditiva. As referências são as comparações de
-  previsão de Smets e Wouters (2007) e de Del Negro e Schorfheide (2013). A comparação com um
-  BVAR espera o BVAR da 0.9. `forecast_evaluation` reestima em cada origem, com janela
-  crescente ou deslizante, e `ForecastEvaluation` dá o RMSE, a razão dele para o do passeio
-  aleatório, `diebold_mariano` com a correção de Harvey, Leybourne e Newbold, a PIT, a cobertura
-  e o escore logarítmico. Validação contra a estimação recursiva do Dynare 7.2 no `fs2000`, em
-  nove amostras (30 de outubro de 2026): nas modas do Dynare, as previsões concordam até
-  `2.6e-15` e as bandas de 90% até `6.3e-9`. Reestimada pelo `dsgelab`, cada moda tem kernel pelo
-  menos tão alto quanto o do Dynare e fica a menos de `0.003` desvio-padrão posterior dela. O
-  teste concorda com o `forecast::dm.test` do R até `3.1e-15` em 48 casos. A densidade
-  preditiva é condicional à estimativa pontual, como a do Dynare depois da moda; a incerteza dos
-  parâmetros em cada origem fica de fora.
+  contra o passeio aleatório, o teste de Diebold–Mariano, e a transformada integral de probabilidade
+  e a cobertura da densidade preditiva. As referências são as comparações de previsão de Smets e
+  Wouters (2007) e de Del Negro e Schorfheide (2013). A comparação com um BVAR, que esperava o BVAR
+  da 0.9, entrou na 0.10. `forecast_evaluation` reestima em cada origem, com janela crescente ou
+  deslizante, e `ForecastEvaluation` dá o RMSE, a razão dele para o do passeio aleatório,
+  `diebold_mariano` com a correção de Harvey, Leybourne e Newbold, a PIT, a cobertura e o escore
+  logarítmico. Validação contra a estimação recursiva do Dynare 7.2 no `fs2000`, em nove amostras
+  (30 de outubro de 2026): nas modas do Dynare, as previsões concordam até `2.6e-15` e as bandas de
+  90% até `6.3e-9`. Reestimada pelo `dsgelab`, cada moda tem kernel pelo menos tão alto quanto o do
+  Dynare e fica a menos de `0.003` desvio-padrão posterior dela. O teste concorda com o
+  `forecast::dm.test` do R até `3.1e-15` em 48 casos. A densidade preditiva é condicional à
+  estimativa pontual, como a do Dynare depois da moda; a incerteza dos parâmetros em cada origem
+  fica de fora.
 - [x] **Restrições de calibração sobre IRFs e momentos** (`irf_calibration`, `moment_calibration`),
   com `check_restrictions` num ponto e `sample_restrictions` em sorteios da priori, e os blocos do
   `.mod` lidos por `from_mod`. Validação contra o Dynare 7.2 no seu `tests/gsa/ls2003a.mod`, com e
@@ -590,7 +590,8 @@ projeto Julia já usado para o MacroModelling.jl.
   as 4 observações iniciais. O `T` do `dsgelab` é o número de linhas, aquele com que a
   verossimilhança é o produto das densidades preditivas de um passo do VAR, verificação que está
   na suíte. Com ele a moda se desloca até 0,39 desvio-padrão posterior, e o `lambda` estimado
-  passa de 0,533 a 0,568. As IRFs do `bvar_irf` e do DSGE-VAR (`bayesian_irf`) ficam de fora.
+  passa de 0,533 a 0,568. As IRFs do `bvar_irf` e do DSGE-VAR (`bayesian_irf`) ficaram de fora e
+  entraram na 0.10.
 
 ### 0.10 — as lacunas que a 0.9 deixou, e a auditoria antes do congelamento
 
@@ -603,12 +604,31 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   frações do produto poupadas como três controles, o valor concorda com a forma fechada até 6,4e-8
   nos 69 nós do nível 3 e até 7,3e-8 em 600 pontos aleatórios da caixa, e o erro cai pelo menos 58
   vezes de um nível ao seguinte (5 de novembro de 2026).
-- [ ] **O BVAR na avaliação de previsões, e as IRFs do BVAR e do DSGE-VAR.** O
-  `forecast_evaluation` aceita um BVAR como referência de comparação, o que fecha a nota do item da
-  0.6. Referência: o `bvar_irf` e o `bayesian_irf` com `dsge_var` do Dynare.
-- [ ] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
-  tem e o `dsgelab` não. Referência: o `improved_time_iteration` do dolo 0.4.9.20 nos modelos dele,
-  e o `time_iteration` na mesma grade.
+- [x] **O BVAR na avaliação de previsões, e as IRFs do BVAR e do DSGE-VAR.** O
+  `forecast_evaluation(bvar_lags=...)` reestima um BVAR em cada origem, na janela do modelo, o que
+  fecha a nota do item da 0.6, e `rmse`, `relative_rmse` e `diebold_mariano` aceitam
+  `benchmark="bvar"`. No `bvar_and_dsge.mod` do Dynare 7.2, em quatro origens com janela crescente
+  e deslizante, os erros de 1 a 4 passos à frente concordam até 1,6e-16 com os do `bvar.toolbox`
+  do Dynare nas mesmas janelas. `BVAR.irf` é o `bvar_irf` e `dsge_var_irf` é o `bayesian_irf` com
+  `dsge_var`, ambos com as estatísticas do `posterior_irf`. Com os sorteios normais que o Octave
+  fez, as 1000 respostas sorteadas do `bvar_irf` concordam até 1,9e-15 da maior resposta com
+  `SquareRoot` e até 9,5e-16 com `Cholesky`, e as do DSGE-VAR, nos 1000 sorteios de parâmetros dos
+  `tests/dsge-var`, até 1,1e-13 (6 de novembro de 2026). O Dynare 7.2 toma as linhas do fator de
+  Cholesky `L` como impulsos, cuja covariância é `L'L` e não `Sigma`. O `BVAR.irf` toma as colunas,
+  e reproduz o Dynare com o fator superior como identificação.
+- [x] **Iteração das expectativas e iteração temporal melhorada**, os métodos globais que o dolo
+  tem e o `dsgelab` não tinha. O `improved_time_iteration` aplica o método de Newton às condições
+  de todos os pontos da grade de uma vez, na declaração e nas grades do `time_iteration`. Contra o
+  `improved_time_iteration` do dolo 0.4.9.20 no RBC, no RBC markoviano e no modelo de consumo e
+  poupança dele, com interpolação linear e cúbica, as políticas concordam até 3,7e-10, em 4 a 10
+  passos de Newton onde a iteração temporal leva de 114 a 361 iterações, e até 4,4e-11 do ponto
+  fixo da iteração temporal. No modelo de consumo e poupança os dois partem da iteração temporal
+  interrompida em 1e-3, porque a do dolo não converge a partir da calibração. O
+  `expectations_iteration` itera sobre as esperanças das equações de Euler, declaradas como
+  saltos. O dolo a documenta, como expectativas parametrizadas, e não a implementa. No
+  crescimento estocástico com utilidade logarítmica e depreciação total, concorda com a iteração
+  temporal até 5e-12 e tem os erros da forma fechada, em um terço do tempo da iteração temporal,
+  com amortecimento de 0,5, sem o qual diverge (6 de novembro de 2026).
 - [x] **Os gráficos que ficaram fora da 0.9**: força e sensibilidade da identificação, a partir da
   matriz de informação, as decomposições de choques anualizadas e por safra, e bandas para as
   previsões condicionais. Referência: o `identification`, o `shock_decomposition` e o

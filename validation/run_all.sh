@@ -14,7 +14,8 @@
 # in macromodelling/ pins the versions of MacroModelling.jl. The Python that runs the compare_*.py
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of
-# compare_time_iteration.py, compare_value_iteration.py and compare_egm.py, runs in a Python 3.11
+# compare_time_iteration.py, compare_improved_time_iteration.py, compare_value_iteration.py and
+# compare_egm.py, runs in a Python 3.11
 # environment of its own that dolo/setup.sh creates with uv, and so does sequence-jacobian, the
 # reference of compare_heterogeneous.py, in the one sequence_jacobian/setup.sh creates. Tasmanian,
 # the reference of compare_smolyak.py, is built from source, with CMake and the system's C++
@@ -121,10 +122,13 @@ if [ -n "${SKIP_DOLO:-}" ]; then
   results+=("skipped  dolo (SKIP_DOLO)")
 else
   # without deleting it, a failed dolo run would let the comparison read an earlier result
-  rm -f out_time_iteration/dolo.json out_value_iteration/dolo.json out_egm/dolo.json
+  rm -f out_time_iteration/dolo.json out_time_iteration/dolo_iti.json \
+    out_value_iteration/dolo.json out_egm/dolo.json
   step "dolo: environment"  bash dolo/setup.sh
   step "dolo: time iteration" dolo/.venv/bin/python dolo/run_dolo.py
   step "compare_time_iteration.py" "$PYTHON" compare_time_iteration.py
+  step "dolo: improved time iteration" dolo/.venv/bin/python dolo/run_dolo_iti.py
+  step "compare_improved_time_iteration.py" "$PYTHON" compare_improved_time_iteration.py
   step "dolo: value function iteration" dolo/.venv/bin/python dolo/run_dolo_vfi.py
   step "compare_value_iteration.py" "$PYTHON" compare_value_iteration.py
   step "dolo: endogenous grid method" dolo/.venv/bin/python dolo/run_dolo_egm.py

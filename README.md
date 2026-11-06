@@ -102,10 +102,11 @@ examples in English and Portuguese.
 | Third-order perturbation: full decision rule in Dynare's form, stochastic steady state, sparse tensors | `solve_third_order`, `ThirdOrderSolution.decision_rule`, `stochastic_steady_state` |
 | Global solution by Chebyshev collocation, on a tensor grid up to three states or on a Smolyak sparse grid with any number, isotropic or anisotropic, validated against Tasmanian | `solve_projection`, `SmolyakGrid` |
 | Global solution by time iteration on a Cartesian or a Smolyak grid, with Markov or quadrature exogenous states and bounded controls (borrowing limits, the zero lower bound), validated against dolo | `time_iteration`, `TimeIterationSolution`, `CartesianGrid` |
+| Improved time iteration (Newton's method on the whole grid) and expectations iteration, on the same declaration and grids as time iteration and with its fixed point, validated against dolo and the closed form | `improved_time_iteration`, `expectations_iteration` |
 | Value function iteration with Howard's improvement steps, over intervals or finite sets of choices, validated against QuantEcon and dolo | `value_iteration`, `ValueIterationSolution`, `DynamicProgram` |
 | The endogenous grid method (Carroll, 2006), for one endogenous state with Markov or quadrature exogenous states and bounded controls, validated against dolo | `egm`, `EGMSolution`, `EGMProgram` |
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
-| BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts) and the DSGE-VAR of Del Negro and Schorfheide, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)` |
+| BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts, IRFs) and the DSGE-VAR of Del Negro and Schorfheide with its IRFs, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)`, `dsge_var_irf` |
 | Heterogeneous agents by the sequence-space Jacobian: one asset by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
 | Markov regime switching to first order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions` |
 | Likelihood of regime switching by Kim's filter, filtered and smoothed regime probabilities, estimation of switching parameters and transition probabilities | `kim_filter`, `MarkovSwitchingProblem` |
@@ -122,7 +123,7 @@ examples in English and Portuguese.
 | Observed-shock local projections with joint HAC covariance across variables and horizons | `local_projection` |
 | Theoretical moments of HP- and band-pass-filtered variables, unit roots included | `FirstOrderSolution.moments(hp_filter=, bandpass=)` |
 | Shock decomposition (also real-time), forecasts with bands, conditional forecasts | `shock_decomposition`, `forecast`, the method `FirstOrderSolution.conditional_forecast` |
-| Out-of-sample forecast evaluation: recursive or rolling re-estimation, RMSE against the random walk, Diebold–Mariano, PIT, coverage | `forecast_evaluation`, `diebold_mariano` |
+| Out-of-sample forecast evaluation: recursive or rolling re-estimation, RMSE against the random walk and a BVAR, Diebold–Mariano, PIT, coverage | `forecast_evaluation`, `diebold_mariano` |
 | Mixed-frequency observables (means or sums over several periods) | `state_space(aggregation=)`, `EstimationProblem(aggregation=)`, `low_frequency` |
 | Calibration restrictions on IRFs and moments, at a point and over the prior | `check_restrictions`, `sample_restrictions` |
 | Global sensitivity: stability mapping, Monte Carlo filtering, Sobol indices | `stability_map`, `monte_carlo_filtering`, `sobol` |
@@ -290,9 +291,11 @@ planned.
 - **IRF matching is first order.** GMM and SMM also accept `order=2`, using the pruned
   second-order rule. MATLAB `irf_matching_file` transformations are not executed; pass an
   explicit Python `transform=` instead.
-- **Global methods are limited** to Chebyshev collocation and time iteration, on a Cartesian
-  grid or on a Smolyak sparse grid, to value function iteration on the same two grids, and to the
-  endogenous grid method with one endogenous state. A Cartesian grid's size grows as the product
+- **Global methods are limited** to Chebyshev collocation and time iteration, improved or on the
+  expectations, on a Cartesian grid or on a Smolyak sparse grid, to value function iteration on
+  the same two grids, and to the endogenous grid method with one endogenous state. Improved time
+  iteration needs a start close enough to the solution, and expectations iteration a model in
+  which each expectation is declared as a jump. A Cartesian grid's size grows as the product
   of the points on each axis. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.

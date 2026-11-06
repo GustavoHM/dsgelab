@@ -1245,13 +1245,23 @@ var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)
 fc = var.forecast(4, 1000, seed=0)                    # 1000 draws from the posterior
 fc.point["y"].round(3), fc.mean()["y"].round(3)
 round(var.rmse()["y"], 3)
+irf = var.irf(8, 1000, seed=0)                        # Dynare's bvar_irf, 1000 draws
+irf["mean"]["y"]["y"][:4].round(3)                    # the response of y to its own impulse
+irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)   # 90% HPD, 4 periods on
+ev_b = dsg.forecast_evaluation(pb, range(320, 400, 10), 4, estimate="fixed", theta=ev.theta,
+                               bvar_lags=1)           # example 25's modes, and a BVAR(1)
+ev_b.relative_rmse("bvar")["y"].round(2)              # the model's RMSE over the BVAR's
 
 common = dict(model=ar, data=data, params=dict(rho=0.5), observables=["y"], priors=pb.priors,
               guess=dict(a=0, y=1), first_obs=5, dsge_varlag=4)
 {w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)
  for w in (0.05, 0.5, 2.0, float("inf"))}
 dv = dsg.EstimationProblem(**common, dsge_var=0.5)
-{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</code></pre>
+dv_mode = dsg.posterior_mode(dv)
+{k: round(v, 3) for k, v in dv_mode.values.items()}
+dirf = dsg.dsge_var_irf(dv, np.tile(dv_mode.x, (500, 1)), periods=8, n_draws=None, seed=0)
+dirf["mean"]["e"]["y"][:4].round(3)                   # the VAR's draws at the model's mode
+(dv_mode.values["stderr e"] * dv_mode.values["rho"] ** np.arange(4)).round(3)   # the model's</code></pre>
 <pre class="output" data-label="Output"><code><span class="out-expr">{p: round(v, 1) for p, v in dens.items()}</span>
 {1: 365.1, 2: 367.5, 3: 368.5, 4: 368.2}
 <span class="out-expr">var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)</span>
@@ -1260,11 +1270,21 @@ dv = dsg.EstimationProblem(**common, dsge_var=0.5)
 ([1.13 1.108 1.09 1.074], [1.127 1.103 1.085 1.072])
 <span class="out-expr">round(var.rmse()["y"], 3)</span>
 0.09
+<span class="out-expr">irf["mean"]["y"]["y"][:4].round(3)</span>
+[0.095 0.08 0.068 0.057]
+<span class="out-expr">irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)</span>
+(0.038, 0.058)
+<span class="out-expr">ev_b.relative_rmse("bvar")["y"].round(2)</span>
+[1.08 1.17 1.04 0.98]
 <span class="out-expr">{w: round(dsg.EstimationProblem(**common, dsge_var=w).log_likelihood(mode.x), 1)</span>
  for w in (0.05, 0.5, 2.0, float("inf"))}
 {0.05: 372.7, 0.5: 378.1, 2.0: 379.2, inf: 379.4}
-<span class="out-expr">{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</span>
-{'rho': 0.738, 'stderr e': 0.091}</code></pre>
+<span class="out-expr">{k: round(v, 3) for k, v in dv_mode.values.items()}</span>
+{'rho': 0.738, 'stderr e': 0.091}
+<span class="out-expr">dirf["mean"]["e"]["y"][:4].round(3)</span>
+[0.092 0.064 0.048 0.04]
+<span class="out-expr">(dv_mode.values["stderr e"] * dv_mode.values["rho"] ** np.arange(4)).round(3)</span>
+[0.091 0.067 0.049 0.037]</code></pre>
   <p><code>bvar</code> does what Dynare's <code>bvar_density</code> and <code>bvar_forecast</code>
   do: a VAR whose prior is the dummy observations of Sims and Zha (1998), with Dynare's
   hyperparameters by default (<code>tau=3</code>, <code>decay=0.5</code>, <code>lambda_=5</code>,
@@ -1279,10 +1299,24 @@ dv = dsg.EstimationProblem(**common, dsge_var=0.5)
   model, with its coefficients integrated out of the likelihood. On data simulated from the model
   the likelihood rises with the weight, from 372.7 at <code>lambda = 0.05</code> to 379.4 at
   <code>lambda = inf</code>, where the VAR is the model's own. A prior on
-  <code>"dsge_prior_weight"</code> estimates the weight. The validation reproduces Dynare's
-  <code>tests/bvar_a_la_sims</code> and <code>tests/dsge-var</code>, the simulated forecasts
-  included, with the same random draws. Dynare counts the VAR's initial observations in
-  <code>T</code>, and dsgelab does not.</p>
+  <code>"dsge_prior_weight"</code> estimates the weight.</p>
+  <p><code>irf</code> is Dynare's <code>bvar_irf</code>: the responses over draws from the
+  posterior, to impulses identified by the Cholesky factor or the symmetric square root of each
+  draw of the covariance, with the mean, the median, the variance, the 90% HPD interval and
+  Dynare's bands. With one variable the two identifications coincide, and the mean response falls
+  from 0.095 on impact by about the lag coefficient each period. With <code>bvar_lags=1</code>,
+  <code>forecast_evaluation</code> re-estimates a BVAR(1) at each of example 25's origins, on the
+  same window as the model. Over these eight origins the model's RMSE is 4% to 17% above the
+  BVAR's at horizons 1 to 3, and 2% below it at horizon 4. <code>dsge_var_irf</code> gives the
+  DSGE-VAR's responses, with the VAR's Cholesky factor rotated so that it reproduces the model's
+  impact matrix (Del Negro and Schorfheide, 2004). At the model's mode, where only the VAR is
+  drawn, the mean response starts at 0.092 against the model's 0.091, and stays within 0.003 of
+  the model's response over four periods. <code>plot_posterior_irf</code> draws both results. The
+  validation reproduces Dynare's <code>tests/bvar_a_la_sims</code> and
+  <code>tests/dsge-var</code>, the simulated forecasts and impulse responses included, with the
+  same random draws. Dynare counts the VAR's initial observations in <code>T</code>, and dsgelab
+  does not. Dynare 7.2's <code>bvar_irf</code> takes the rows of the Cholesky factor as the
+  impulses, and dsgelab its columns, whose covariance is the VAR's.</p>
   <h3>35. Krusell–Smith, by the sequence-space Jacobian</h3>
 <pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
     c_next = 1 / (beta * Va_p)                         # log utility: u'(c) = 1 / c
@@ -1649,6 +1683,9 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
       <tr><td>3002 simulated forecast paths, draw by draw, with Octave's normal draws</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
       <tr><td>DSGE-VAR log posterior at 11 points, with Dynare's <code>T</code></td><td class="num">5e-12</td><td class="ok">OK</td></tr>
       <tr><td>DSGE-VAR posterior modes, in posterior standard deviations (kernel at least Dynare's)</td><td class="num">5e-5</td><td class="ok">OK</td></tr>
+      <tr><td><code>bvar_irf</code>, 2000 sampled responses (<code>SquareRoot</code>, and <code>Cholesky</code> with Dynare's impulses), draw by draw, relative</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td>DSGE-VAR <code>bayesian_irf</code>, 2000 sampled responses on Dynare's parameter draws, relative</td><td class="num">1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>BVAR benchmark of <code>forecast_evaluation</code>, errors on 8 windows against <code>bvar.toolbox</code></td><td class="num">2e-16</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
   <p style="font-size:.9rem;color:var(--muted)">Dynare 7.2 counts the VAR's 4 initial observations

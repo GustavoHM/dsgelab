@@ -1076,14 +1076,14 @@ The 48 cases cross horizons 1 to 4, losses `|e|` and `e^2`, both variance estima
 three alternatives. None of them has a negative variance at the requested horizon, so the
 fallback to horizon 1 that both programs make is checked only in the test suite. The numbers
 come from a run on 30 October 2026, with
-Dynare 7.2 and Octave 11.3.0.
+Dynare 7.2 and Octave 11.3.0. The BVAR benchmark (`bvar_lags=`) is checked in the next section.
 
 ## BVAR and DSGE-VAR
 
 ```bash
 bash fetch.sh                     # Dynare 7.2's tests/bvar_a_la_sims and tests/dsge-var, by SHA-256
 bash run_bvar.sh                  # about a minute
-python compare_bvar.py            # about a minute and a half, most of it the four posterior modes
+python compare_bvar.py            # about two minutes, most of it the four posterior modes
 ```
 
 ```
@@ -1092,33 +1092,38 @@ bvar_standalone: bvar_density 2, first_obs=20, train=10, flat=True
   log marginal density: 6198.9907 6207.4897   deviation 1.8e-12
   bvar_forecast 2, nobs=200, 2 periods, 1001 draws: RMSE over 782 observations 8.7e-18
   paths, draw by draw: with shocks 4.9e-17, without 2.8e-17 (largest value 0.05); mean with shocks 8.7e-18; explosive draws 0.000
+  bvar_irf, SquareRoot: 1000 draws of 40 periods, responses draw by draw 1.9e-15, oo_.bvar.irf 1.1e-15 (relative to 0.0127)
+  bvar_irf, Cholesky, as the upper factor L': 1000 draws of 40 periods, responses draw by draw 9.5e-16, oo_.bvar.irf 5.4e-16 (relative to 0.0127)
+  bvar_irf, Cholesky, the columns of L: 1000 draws of 40 periods, responses draw by draw 2.3e-01, oo_.bvar.irf 7.1e-02 (relative to 0.0127)
 bvar_and_dsge: bvar_density 8, first_obs=20, train=10, flat=False
   prior and posterior, lags 1 to 8: df 0e+00, S 5.6e-17, XXi 1.8e-14, PhiHat 1.4e-14 (relative)
   log marginal density: 6199.5260 6207.7011 6206.4335 6206.3822 6202.7006 6199.4387 6194.0685 6190.8352   deviation 0.0e+00
   bvar_forecast 8, nobs=200, 10 periods, 2001 draws: RMSE over 782 observations 1.6e-17
   paths, draw by draw: with shocks 2.1e-16, without 1.8e-16 (largest value 0.06); mean with shocks 7.8e-17; explosive draws 0.000
+  forecast_evaluation's BVAR(2) benchmark, origins [100, 130, 160, 190], expanding and 60-observation windows, 1 to 4 steps: errors 1.6e-16 (largest error 0.0221)
 
 dsgevar_forward_calibrated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
   log posterior kernel at 4 points: 2.5e-12;  log prior 8.9e-16;  -inf at the same 0 point(s): True
   kernel at Dynare's mode -9.1e-13 from Dynare's; dsgelab's mode: kernel +3.05e-09 over Dynare's, parameters within 5.2e-05 posterior sd
   Laplace with Dynare's inverse Hessian 9.7e-13; with dsgelab's Hessian -1.6e-04
   with dsgelab's T: mode moves by up to 0.18 posterior sd
+  bayesian_irf of the DSGE-VAR: 1000 parameter draws, 40 periods, responses draw by draw 4.9e-14, oo_.PosteriorIRF.bvardsge 3.8e-14 (relative to 2.021); VAR draws redrawn as explosive 0.0000
 
 dsgevar_forward_estimated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
   log posterior kernel at 7 points: 4.9e-12;  log prior 8.9e-16;  -inf at the same 1 point(s): True
   kernel at Dynare's mode -1.6e-12 from Dynare's; dsgelab's mode: kernel +2.20e-10 over Dynare's, parameters within 9.3e-06 posterior sd
   Laplace with Dynare's inverse Hessian 1.6e-12; with dsgelab's Hessian -7.3e-06
   with dsgelab's T: mode moves by up to 0.39 posterior sd, lambda 0.568 against 0.533 (lambda T = 51.1 against 50.1)
+  bayesian_irf of the DSGE-VAR: 1000 parameter draws, 40 periods, responses draw by draw 1.1e-13, oo_.PosteriorIRF.bvardsge 5.7e-14 (relative to 2.031); VAR draws redrawn as explosive 0.0010
 
 OK
 ```
 
 The BVAR files are Dynare's `tests/bvar_a_la_sims/bvar_standalone.mod` and `bvar_and_dsge.mod`,
 with their data (`bvar_sample.m`, 1001 observations of two series), options and hyperparameters.
-`run_bvar.sh` removes their `bvar_irf` lines and runs the estimation of `bvar_and_dsge.mod`
-without Metropolis, since neither is compared, and adds a `verbatim` block before
-`bvar_forecast` that resets Octave's generator and saves the normal draws `bvar.forecast` is about
-to take. `bvar` rebuilds, for every lag length of `bvar_density`, the prior and the posterior that
+`run_bvar.sh` runs the estimation of `bvar_and_dsge.mod` without Metropolis, since it is not
+compared, and adds a `verbatim` block before `bvar_forecast` and before each `bvar_irf` that
+resets Octave's generator and saves the normal draws the command is about to take. `bvar` rebuilds, for every lag length of `bvar_density`, the prior and the posterior that
 Dynare's `bvar.toolbox` returns, and the log marginal density. `BVAR.forecast` takes the saved
 draws through an object with the `standard_normal` method of a numpy `Generator`, and its paths
 with and without shocks are Dynare's, draw by draw: Dynare's loop makes `bvar_replic + 1` draws,
@@ -1126,12 +1131,36 @@ so 1001 and 2001 here. The RMSE is that of the forecast at the posterior mean ov
 observations after `nobs=200`. Without the saved draws, the forecast means agree only up to Monte
 Carlo error.
 
+`bvar_standalone.mod` ends with `bvar_irf(2,'Cholesky')` and `bvar_irf(2,'SquareRoot')`, 1000
+draws of 40 periods each. A second `verbatim` block after each saves `oo_.bvar.irf` and the
+sampled responses, and `BVAR.irf` takes the saved normal draws. Dynare 7.2's `bvar.irf` builds
+the responses with the impact matrix `B` on the left of the lag matrices, so that its impulses are
+the rows of `B`, and stores the response of variable `i` to impulse `j` under
+`oo_.bvar.irf.Mean.(j).(i)`, where its code names the first field the variable and the second
+the shock. With `SquareRoot`, `B`
+is symmetric, the rows are the columns, and Dynare's numbers are those of `BVAR.irf` with the
+fields read shock first. With `Cholesky`, the rows of the lower factor `L` are impulses with
+covariance `L'L` rather than `Sigma`: the first variable's impulse moves only the first variable
+on impact. `BVAR.irf` takes the columns of `L` by default, and with the upper factor `L'` as its
+identification it gives Dynare's numbers. The responses to the columns differ from Dynare's by up
+to 23% of the largest response in single draws, and the statistics by up to 7.1%.
+
+The benchmark of `forecast_evaluation` is checked on `bvar_and_dsge.mod`, whose estimation sets
+`first_obs=20` and whose model, two AR(1) processes for `dx` and `dy`, `from_mod` reads (with the
+prior shapes put in lower case, as `NORMAL_PDF` is written there). `forecast_evaluation` runs with
+the parameters fixed at their prior means and `bvar_lags=2`, at origins 100, 130, 160 and 190,
+on an expanding window and on a rolling window of 60 observations. On each of the eight windows,
+Octave sets `first_obs` and `nobs` to the same observations, calls `bvar.toolbox(2)` with Dynare's
+default hyperparameters and no training sample, and runs the recursion that `bvar.forecast` uses
+for its RMSE, the VAR at `PhiHat` from the last two observations, for four steps. The errors are
+compared with `ForecastEvaluation.bvar_errors`.
+
 The DSGE-VAR files are Dynare's `tests/dsge-var/dsgevar_forward_calibrated_lambda.mod`
 (`dsge_var=0.8`) and `dsgevar_forward_estimated_lambda.mod` (`dsge_prior_weight` with a uniform
 prior on [0, 1.9]), on the data their `simul_hybrid.mod` simulates in Octave: 500 periods of a
 model with a hybrid Phillips curve, of which the tests use 90 from `first_obs=50`, with 4 lags and
-a constant. `run_bvar.sh` keeps their models, priors, samples and optimiser (`mode_compute=4`) and
-removes Metropolis and `bayesian_irf`. After the mode, it evaluates Dynare's
+a constant. `run_bvar.sh` keeps their models, priors, samples, optimiser (`mode_compute=4`) and
+Metropolis (2000 draws) and removes `bayesian_irf`. After the mode, it evaluates Dynare's
 `dsge_var_likelihood` at the prior mean, at the mode and at points perturbed from both by 5 and 10
 per cent, and in the second file at the mode with `lambda` set to 0.3, 0.5, 1.5 and 0.2. Below
 `(k + n) / T = 21 / 94 = 0.223` the prior is improper, and both programs give `-inf` at 0.2.
@@ -1146,8 +1175,21 @@ one observation at a time, and its limit as `lambda` grows is the Gaussian likel
 the model implies. Under Dynare's count, neither holds. `compare_bvar.py` therefore compares the
 two programs with `T` set to Dynare's, through a subclass of `EstimationProblem`, and then reports
 how far `dsgelab`'s own `T` moves the mode. At the prior mean of the first file the two counts
-give log posteriors of -373.37 (Dynare's) and -366.43. The numbers come from a run on 3 November
-2026, with Dynare 7.2 and Octave 11.3.0.
+give log posteriors of -373.37 (Dynare's) and -366.43.
+
+For the DSGE-VAR's impulse responses, `run_bvar.sh` calls `PosteriorIRF` after the estimation,
+as `bayesian_irf` would. It saves the parameter draws `get_posterior_subsample` takes (1000 of the
+1000 Metropolis draws after the burn-in, with Octave's uniform generator restored afterwards) and
+the normal draws, which the inverse-Wishart and matrix-normal draws of each VAR consume. At each
+parameter draw, `dsge_var_irf` draws `(Phi, Sigma)` from the posterior of
+`EstimationProblem.dsge_var_posterior`, redraws while the VAR is explosive, and rotates the
+Cholesky factor of `Sigma` by the `Q` of the QR decomposition of the model's impact matrix, as
+`PosteriorIRF_core1.m` does. Dynare draws `Sigma` with `floor((1 + lambda) T) - k` degrees of
+freedom, where `dsgelab` takes the posterior's `(1 + lambda) T - k`, and the comparison uses
+Dynare's through a subclass, with Dynare's `T`. The responses agree draw by draw, and so do the
+mean, median, variance, 90% HPD interval and deciles of `oo_.PosteriorIRF.bvardsge`. In the second
+file one VAR draw in a thousand was explosive and drawn again, in both programs. The numbers come
+from a run on 6 November 2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Process discretisation: Tauchen and Rouwenhorst
 
@@ -1282,6 +1324,100 @@ about three times smaller than the linear one's. The test suite checks the same 
 product of two Markov chains, and the cubic interpolant against SciPy's natural `CubicSpline`. The
 numbers come from a run on 30 October 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on
 Python 3.12.
+
+## Improved time iteration and expectations iteration against dolo and the closed form
+
+```bash
+bash dolo/setup.sh                                 # as for time iteration
+dolo/.venv/bin/python dolo/run_dolo_iti.py         # about 90 seconds
+python compare_improved_time_iteration.py          # about 90 seconds
+```
+
+```
+1. dolo 0.4.9.20's improved_time_iteration, tolerance 1e-11
+ rbc (linear): dsgelab 0 + 9 Newton steps (0.90 s), time iteration 352; dolo 0 + 8 Newton steps, time iteration 352
+  ok   rbc, linear: against dolo at the grid points                3.37e-10  (limit 1e-08)
+  ok   rbc, linear: against dolo between them                      3.30e-10  (limit 1e-08)
+  ok   rbc, linear: against time iteration                         4.37e-11  (limit 1e-09)
+ rbc (cubic): dsgelab 0 + 9 Newton steps (2.85 s), time iteration 361; dolo 0 + 8 Newton steps, time iteration 361
+  ok   rbc, cubic: against dolo at the grid points                 3.72e-10  (limit 1e-08)
+  ok   rbc, cubic: against dolo between them                       3.68e-10  (limit 1e-08)
+  ok   rbc, cubic: against time iteration                          2.67e-11  (limit 1e-09)
+ consumption_savings (linear): dsgelab 40 + 4 Newton steps (0.07 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, linear: against dolo at the grid points  3.46e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against dolo between them      3.30e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against time iteration         2.82e-12  (limit 1e-09)
+ consumption_savings (cubic): dsgelab 40 + 4 Newton steps (0.19 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, cubic: against dolo at the grid points  3.32e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against dolo between them       3.17e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against time iteration          2.85e-12  (limit 1e-09)
+ rbc_mc (linear): dsgelab 0 + 10 Newton steps (0.21 s), time iteration 351; dolo 0 + 11 Newton steps, time iteration 351
+  ok   rbc_mc, linear: against dolo at the grid points             1.96e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against dolo between them                   1.92e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against time iteration                      3.56e-11  (limit 1e-09)
+ rbc_mc (cubic): dsgelab 0 + 10 Newton steps (0.87 s), time iteration 343; dolo 0 + 11 Newton steps, time iteration 343
+  ok   rbc_mc, cubic: against dolo at the grid points              1.70e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against dolo between them                    1.67e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against time iteration                       3.37e-11  (limit 1e-09)
+2. improved time iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, improved and time iteration: 4 and 17, 4 and 16, 4 and 17, 4 and 17; 1.02 s and 4.43 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              4.93e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, improved and time iteration: 4 and 17, 4 and 17, 4 and 17, 4 and 17; 1.40 s and 4.38 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               2.15e-12  (limit 1e-09)
+3. expectations iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, expectations and time iteration: 28 and 19, 29 and 19, 29 and 19, 29 and 19; 2.24 s and 6.46 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              3.68e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, expectations and time iteration: 26 and 19, 26 and 19, 26 and 19, 26 and 19; 2.43 s and 7.48 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               4.69e-12  (limit 1e-09)
+  without damping, the first steps move the policy by 6.3e-01, 8.9e-01, 1.5e+00, 2.0e+00, 3.7e+00
+
+all checks passed
+```
+
+`run_dolo_iti.py` solves the three models of the time-iteration comparison, on the same grids, with
+dolo 0.4.9.20's `improved_time_iteration`, and with its `time_iteration` from the same start for
+the iteration counts, and writes `out_time_iteration/dolo_iti.json`. `compare_improved_time_iteration.py`
+solves them with `dsgelab`'s `improved_time_iteration` from the same start. Both apply Newton's
+method to the conditions of every grid point at once, with the derivative through next period's
+policy. dolo solves each Newton step by a Neumann series in that derivative and `dsgelab` by
+GMRES, both preconditioned by the blocks of the derivative with next period's policy held fixed.
+dolo stops when the largest residual is below 1e-11, and `dsgelab` when a step moves no control by
+more than 1e-11, so the policies agree within 3.7e-10 relative to the largest control, and
+`dsgelab`'s agrees with its own time iteration run to 1e-12 within 4.4e-11. The Newton steps
+number 4 to 10, where time iteration takes 114 to 361 iterations from the same start.
+
+On `rbc` and `rbc_mc` both routines start from the controls of dolo's calibration, a constant
+policy. On `consumption_savings`, as published, dolo's routine does not converge from the
+calibration within its 1000 steps, and from `c = min(w, 1)` it takes 899 steps with linear
+interpolation and does not converge with cubic. `run_dolo_iti.py` therefore starts it from its
+own time iteration stopped at a tolerance of 1e-3, 40 iterations from `min(w, 1)`, and
+`dsgelab` starts in the same way. dolo is not edited, and the starting policies are passed as
+`dr0`. From `min(w, 1)` directly, `dsgelab`'s routine takes 9 steps on this grid.
+
+The second part repeats the closed-form check of the time-iteration comparison with improved time
+iteration, which takes 4 Newton steps on every grid where time iteration takes 16 or 17. The third
+solves the same model with the expectation in the Euler equation declared as the jump `z`, by
+`expectations_iteration`. dolo's documentation describes this iteration, as parameterized
+expectations for its `fgh` models, and dolo 0.4.9.20 has no code for it, so the references are
+the closed form and time iteration on the same grid. Both methods reproduce time iteration's
+policy within 1e-11 and the closed form's errors to the digits printed. Expectations iteration
+takes 26 to 29 iterations where time iteration takes 19, and a third of the time, because no
+integral is evaluated inside the solve for the controls. Without damping it diverges, as its
+docstring explains: a change in consumption moves the next update by about
+`-(1 - alpha beta) / (alpha beta)`, -1.8, times as much. The numbers come from a run on
+6 November 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.13.
 
 ## Value function iteration against QuantEcon and dolo
 

@@ -149,3 +149,38 @@ def test_bad_inputs_are_refused():
                             estimate="fixed", theta=[0.8])
     with pytest.raises(ValueError, match="alternative"):
         diebold_mariano([1.0, 2.0], [1.0, 1.0], alternative="both")
+
+
+def test_bvar_benchmark_is_reestimated_on_each_window():
+    y = _ar1_data(90, seed=4)
+    pb = _ar1_problem(y)
+    origins = [50, 60, 70, 80]
+    fe = forecast_evaluation(pb, origins, 3, estimate="fixed", theta=[0.8], window=40,
+                             bvar_lags=2, bvar_options={"tau": 2.0})
+    assert fe.bvar_lags == 2
+    for o, n in enumerate(origins):
+        b = dsg.bvar({"y": y[n - 40:n]}, 2, first_obs=3, tau=2.0)
+        np.testing.assert_allclose(fe.bvar_mean["y"][o], b.forecast(3, draws=0).point["y"],
+                                   rtol=1e-13)
+    e = fe.bvar_errors["y"]
+    np.testing.assert_allclose(e, fe.actual["y"] - fe.bvar_mean["y"], rtol=0)
+    rm = fe.rmse(benchmark="bvar")["y"]
+    np.testing.assert_allclose(rm, np.sqrt(np.nanmean(e ** 2, axis=0)), rtol=1e-12)
+    np.testing.assert_allclose(fe.relative_rmse("bvar")["y"], fe.rmse()["y"] / rm, rtol=1e-12)
+    np.testing.assert_array_equal(fe.rmse(benchmark=True)["y"],
+                                  fe.rmse(benchmark="random_walk")["y"])
+    dm = fe.diebold_mariano("y", 1, benchmark="bvar")
+    ref = diebold_mariano(fe.errors["y"][:, 0], e[:, 0], 1)
+    assert dm.statistic == ref.statistic and dm.p_value == ref.p_value
+    # without the benchmark, asking for it is refused
+    plain = forecast_evaluation(pb, origins, 3, estimate="fixed", theta=[0.8])
+    assert plain.bvar_mean is None and plain.bvar_lags is None
+    with pytest.raises(ValueError, match="bvar_lags"):
+        plain.rmse(benchmark="bvar")
+    with pytest.raises(ValueError, match="benchmark"):
+        plain.relative_rmse("ar")
+    with pytest.raises(ValueError, match="bvar_lags"):
+        forecast_evaluation(pb, origins, 3, estimate="fixed", theta=[0.8], bvar_options={"mu": 1})
+    with pytest.raises(ValueError, match="nobs"):
+        forecast_evaluation(pb, origins, 3, estimate="fixed", theta=[0.8], bvar_lags=1,
+                            bvar_options={"nobs": 10})

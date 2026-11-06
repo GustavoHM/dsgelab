@@ -142,3 +142,66 @@ def test_options_and_errors():
     b = bvar(Y, 1, first_obs=2, prefilter=True)
     assert b.names == ["y1", "y2"] and not b.constant and b.posterior.Phi.shape == (2, 2)
     assert dsg.bvar is bvar
+
+
+def test_irf_draws_and_statistics():
+    data = _var_data()
+    b = bvar(data, 2, first_obs=3)
+    out = b.irf(12, 300, seed=4)
+    Phi, Sigma = b.posterior.draw(300, seed=4)          # the same draws, in the same order
+    assert out["draws"] == 300 and out["explosive"] == 0.0 and out["coverage"] == 0.6
+    for d in (0, 117, 299):
+        C = b._companion(Phi[d])
+        L = np.linalg.cholesky(Sigma[d])
+        P = np.eye(4)
+        for h in range(12):
+            resp = P[:2, :2] @ L                          # Psi_h L, from the companion matrix
+            for j, e in enumerate(b.names):
+                for i, v in enumerate(b.names):
+                    assert out["responses"][e][v][d, h] == pytest.approx(resp[i, j], abs=1e-13)
+            P = C @ P
+    R = out["responses"]["x"]["z"]
+    ranked = np.sort(R, axis=0)
+    np.testing.assert_allclose(out["mean"]["x"]["z"], R.mean(axis=0), rtol=1e-12)
+    np.testing.assert_allclose(out["variance"]["x"]["z"], R.var(axis=0), rtol=1e-12)
+    # Dynare's ranked draws: round(0.5 N), round(0.2 N) and round(0.8 N) of N = 300
+    np.testing.assert_array_equal(out["median"]["x"]["z"], ranked[149])
+    np.testing.assert_array_equal(out["lower_bound"]["x"]["z"], ranked[59])
+    np.testing.assert_array_equal(out["upper_bound"]["x"]["z"], ranked[239])
+    # the HPD interval holds 90% of the draws and is no wider than the central one
+    lo, hi = out["lower"]["x"]["z"], out["upper"]["x"]["z"]
+    inside = np.mean((R >= lo - 1e-15) & (R <= hi + 1e-15), axis=0)
+    assert np.all(inside >= 0.9)
+    q = np.quantile(R, [0.05, 0.95], axis=0)
+    assert np.all(hi - lo <= q[1] - q[0] + 1e-12)
+    # a Cholesky impulse to the second variable does not move the first on impact
+    assert np.all(out["responses"]["z"]["x"][:, 0] == 0.0)
+
+
+def test_irf_identifications():
+    b = bvar(_var_data(), 1, first_obs=2)
+    sq = b.irf(5, 50, identification="SquareRoot", seed=1)
+    _, Sigma = b.posterior.draw(50, seed=1)
+    for d in (0, 49):
+        B = np.array([[sq["responses"][e][v][d, 0] for e in b.names] for v in b.names])
+        np.testing.assert_allclose(B, B.T, atol=1e-15)
+        np.testing.assert_allclose(B @ B, Sigma[d], rtol=1e-12)
+    # a callable identification; the upper factor is what Dynare 7.2 takes for 'Cholesky'
+    up = b.irf(5, 50, identification=lambda S: np.linalg.cholesky(S).T, seed=1)
+    for d in (0, 49):
+        U = np.linalg.cholesky(Sigma[d]).T
+        assert up["responses"]["x"]["z"][d, 0] == pytest.approx(U[1, 0])
+        assert up["responses"]["z"]["x"][d, 0] == pytest.approx(U[0, 1])
+    with pytest.raises(ValueError, match="identification"):
+        b.irf(5, 10, identification="sign")
+    with pytest.raises(ValueError, match="coverage"):
+        b.irf(5, 10, coverage=1.2)
+
+
+def test_plot_posterior_irf_draws_the_bvar_irf():
+    pytest.importorskip("matplotlib")
+    out = bvar(_var_data(), 1, first_obs=2).irf(6, 40, seed=0)
+    fig = dsg.plot_posterior_irf(out, "x")
+    axes = [a for a in fig.axes if a.get_visible()]
+    assert [a.get_title() for a in axes] == ["x", "z"]
+    np.testing.assert_array_equal(axes[1].get_lines()[0].get_ydata(), out["mean"]["x"]["z"])

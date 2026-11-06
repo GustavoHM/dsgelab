@@ -31,7 +31,7 @@ from .calibration import CalibrationResult, calibrate, target_jacobian
 from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
                           compare_irfs, diagnose, steady_state_invariance)
 from .bgp import BalancedGrowth, balanced_growth
-from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density
+from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density, dsge_var_irf
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
 from .identification import (Identification, IdentificationCheck, IdentificationStrength,
                              identification)
@@ -88,7 +88,8 @@ from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
 from .priors import Prior, prior
 from .projection import Projection, solve_projection
 from .smolyak import SmolyakGrid
-from .time_iteration import CartesianGrid, TimeIterationSolution, time_iteration
+from .time_iteration import (CartesianGrid, TimeIterationSolution, expectations_iteration,
+                             improved_time_iteration, time_iteration)
 from .value_iteration import DynamicProgram, ValueIterationSolution, value_iteration
 from .egm import EGMProgram, EGMSolution, egm
 from .switching import (MarkovSwitchingError, MarkovSwitchingSolution, MSVSolution,
@@ -140,11 +141,12 @@ __all__ = [
     "posterior_irf", "plot_identification_strength", "plot_identification_sensitivity",
     "plot_identification_patterns",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
-    "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart",
+    "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart", "dsge_var_irf",
     "prior", "Prior",
     "solve_projection", "Projection", "SmolyakGrid",
     "tauchen", "rouwenhorst", "MarkovChain",
     "time_iteration", "TimeIterationSolution", "CartesianGrid",
+    "improved_time_iteration", "expectations_iteration",
     "value_iteration", "ValueIterationSolution", "DynamicProgram",
     "egm", "EGMSolution", "EGMProgram",
     "HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyState", "simple",
