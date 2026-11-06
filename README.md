@@ -131,7 +131,7 @@ examples in English and Portuguese.
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
 | Extended path, deterministic and stochastic (sparse or full tree, hybrid correction) | `extended_path` |
-| Models in levels: declared trends with Dynare's balanced-growth check; the growth path | `from_mod`, `balanced_growth` |
+| Models in levels: declared trends with Dynare's balanced-growth check; the growth path | `from_mod`, `from_equations(trend_vars=, deflators=)`, `balanced_growth` |
 | Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
 | Export a model to Dynare and to MacroModelling.jl | `to_dynare`, `to_macromodelling` |
 | Calibration on targets, with an identification diagnostic; calibration equations inside the model | `calibrate`, `target_jacobian`, `from_equations(calibration_equations=)` |
@@ -308,7 +308,6 @@ planned.
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.
 - **The extended path's hybrid correction stops at second order.**
-- **Trends can be declared only in a `.mod` file.** `from_equations` does not accept them yet.
 - **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul` and
   `estimation` are skipped, and their options are not applied. The dedicated routes
   `ModFile.identification`, `ModFile.method_of_moments` and `ModFile.irf_matching` read their
