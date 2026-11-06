@@ -198,7 +198,8 @@ class EstimationProblem:
     @property
     def is_dsge_var(self) -> bool:
         """Whether the likelihood is the DSGE-VAR's."""
-        return self.dsge_var is not None or "dsge_prior_weight" in self.free
+        return self.dsge_var is not None or (self.free is not None
+                                             and "dsge_prior_weight" in self.free)
 
     def _check_dsge_var(self, Y: np.ndarray) -> None:
         from .bvar import _var_sample_moments
@@ -213,7 +214,8 @@ class EstimationProblem:
             raise ValueError("a DSGE-VAR does not take presample, as in Dynare")
         if self.dsge_var is not None and not self.dsge_var > 0:
             raise ValueError("dsge_var, the weight of the DSGE prior, must be positive")
-        meas = [n for n in self.free if n.startswith("stderr ") and n[7:] not in self.model.shocks]
+        meas = [n for n in self.free or () if n.startswith("stderr ")
+                and n[7:] not in self.model.shocks]
         if meas or any(v for v in self._base_meas().values()):
             raise ValueError("a DSGE-VAR has no measurement errors, as in Dynare")
         if self.first_obs - 1 < p:

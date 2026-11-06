@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from functools import cached_property
 from itertools import product
-from typing import Mapping, Sequence
+from typing import Mapping, Sequence, cast
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -59,9 +59,9 @@ class SmolyakGrid:
                                  f"unknown {extra}")
             levels = [level[n] for n in self.names]
         elif np.ndim(level) == 0:
-            levels = [level] * d
+            levels = [cast(int, level)] * d
         else:
-            levels = list(level)
+            levels = list(cast(Sequence[int], level))
             if len(levels) != d:
                 raise ValueError(f"level has {len(levels)} entries for {d} axes")
         if not all(float(v).is_integer() and v >= 0 for v in levels):
@@ -69,7 +69,8 @@ class SmolyakGrid:
         self.levels = np.array([int(v) for v in levels], dtype=int)
         self.level = int(self.levels.max())
         self.indices = _multi_indices(self.levels)
-        unit, degrees = [], []
+        unit: list[tuple[float, ...]] = []
+        degrees: list[tuple[int, ...]] = []
         for idx in self.indices:
             unit.extend(product(*[_new_nodes(i) for i in idx]))
             degrees.extend(product(*[_new_degrees(i) for i in idx]))

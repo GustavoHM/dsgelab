@@ -213,8 +213,8 @@ def switching_system(model: Model, params: Params, switching: Mapping[str, Seque
     hreg = T.shape[0]
     switching = {k: np.asarray(v, dtype=float).ravel() for k, v in switching.items()}
     for k, v in switching.items():
-        if v.size != hreg:
-            raise ValueError(f"{k!r} has {v.size} values for {hreg} regimes")
+        if np.size(v) != hreg:
+            raise ValueError(f"{k!r} has {np.size(v)} values for {hreg} regimes")
         get_param(params, k)                         # raises if the name is unknown
     names_next = set(next_regime)
     unknown = names_next - set(switching)
@@ -664,7 +664,7 @@ class MarkovSwitchingSolution:
         if expected:
             if not np.isscalar(regime):
                 raise ValueError("expected=True needs one starting regime")
-            r = int(regime)
+            r = int(np.asarray(regime))
             v = np.zeros((h, nk))
             v[r] = self.Q[r, r] @ e
             k = np.zeros((periods, nk))
@@ -676,7 +676,7 @@ class MarkovSwitchingSolution:
             paths = {n: k[:, i] for i, n in enumerate(self.model.states)}
             paths.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
         else:
-            path = (np.full(periods, int(regime)) if np.isscalar(regime)
+            path = (np.full(periods, int(np.asarray(regime))) if np.isscalar(regime)
                     else np.asarray(regime, dtype=int))
             if path.size != periods:
                 raise ValueError(f"the regime path has {path.size} entries for {periods} periods")

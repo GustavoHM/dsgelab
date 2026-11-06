@@ -162,10 +162,10 @@ def _chains(draws: Any, names: Sequence[str] | None = None):
         C = C[None, :, None]
     elif C.ndim == 2:
         C = C[None]
-    names = [f"x{i}" for i in range(C.shape[2])] if names is None else list(names)
-    if len(names) != C.shape[2]:
-        raise ValueError(f"{C.shape[2]} parameters for {len(names)} names")
-    return C, names, None
+    labels = [f"x{i}" for i in range(C.shape[2])] if names is None else list(names)
+    if len(labels) != C.shape[2]:
+        raise ValueError(f"{C.shape[2]} parameters for {len(labels)} names")
+    return C, labels, None
 
 
 # ======================================================== MCMC diagnostics
@@ -239,7 +239,7 @@ def brooks_gelman(draws: Any, *, names: Sequence[str] | None = None,
     (0.5) as ``drop``: :func:`~dsgelab.metropolis_hastings` with ``burn=0``
     keeps the draws it needs.
     """
-    C, names, lp = _chains(draws, names)
+    C, labels, lp = _chains(draws, names)
     if log_posterior is not None:
         lp = np.atleast_2d(np.asarray(log_posterior, dtype=float))
     m, N, k = C.shape
@@ -250,7 +250,7 @@ def brooks_gelman(draws: Any, *, names: Sequence[str] | None = None,
     uni = np.stack([_brooks_gelman_series(C[:, :, j], iterations, drop, alpha)
                     for j in range(k)], axis=2)
     multi = None if lp is None else _brooks_gelman_series(lp, iterations, drop, alpha)
-    return BrooksGelman(iterations=iterations, names=names, univariate=uni, multivariate=multi)
+    return BrooksGelman(iterations=iterations, names=labels, univariate=uni, multivariate=multi)
 
 
 def mh_autocorrelation(draws: ArrayLike, lags: int = 30) -> np.ndarray:
@@ -457,9 +457,10 @@ def posterior_irf(problem: Any, draws: Any, *, shocks: Sequence[str] | None = No
         stock.append(resp)
     if not stock:
         raise RuntimeError("no draw could be solved")
+    assert shock_names is not None
     S = np.array(stock)                              # (draws, shocks, periods, variables)
     st = _posterior_moments(S, mass)
-    out = {key: {e: {v: st[key][i, :, j] for j, v in enumerate(names)}
+    out: dict[str, Any] = {key: {e: {v: st[key][i, :, j] for j, v in enumerate(names)}
                  for i, e in enumerate(shock_names)}
            for key in ("mean", "median", "lower", "upper", "deciles")}
     out["responses"] = {e: {v: S[:, i, :, j] for j, v in enumerate(names)}
@@ -531,9 +532,9 @@ def plot_paths(paths: Mapping, variables: Sequence[str] | None = None, *, column
     whose first date is the initial condition (``start=0`` numbers it as
     Dynare's ``rplot`` does). ``start`` numbers the first period.
     """
-    if hasattr(paths, "levels") and hasattr(paths, "model"):
-        paths = paths.values()
-    return _grid(paths, variables, columns=columns, start=start, zero=False, title=title,
+    series = (paths.values() if hasattr(paths, "levels") and hasattr(paths, "model")
+              else paths)
+    return _grid(series, variables, columns=columns, start=start, zero=False, title=title,
                  figsize=figsize, xlabel="period")
 
 

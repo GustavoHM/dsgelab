@@ -476,7 +476,7 @@ class MarkovSwitchingProblem:
 
     @property
     def names(self) -> list:
-        return list(self.free)
+        return list(self.free or ())
 
     def _base_meas(self) -> dict:
         m = self.measurement
@@ -496,7 +496,7 @@ class MarkovSwitchingProblem:
         for n in self.names:
             b = _bracket(n)
             if b is not None and len(b[1]) == 2:
-                v = float(self.transition[b[1]])
+                v = float(np.asarray(self.transition)[b[1]])
             elif b is not None:
                 v = float(self.switching[b[0]][b[1][0]])
             elif n.startswith("stderr "):
@@ -515,8 +515,8 @@ class MarkovSwitchingProblem:
         """``(params, shock covariance, measurement sds, switching, transition)`` at ``theta``."""
         from .estimation import unpack_point
         theta = np.asarray(theta, dtype=float)
-        switching = {k: v.copy() for k, v in self.switching.items()}
-        T = self.transition.copy()
+        switching = {k: np.asarray(v).copy() for k, v in self.switching.items()}
+        T = np.asarray(self.transition).copy()
         rest_names, rest_values = [], []
         for n, v in zip(self.names, theta):
             b = _bracket(n)
@@ -532,7 +532,7 @@ class MarkovSwitchingProblem:
             if not named.any():
                 continue
             left = 1.0 - T[i, named].sum()
-            base = self.transition[i, ~named]
+            base = np.asarray(self.transition)[i, ~named]
             share = base / base.sum() if base.sum() > 0 else np.full(base.size, 1.0 / base.size)
             T[i, ~named] = left * share
         params, S, meas = unpack_point(self.model, self.params, self.cov, self._base_meas(),

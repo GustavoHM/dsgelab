@@ -243,7 +243,8 @@ class BlockSteadyState(dict):
     the distributions ``D`` and ``Dbeg``.
     """
 
-    def __init__(self, values: Mapping[str, Any] = (), internals: Mapping[str, dict] | None = None):
+    def __init__(self, values: Mapping[str, Any] | Iterable[tuple[str, Any]] = (),
+                 internals: Mapping[str, dict] | None = None):
         super().__init__(values)
         self.internals: dict[str, dict[str, Any]] = dict(internals or {})
 
@@ -499,7 +500,7 @@ class HetBlock:
                  hetinputs: Iterable = (), hetoutputs: Iterable = (), name: str | None = None,
                  backward_tol: float = 1e-10, backward_max_iter: int = 10000, h: float = 1e-4,
                  twosided: bool = True):
-        self.name = name or getattr(step, "__name__", "het")
+        self.name: str = name if name else getattr(step, "__name__", "het")
         label = f"het block {self.name}"
         self.step = _Function(step, outputs, label)
         self.backward = _names(backward)
@@ -681,7 +682,8 @@ class HetBlock:
         changed = self._moving_hetinputs(paths)
         Pi, grid = self._exogenous(x0)
         V = {v: internals[v] for v in self.backward}
-        policies, outcomes = [None] * T, [None] * T
+        policies: list[Any] = [None] * T
+        outcomes: list[Any] = [None] * T
         for t in reversed(range(T)):
             x = dict(x0)
             for k, p in paths.items():
@@ -956,7 +958,7 @@ class BlockModel:
                 maker[o] = b
         self.blocks = _order(blocks, maker, name)
         self.outputs = [o for b in self.blocks for o in b.outputs]
-        self.inputs = []
+        self.inputs: list[str] = []
         for b in self.blocks:
             self.inputs += [i for i in b.inputs if i not in maker and i not in self.inputs]
 
