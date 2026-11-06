@@ -33,7 +33,8 @@ from .diagnostics import (blanchard_kahn_report, check_identity, check_slack,
 from .bgp import BalancedGrowth, balanced_growth
 from .bvar import BVAR, BVARForecast, NormalInverseWishart, bvar, bvar_density
 from .extended_path import ExtendedPath, extended_path, quadrature_nodes
-from .identification import Identification, IdentificationCheck, identification
+from .identification import (Identification, IdentificationCheck, IdentificationStrength,
+                             identification)
 from .irf_matching import IRFMatchingResult, irf_matching
 from .local_projection import LocalProjectionResult, local_projection
 from .moment_estimation import MomentsResult, method_of_moments
@@ -61,21 +62,25 @@ from .nuts import NUTSResult, nuts
 from .estimate import EstimationResult, estimate, log_likelihood, log_posterior
 from .estimation import (EstimationProblem, MCMCResult, ModeResult, SMCResult,
                          effective_sample_size, maximum_likelihood, metropolis_hastings,
-                         model_probabilities, posterior_forecast, posterior_mode,
-                         prior_predictive, rhat, smc)
+                         model_probabilities, posterior_conditional_forecast, posterior_forecast,
+                         posterior_mode, prior_predictive, rhat, smc)
 from .forecast_evaluation import (DieboldMariano, ForecastEvaluation, diebold_mariano,
                                   forecast_evaluation)
 from .heterogeneous import (BlockModel, BlockSteadyState, HetBlock, SimpleBlock, SolvedBlock,
                             interpolate_rows, log_grid, simple)
 from .markov import MarkovChain, rouwenhorst, tauchen
-from .kalman import (FilterResult, Forecast, SmootherResult, StateSpace, forecast,
-                     kalman_filter, kalman_smoother, realtime_shock_decomposition,
-                     low_frequency, shock_decomposition, state_space)
+from .kalman import (ConditionalForecast, FilterResult, Forecast, SmootherResult, StateSpace,
+                     annualise_decomposition, conditional_forecast_bands, forecast,
+                     initial_condition_decomposition, kalman_filter, kalman_smoother,
+                     realtime_shock_decomposition, low_frequency, shock_decomposition,
+                     state_space)
 from .inversion import InversionFilterResult, inversion_filter, inversion_smoother
 from .particle import ParticleFilterResult, ParticleSmootherResult, particle_filter, particle_smoother
 from .plots import (BrooksGelman, brooks_gelman, mh_autocorrelation, mode_check,
                     plot_brooks_gelman, plot_conditional_forecast, plot_decomposition,
-                    plot_filtering, plot_forecast, plot_identification, plot_irf,
+                    plot_filtering, plot_forecast, plot_identification,
+                    plot_identification_patterns, plot_identification_sensitivity,
+                    plot_identification_strength, plot_irf,
                     plot_mh_autocorrelation, plot_mode_check, plot_occbin, plot_occbin_regimes,
                     plot_paths, plot_posterior, plot_posterior_irf, plot_priors,
                     plot_smoothed_observables, plot_smoothed_shocks, posterior_density,
@@ -124,14 +129,16 @@ __all__ = [
     "particle_filter", "ParticleFilterResult", "particle_smoother", "ParticleSmootherResult",
     "inversion_filter", "InversionFilterResult", "inversion_smoother",
     "SmootherResult", "shock_decomposition", "realtime_shock_decomposition", "forecast",
-    "low_frequency",
+    "low_frequency", "initial_condition_decomposition", "annualise_decomposition",
+    "conditional_forecast_bands", "ConditionalForecast", "posterior_conditional_forecast",
     "plot_irf", "plot_paths", "plot_decomposition", "plot_forecast", "plot_posterior",
     "prior_density", "posterior_density",
     "plot_priors", "trace_plot", "plot_mh_autocorrelation", "plot_brooks_gelman", "plot_mode_check",
     "plot_smoothed_shocks", "plot_smoothed_observables", "plot_posterior_irf",
     "plot_conditional_forecast", "plot_occbin", "plot_occbin_regimes", "plot_identification",
     "plot_filtering", "brooks_gelman", "BrooksGelman", "mh_autocorrelation", "mode_check",
-    "posterior_irf",
+    "posterior_irf", "plot_identification_strength", "plot_identification_sensitivity",
+    "plot_identification_patterns",
     "Forecast", "forecast_evaluation", "ForecastEvaluation", "diebold_mariano", "DieboldMariano",
     "bvar", "bvar_density", "BVAR", "BVARForecast", "NormalInverseWishart",
     "prior", "Prior",
@@ -149,7 +156,7 @@ __all__ = [
     "enumerated_likelihood", "MarkovSwitchingProblem",
     "perfect_foresight", "TransitionPath", "perfect_foresight_with_expectation_errors", "News",
     "calibrate", "CalibrationResult", "target_jacobian",
-    "identification", "Identification", "IdentificationCheck",
+    "identification", "Identification", "IdentificationCheck", "IdentificationStrength",
     "method_of_moments", "MomentsResult", "irf_matching", "IRFMatchingResult",
     "local_projection", "LocalProjectionResult",
     "check_restrictions", "sample_restrictions", "Restriction", "RestrictionCheck",
