@@ -69,18 +69,18 @@ Cartesian grid, with bounds on the controls imposed by complementarity. It agree
 growth.
 
 Version 0.9.0, released on 5 November 2026 on PyPI and on Zenodo (DOI
-[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), closes milestone 0.8 and brings milestone 0.9.
-Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features come out in
-it. On a grid, the package now also solves by value function iteration with Howard's steps, by the
-endogenous grid method, and by collocation and time iteration on Smolyak sparse grids with any
-number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed form of
-stochastic growth with up to six capital stocks. Markov regime switching is solved at first order
-and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the solutions
-Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous agents are
-solved by the sequence-space Jacobian method and agree with sequence-jacobian on its Krusell–Smith
-and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and `dsge_var`. The
-rest of Dynare's figures came in at the author's request, and the numbers they draw agree with
-Dynare's own.
+[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), closes milestone 0.8 and brings
+milestone 0.9. Versions 0.7.3 to 0.7.5 and 0.8.0 were not published on their own, and their features
+come out in it. On a grid, the package now also solves by value function iteration with Howard's
+steps, by the endogenous grid method, and by collocation and time iteration on Smolyak sparse grids
+with any number of states. These are validated against QuantEcon, dolo, Tasmanian and the closed
+form of stochastic growth with up to six capital stocks. Markov regime switching is solved at first
+order and estimated with Kim's filter. RISE runs only in MATLAB, so the check is against the
+solutions Foerster, Rubio-Ramírez, Waggoner and Zha publish and against statsmodels. Heterogeneous
+agents are solved by the sequence-space Jacobian method and agree with sequence-jacobian on its
+Krusell–Smith and HANK models. The BVAR and the DSGE-VAR agree with Dynare's tests of `+bvar` and
+`dsge_var`. The rest of Dynare's figures came in at the author's request, and the numbers they draw
+agree with Dynare's own.
 
 ## What counts as done
 

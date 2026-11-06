@@ -74,18 +74,19 @@ concorda com o `time_iteration` do dolo em três modelos publicados com ele e co
 crescimento estocástico.
 
 A versão 0.9.0, lançada em 5 de novembro de 2026 no PyPI e no Zenodo (DOI
-[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), fecha o marco 0.8 e traz o marco 0.9. As versões
-0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem nela. Numa grade, o
-pacote agora também resolve por iteração da função valor com os passos de Howard, pelo método da
-grade endógena, e por colocação e iteração temporal em grades esparsas de Smolyak com qualquer
-número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o Tasmanian e a forma
-fechada do crescimento estocástico com até seis estoques de capital. A mudança de regime markoviana
-é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no MATLAB, e por isso a
-conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha publicam e contra o
-statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no espaço das
-sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O BVAR e o
-DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos do Dynare
-entraram a pedido do autor, e os números que eles desenham concordam com os do próprio Dynare.
+[10.5281/zenodo.23992839](https://doi.org/10.5281/zenodo.23992839)), fecha o marco 0.8 e traz o
+marco 0.9. As versões 0.7.3 a 0.7.5 e 0.8.0 não foram publicadas à parte, e os recursos delas saem
+nela. Numa grade, o pacote agora também resolve por iteração da função valor com os passos de
+Howard, pelo método da grade endógena, e por colocação e iteração temporal em grades esparsas de
+Smolyak com qualquer número de estados. Esses métodos são validados contra o QuantEcon, o dolo, o
+Tasmanian e a forma fechada do crescimento estocástico com até seis estoques de capital. A mudança
+de regime markoviana é resolvida em primeira ordem e estimada com o filtro de Kim. O RISE só roda no
+MATLAB, e por isso a conferência é contra as soluções que Foerster, Rubio-Ramírez, Waggoner e Zha
+publicam e contra o statsmodels. Os agentes heterogêneos são resolvidos pelo método do jacobiano no
+espaço das sequências e concordam com o sequence-jacobian nos modelos Krusell–Smith e HANK dele. O
+BVAR e o DSGE-VAR concordam com os testes do `+bvar` e do `dsge_var` do Dynare. Os demais gráficos
+do Dynare entraram a pedido do autor, e os números que eles desenham concordam com os do próprio
+Dynare.
 
 ## O que conta como pronto
 
