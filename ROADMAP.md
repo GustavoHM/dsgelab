@@ -611,6 +611,13 @@ of 0.9.0 records, and each keeps the six conditions above.
   Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
   in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
   along a transition path.
+  - [x] *The Markov matrix that moves along a path* (6 November 2026), with transitions from a
+    given distribution (`initial`). On the household of sequence-jacobian 1.0.0's
+    `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates,
+    closed by a bond market, the steady state agrees within 8.1e-10, the Jacobians within 2.9e-10,
+    `G` within 8.3e-11, the linear and nonlinear responses within 2.2e-10 and the return from
+    another steady state's distribution within 6.0e-10. The fake-news Jacobians agree with the
+    brute-force ones within 1.6e-9. The asset grid stays fixed along a path.
 - [ ] **API audit before the freeze.** An inventory of `__all__`, with the names, argument orders
   and defaults made consistent across modules. Every change comes with a deprecation warning that
   lasts at least one minor version, as the version policy of 0.5 requires, so the audit is

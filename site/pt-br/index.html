@@ -1371,13 +1371,43 @@ f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():
 hh.h = 1e-6
 J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # pelo algoritmo das notícias falsas
 direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
-f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"
+
+def mixed(rho_e, sd_e, n_e, n_a, q):     # com probabilidade q, a renda é sorteada de novo
+    e, Pi, a = grids(rho_e, sd_e, n_e, n_a)
+    return e, (1 - q) * Pi + q / e.size, a             # uma matriz de Markov que muda com q
+
+hh_q = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                    hetinputs=[(mixed, ["e_grid", "Pi", "a_grid"])], h=1e-6)
+ks_q = dsg.BlockModel([hh_q, firm, markets])
+ss_q = ks_q.steady_state({**ss, "q": 0.05}, unknowns={"K": ss["K"]}, targets=["asset_mkt"])
+f"{100 * ss_q['r']:.3f} por cento"
+Jq = hh_q.jacobian(ss_q, ["q"], 30)["C"]["q"]
+bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()
+     &lt; 1e-7 * np.abs(Jq).max())
+dq = 0.05 * 0.8 ** np.arange(T)                        # mais risco de renda por um tempo
+linear = ks_q.impulse_linear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+nonlinear = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+D0 = ss.internals["household"]["Dbeg"]                 # a distribuição sem o risco adicional
+back = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": np.zeros(T)},
+                              initial={"household": D0})
+f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</code></pre>
 <pre class="output" data-label="Saída"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
 ('0.98191', '-3e-11')
 <span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
 ('3.97 bp', '6e-07')
 <span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
-'1e-10'</code></pre>
+'1e-10'
+<span class="out-expr">f"{100 * ss_q['r']:.3f} por cento"</span>
+'0.317 por cento'
+<span class="out-expr">bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()</span>
+     &lt; 1e-7 * np.abs(Jq).max())
+True
+<span class="out-expr">f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('-0.99 bp', '4e-05')
+<span class="out-expr">f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</span>
+('-0.838', '-0.027')</code></pre>
   <p>Um <code>HetBlock</code> contém um contínuo de famílias em 100 pontos de ativos por 7 estados
   de renda, e <code>household</code> é um passo da iteração para trás delas pelo método da grade
   endógena, que <code>interpolate_rows</code> faz linha a linha. A firma e os mercados são blocos
@@ -1394,6 +1424,18 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   passos para trás, e derivar a trajetória inteira para um choque em cada data, a um custo 30
   vezes maior, dá a mesma matriz. A validação resolve os modelos de Krusell–Smith e HANK de um
   ativo do próprio sequence-jacobian em 7 por 500 pontos e concorda com ele até 2e-10.</p>
+  <p>Em <code>mixed</code> a matriz de Markov é função de um agregado, <code>q</code>, a
+  probabilidade de a renda ser sorteada de novo, com todos os nós igualmente prováveis, o que
+  espalha a renda mais do que a distribuição estacionária da própria cadeia. Com
+  <code>q = 0.05</code> as famílias poupam mais, e os juros que equilibram o mercado de ativos caem
+  de 1 para 0,317 por cento. O jacobiano das notícias falsas em relação a <code>q</code> leva em
+  conta que a matriz move a distribuição no período do choque e a expectativa um período antes
+  dele, e concorda com o direto dentro de 1e-7 da sua maior entrada. Uma alta temporária de
+  <code>q</code> reduz os juros em 0,99 ponto-base um período depois. <code>initial</code> começa a
+  transição da distribuição do primeiro estado estacionário, que tem menos capital, e a economia
+  volta ao novo estado estacionário com os choques em zero. A validação compara os mesmos recursos
+  com o sequence-jacobian na família do <code>labor_search.ipynb</code> dele, cuja cadeia de
+  emprego muda com as taxas de obtenção e de perda de emprego, dentro de 6e-10.</p>
   <h3>36. Uma regra de Taylor que muda de regime, resolvida e filtrada</h3>
 <pre><code>fisher = dsg.Model(
     states=["r"], jumps=["pi"], shocks=["e"],
@@ -1828,7 +1870,10 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   <h3>Agentes heterogêneos comparados com o sequence-jacobian</h3>
   <p>Os modelos de Krusell–Smith e HANK de um ativo do próprio sequence-jacobian 1.0.0, dos
   cadernos na tag v1.0.0, em 7 estados de renda por 500 pontos de ativos, com a mesma calibração,
-  as mesmas incógnitas e os mesmos alvos. As diferenças são relativas ao maior valor comparado.</p>
+  as mesmas incógnitas e os mesmos alvos. A família do <code>labor_search.ipynb</code>, cuja cadeia
+  de emprego muda com as taxas de obtenção e de perda de emprego, em 10 estados por 100 pontos,
+  fechada por um mercado de títulos que os dois pacotes escrevem do mesmo modo. As diferenças são
+  relativas ao maior valor comparado.</p>
   <table>
     <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
@@ -1837,6 +1882,9 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
       <tr><td>jacobianos de equilíbrio geral G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>respostas a impulso lineares e não lineares</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>notícias falsas contra força bruta (o dsgelab contra ele mesmo)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho, matriz de Markov movida por f e s: estado estacionário</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho: jacobianos, G, respostas lineares e não lineares</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho: retorno a partir da distribuição de outro estado estacionário</td><td class="num">6e-10</td><td class="ok">OK</td></tr>
   <h3>Mudança de regime markoviana comparada com soluções publicadas e com o statsmodels</h3>
   <p>O RISE, o toolbox de mudança de regime, é distribuído como P-code do MATLAB, que o GNU Octave
   não executa. A solução é comparada, no lugar dele, com as soluções que Foerster, Rubio-Ramírez,

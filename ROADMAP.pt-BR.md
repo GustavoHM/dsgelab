@@ -639,6 +639,13 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
   dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
   Markov que muda ao longo de uma trajetória de transição.
+  - [x] *A matriz de Markov que muda ao longo da trajetória* (6 de novembro de 2026), com
+    transições a partir de uma distribuição dada (`initial`). No domicílio do `labor_search.ipynb`
+    do sequence-jacobian 1.0.0, cuja cadeia de emprego muda com as taxas de obtenção e de perda de
+    emprego, fechado por um mercado de títulos, o estado estacionário concorda em 8,1e-10, os
+    jacobianos em 2,9e-10, `G` em 8,3e-11, as respostas linear e não linear em 2,2e-10 e o retorno
+    a partir da distribuição de outro estado estacionário em 6,0e-10. Os jacobianos do fake news
+    concordam com os de força bruta em 1,6e-9. A grade de ativos fica fixa ao longo da trajetória.
 - [ ] **Auditoria da API antes do congelamento.** Um inventário do `__all__`, com nomes, ordem dos
   argumentos e valores padrão coerentes entre os módulos. Cada mudança vem com um aviso de
   descontinuação que dura pelo menos uma versão menor, como exige a política de versões da 0.5, e

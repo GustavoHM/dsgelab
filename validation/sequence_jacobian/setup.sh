@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # setup.sh: creates validation/sequence_jacobian/.venv, a Python 3.11 environment with
-# sequence-jacobian 1.0.0 and the versions in requirements.txt, and downloads the two notebooks
-# whose models compare_heterogeneous.py solves, krusell_smith.ipynb and hank.ipynb, from
-# sequence-jacobian's v1.0.0 tag, checking their sha256 sums.
+# sequence-jacobian 1.0.0 and the versions in requirements.txt, and downloads the three notebooks
+# whose models compare_heterogeneous.py solves, krusell_smith.ipynb, hank.ipynb and
+# labor_search.ipynb, from sequence-jacobian's v1.0.0 tag, checking their sha256 sums.
 #
 # Usage:  bash validation/sequence_jacobian/setup.sh
 #
@@ -22,3 +22,4 @@ get() {   # get <file> <sha256>
 }
 get krusell_smith.ipynb ddcde2d99edfc20d4183ea750dd39782ee507cea869f0040665ebaff8e359cf3
 get hank.ipynb cd517a24fca328eab8969477a04da27530bb6298f29cdde7cf2aa75d8217e2ff
+get labor_search.ipynb 7e6c980181b91b17f108a0be41400a5e0f57cda8b1776a71b8cabc595dd5457c

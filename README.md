@@ -302,8 +302,9 @@ planned.
 - **Markov regime switching is first order only,** with exogenous transition probabilities, and
   Newton's method from finitely many starting points cannot prove that a stable solution is
   unique. Kim's filter is an approximation, whose error the validation measures.
-- **Heterogeneous agents have one endogenous state,** the asset, and a Markov matrix and grid that
-  stay fixed along a path.
+- **Heterogeneous agents have one endogenous state,** the asset, on a grid that stays fixed along
+  a path. The Markov matrix may move with the inputs, and a transition may start from any
+  distribution on the grid.
 - **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.

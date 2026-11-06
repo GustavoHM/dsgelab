@@ -1,4 +1,4 @@
-"""run_ssj.py: sequence-jacobian on two of its own models, for compare_heterogeneous.py.
+"""run_ssj.py: sequence-jacobian on three of its own models, for compare_heterogeneous.py.
 
 Runs in the environment that setup.sh creates (Python 3.11, sequence-jacobian 1.0.0) and writes
 validation/out_heterogeneous/ssj.npz: for each model, the steady state (aggregates, policies,
@@ -11,8 +11,16 @@ general-equilibrium Jacobians, and the linear and nonlinear impulse responses of
   hank  hank.ipynb: the one-asset HANK with labour supply on 7 by 500 points, the steady state
         solved for beta and vphi; pi, w and Y as the unknowns and the Phillips curve, the asset
         market and the labour market as the targets; a shock to rstar of -0.0025 0.61^t.
+  ls    labor_search.ipynb: the household with unemployment risk on 2 employment states by 5
+        productivity states by 100 asset points, whose employment chain is a hetinput of the
+        job-finding rate f and the separation rate s; its Jacobians, and its linear response to
+        s of 0.6^t, the notebook's. The notebook has no general equilibrium, and the script adds
+        the smallest closure (LS_EXTENSION): a fixed supply of bonds equal to the household's
+        assets at the steady state, the interest rate as the unknown and the bond market as the
+        target, a shock to s of 0.02 0.8^t, and the return to the steady state from the
+        distribution of the steady state with s = 0.12 (ss_initial).
 
-The model code below is copied from the two notebooks at sequence-jacobian's v1.0.0 tag, which
+The model code below is copied from the three notebooks at sequence-jacobian's v1.0.0 tag, which
 setup.sh downloads, and the script checks that each piece appears in them verbatim before running
 it. The household of the HANK model, hetblocks.hh_labor.hh, is part of the package. Two settings
 differ from the notebooks: the household's backward iteration stops at 1e-12 instead of 1e-8 and
@@ -178,21 +186,81 @@ blocks = [hh_ext, firm, monetary, fiscal, mkt_clearing, nkpc]
 hank = create_model(blocks, name="One-Asset HANK")''',
 ]
 
+LS_CELLS = [
+r'''from sequence_jacobian import markov_rouwenhorst, agrid
+
+def make_grid(rho_e, sd_e, nE, amin, amax, nA):
+    e_grid, _, Pi_e = markov_rouwenhorst(rho=rho_e, sigma=sd_e, N=nE)
+    a_grid = agrid(amin=amin, amax=amax, n=nA)
+    return e_grid, Pi_e, a_grid
+
+
+def search_frictions(f, s):
+    Pi_s = np.vstack(([1 - s, s], [f, 1 - f]))
+    return Pi_s
+
+
+def labor_income(e_grid, w, b):
+    y = np.vstack((w * e_grid, b * e_grid))
+    return y ''',
+r'''from sequence_jacobian import het, interpolate_y
+
+def household_init(a_grid, y, r, eis):
+    c = np.maximum(1e-8, y[..., np.newaxis] + np.maximum(r, 0.04) * a_grid)
+    Va = (1 + r) * (c ** (-1 / eis))
+    return Va
+
+@het(exogenous=['Pi_s', 'Pi_e'], policy='a', backward='Va', backward_init=household_init)
+def household(Va_p, a_grid, y, r, beta, eis):
+    c_nextgrid = (beta * Va_p) ** (-eis)
+    coh = (1 + r) * a_grid + y[..., np.newaxis]
+    a = interpolate_y(c_nextgrid + a_grid, coh, a_grid)  # (x, xq, y)
+    a = np.maximum(a, a_grid[0]) 
+    c = coh - a
+    uc = c ** (-1 / eis)
+    Va = (1 + r) * uc
+
+    return Va, a, c''',
+r'''def unemployment(c):
+    u = np.zeros_like(c)
+    u[1, ...] = 1.0
+    return u''',
+r'''hh = household.add_hetinputs([make_grid, search_frictions, labor_income])
+hh = hh.add_hetoutputs([unemployment])''',
+r'''calibration = dict(beta=0.95, r=0.01, eis=0.5, f=0.4, s=0.1, w=1., b=0.5,
+                   rho_e=0.95, sd_e=0.5, nE=5, amin=0., amax=50, nA=100)''',
+]
+
+# The notebook stops at the household in partial equilibrium. The extension below, which is not in
+# it, closes the model with a fixed supply of bonds B, equal to the household's assets at the
+# notebook's steady state, and the interest rate as the unknown that clears the bond market. It
+# has no lags, so that a different initial steady state moves only the household's distribution.
+LS_EXTENSION = r'''
+@simple
+def bond_market(A, B):
+    asset_mkt = A - B
+    return asset_mkt
+
+
+ls = create_model([hh, bond_market], name="Labor search")
+'''
+
 
 def notebook_code(name: str) -> str:
     cells = json.loads((HERE / "notebooks" / name).read_text())["cells"]
     return "\n".join("".join(c["source"]) for c in cells if c["cell_type"] == "code")
 
 
-def load(name: str, pieces: list[str]) -> dict:
-    """Runs the pieces, after checking that each one is in the notebook as published."""
+def load(name: str, pieces: list[str], extension: str = "") -> dict:
+    """Runs the pieces, after checking that each one is in the notebook as published, and then
+    the extension, which is not."""
     code = notebook_code(name)
     for piece in pieces:
         assert piece in code, f"{name}: a piece of the model is not in the notebook:\n{piece}"
     # sequence-jacobian reads the names of the outputs from the source of each function, so the
     # pieces are written to a file and imported from it
     path = OUT / ("model_" + name.replace(".ipynb", ".py"))
-    path.write_text(PREAMBLE + "\n\n".join(pieces) + "\n")
+    path.write_text(PREAMBLE + "\n\n".join(pieces) + "\n" + extension)
     spec = importlib.util.spec_from_file_location(path.stem, path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -283,6 +351,45 @@ def main() -> None:
     names = ["pi", "w", "Y", "r", "C", "A", "Div"]
     save(out, "hank/linear", {k: lin[k] for k in names})
     save(out, "hank/nonlinear", {k: nonlin[k] for k in names})
+
+    ns = load("labor_search.ipynb", LS_CELLS, LS_EXTENSION)
+    hh, ls = ns["hh"], ns["ls"]
+    opts = {"household": {"backward_tol": BACKWARD_TOL, "forward_tol": FORWARD_TOL}}
+    t0 = time.perf_counter()
+    ss_hh = hh.steady_state(ns["calibration"], options=opts)
+    calibration = {**ns["calibration"], "B": ss_hh["A"]}
+    ss = ls.steady_state(calibration, options=opts)
+    times["ls steady state"] = time.perf_counter() - t0
+    save(out, "ls/ss", {k: ss[k] for k in ["A", "C", "U", "B", "asset_mkt"]})
+    save(out, "ls/internals", {k: ss.internals["household"][k]
+                               for k in ["a", "c", "Va", "D", "Dbeg", "a_grid", "e_grid", "Pi_e",
+                                         "Pi_s", "y"]})
+    inputs, outputs = ["s", "f", "r", "w"], ["A", "C", "U"]
+    t0 = time.perf_counter()
+    save(out, "ls/J", jacobians(hh, ss, inputs, outputs))
+    times["ls household Jacobians"] = time.perf_counter() - t0
+    save(out, "ls/J2", jacobians(hh, ss, inputs, outputs, twosided=True))
+    td = hh.impulse_linear(ss, {"s": 0.6 ** np.arange(50)})
+    save(out, "ls/td", {k: td[k] for k in ["C", "U", "A"]})
+    t0 = time.perf_counter()
+    save(out, "ls/G", ge(ls, ss, ["r"], ["asset_mkt"], ["s", "f"], ["r", "A", "C", "U"]))
+    times["ls G"] = time.perf_counter() - t0
+    shock = {"s": 0.02 * 0.8 ** np.arange(T)}
+    lin = ls.solve_impulse_linear(ss, ["r"], ["asset_mkt"], shock)
+    t0 = time.perf_counter()
+    nonlin = ls.solve_impulse_nonlinear(ss, ["r"], ["asset_mkt"], shock, tol=NONLINEAR_TOL,
+                                        maxit=50, verbose=False)
+    times["ls nonlinear"] = time.perf_counter() - t0
+    names = ["r", "A", "C", "U"]
+    save(out, "ls/linear", {k: lin[k] for k in names})
+    save(out, "ls/nonlinear", {k: nonlin[k] for k in names})
+    # the return to the steady state from the distribution of a steady state with s = 0.12
+    ss_initial = ls.steady_state({**calibration, "s": 0.12}, options=opts)
+    save(out, "ls/initial", {"Dbeg": ss_initial.internals["household"]["Dbeg"]})
+    back = ls.solve_impulse_nonlinear(ss, ["r"], ["asset_mkt"], {"s": np.zeros(T)},
+                                      tol=NONLINEAR_TOL, maxit=50, verbose=False,
+                                      ss_initial=ss_initial)
+    save(out, "ls/from_initial", {k: back[k] for k in names})
 
     np.savez_compressed(OUT / "ssj.npz", **out)
     from importlib.metadata import version

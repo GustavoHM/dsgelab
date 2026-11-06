@@ -1356,13 +1356,43 @@ f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():
 hh.h = 1e-6
 J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # by the fake-news algorithm
 direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
-f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"
+
+def mixed(rho_e, sd_e, n_e, n_a, q):     # with probability q, income is drawn afresh
+    e, Pi, a = grids(rho_e, sd_e, n_e, n_a)
+    return e, (1 - q) * Pi + q / e.size, a             # a Markov matrix that moves with q
+
+hh_q = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                    hetinputs=[(mixed, ["e_grid", "Pi", "a_grid"])], h=1e-6)
+ks_q = dsg.BlockModel([hh_q, firm, markets])
+ss_q = ks_q.steady_state({**ss, "q": 0.05}, unknowns={"K": ss["K"]}, targets=["asset_mkt"])
+f"{100 * ss_q['r']:.3f} per cent"
+Jq = hh_q.jacobian(ss_q, ["q"], 30)["C"]["q"]
+bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()
+     &lt; 1e-7 * np.abs(Jq).max())
+dq = 0.05 * 0.8 ** np.arange(T)                        # more income risk for a while
+linear = ks_q.impulse_linear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+nonlinear = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+D0 = ss.internals["household"]["Dbeg"]                 # the distribution without the extra risk
+back = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": np.zeros(T)},
+                              initial={"household": D0})
+f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</code></pre>
 <pre class="output" data-label="Output"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
 ('0.98191', '-3e-11')
 <span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
 ('3.97 bp', '6e-07')
 <span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
-'1e-10'</code></pre>
+'1e-10'
+<span class="out-expr">f"{100 * ss_q['r']:.3f} per cent"</span>
+'0.317 per cent'
+<span class="out-expr">bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()</span>
+     &lt; 1e-7 * np.abs(Jq).max())
+True
+<span class="out-expr">f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('-0.99 bp', '4e-05')
+<span class="out-expr">f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</span>
+('-0.838', '-0.027')</code></pre>
   <p>A <code>HetBlock</code> holds a continuum of households on 100 asset points by 7 income
   states, and <code>household</code> is one step of their backward iteration by the endogenous
   grid method, which <code>interpolate_rows</code> does row by row. The firm and the markets are
@@ -1379,6 +1409,18 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   with 30 backward steps, and differentiating the whole path for a shock at each date, which
   costs 30 times more, gives the same matrix. The validation solves sequence-jacobian's own
   Krusell–Smith and one-asset HANK models on 7 by 500 points and agrees with it to 2e-10.</p>
+  <p>In <code>mixed</code> the Markov matrix is a function of an aggregate, <code>q</code>, the
+  probability that income is drawn afresh, each node equally likely, which spreads income more
+  than the chain's own stationary distribution. At <code>q = 0.05</code> households save more,
+  and the interest rate that clears the asset market falls from 1 to 0.317 per cent. The
+  fake-news Jacobian with respect to <code>q</code> takes into account that the matrix moves the
+  distribution in the period of the shock and the expectation a period before it, and agrees with
+  the direct one within 1e-7 of its largest entry. A temporary rise in <code>q</code> lowers the
+  interest rate by 0.99 basis points a period later. <code>initial</code> starts the transition
+  from the distribution of the first steady state, which holds less capital, and the economy
+  returns to the new steady state with the shocks at zero. The validation compares the same
+  features with sequence-jacobian on the household of its <code>labor_search.ipynb</code>, whose
+  employment chain moves with the job-finding and separation rates, within 6e-10.</p>
   <h3>36. A Taylor rule that switches regime, solved and filtered</h3>
 <pre><code>fisher = dsg.Model(
     states=["r"], jumps=["pi"], shocks=["e"],
@@ -1804,7 +1846,9 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   <h3>Heterogeneous agents against sequence-jacobian</h3>
   <p>sequence-jacobian 1.0.0's own Krusell–Smith and one-asset HANK models, from its notebooks at
   the v1.0.0 tag, on 7 income states by 500 asset points, with the same calibration, unknowns and
-  targets. The differences are relative to the largest value compared.</p>
+  targets. The household of its <code>labor_search.ipynb</code>, whose employment chain moves with
+  the job-finding and separation rates, on 10 states by 100 points, closed by a bond market that
+  both packages write identically. The differences are relative to the largest value compared.</p>
   <table>
     <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
     <tbody>
@@ -1813,6 +1857,9 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
       <tr><td>general-equilibrium Jacobians G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>linear and nonlinear impulse responses</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>fake news against brute force (dsgelab against itself)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+      <tr><td>labor search, Markov matrix moved by f and s: steady state</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>labor search: Jacobians, G, linear and nonlinear responses</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
+      <tr><td>labor search: return from another steady state's distribution</td><td class="num">6e-10</td><td class="ok">OK</td></tr>
   <h3>Markov regime switching against published solutions and statsmodels</h3>
   <p>RISE, the toolbox for regime switching, is distributed as MATLAB P-code, which GNU Octave cannot
   execute. The solution is checked instead against the solutions Foerster, Rubio-Ramírez, Waggoner

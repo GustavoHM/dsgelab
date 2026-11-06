@@ -62,6 +62,7 @@ policy under switching require **RISE**.
 | Discretisation of an AR(1) (Tauchen, Rouwenhorst) | ✅ ‡ against QuantEcon on 120 processes, Tauchen's probabilities against a 40-digit computation and Rouwenhorst against its closed form | ? | ✅ `tauchen`, `rouwenhorst` | ? | ? | ? | ✅ Rouwenhorst options in the heterogeneous-agent module (`+heterogeneity`) |
 | Heterogeneous agents (HANK), steady state with calibration | ✅ ‡ one asset by a Markov chain, the backward step written by the user, Young's lottery; against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK, steady states within 7.6e-10 | — | — | — | 📄 | — | 📄 |
 | Sequence-space Jacobians (fake news), `G` and impulse responses | ✅ ‡ against sequence-jacobian 1.0.0 on the same two models: household Jacobians within 2.5e-10, `G` within 1.7e-10, linear and nonlinear responses within 1.9e-10; fake news against brute force within 4.1e-8 | — | — | — | 📄 | — | — |
+| Markov matrix that moves along a path, transition from a given distribution | ✅ ‡ against sequence-jacobian 1.0.0 on the household of its `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates, closed by a bond market: steady state within 8.1e-10, Jacobians within 2.9e-10, `G` within 8.3e-11, linear and nonlinear responses within 2.2e-10, return from another steady state's distribution (`ss_initial`) within 6.0e-10; fake news against brute force within 1.6e-9 | — | — | — | ? | — | ? |
 | Markov regime switching, solution | ✅ ‡ first order, partition perturbation with every solution found kept and mean-square stability; the nine solutions that Foerster et al. (2013) print for a New Keynesian model, 106 of 108 entries within a unit of the last digit, and the RBC of Foerster et al. (2016) | — | 📄 discrete Markov chains as exogenous processes, in global methods | — | — | — | 📄 MS-SBVAR, for VARs only |
 | Markov regime switching, estimation | ✅ ‡ Kim's filter with filtered and smoothed regime probabilities, posterior mode and samplers; against statsmodels 0.14.4's Hamilton filter within 3e-14 and the exact likelihood over every regime path | — | — | — | — | — | 📄 MS-SBVAR, for VARs only |
 | Occasionally binding constraints | ✅ ‡ OccBin, against Dynare's `+occbin` at 2e-15, with one and with two constraints | — | 📄 | 📄 ZLB | 📄 | — | ✅ OccBin |
@@ -122,10 +123,10 @@ model, and `validation/dolo/run_dolo_vfi.py` lists the four changes that make it
 pandas that no longer builds, and I did not test Python versions earlier than 3.14.
 
 **`econpizza` and `sequence-jacobian` take heterogeneous agents as their subject.** `dsgelab` has
-the sequence-space Jacobian method for one asset and one Markov chain, validated against
-sequence-jacobian 1.0.0 on two of its own models. sequence-jacobian also has two endogenous
-states, the two-asset HANK among its examples, Markov matrices that move along a path,
-estimation from the impulse responses' covariances, and numba. For representative-agent models, the table records
+the sequence-space Jacobian method for one asset and one Markov chain, which may move along a
+path, validated against sequence-jacobian 1.0.0 on three of its own models. sequence-jacobian
+also has two endogenous states, the two-asset HANK among its examples, several Markov chains on
+axes of their own, estimation from the impulse responses' covariances, and numba. For representative-agent models, the table records
 for `econpizza`, from its documentation, perfect foresight, IRFs, occasionally binding constraints
 and a global method.
 
@@ -269,7 +270,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Global methods | 📄 dolo | Chebyshev collocation and time iteration on tensor or Smolyak grids, value function iteration and the endogenous grid method | — |
 | Improved time iteration and expectations iteration | ✅ dolo (improved), 📄 dolo (expectations) | **done**: `improved_time_iteration`, against dolo's on its RBC, its Markov RBC and its consumption–savings model within 3.7e-10, in 4 to 10 Newton steps; `expectations_iteration`, which dolo documents and does not implement, against `time_iteration` on the same grid within 1e-11 and the closed form of stochastic growth | 0.10 |
 | BVAR (Sims–Zha prior) and DSGE-VAR | ✅ Dynare (`+bvar`, `estimation(dsge_var=...)`) | **done**: `bvar`, `bvar_density` and `BVAR.forecast` against Dynare's `tests/bvar_a_la_sims` (posteriors within 1.8e-14, log marginal densities within 1.8e-12, forecast paths draw by draw within 2.1e-16), and `EstimationProblem(dsge_var=...)` against `tests/dsge-var` (log posterior within 4.9e-12, modes within 1e-4 posterior sd) with Dynare's count of `T`, which dsgelab does not use by default; `BVAR.irf` against `bvar_irf` draw by draw within 1.9e-15 of the largest response, and `dsge_var_irf` against `bayesian_irf` within 1.1e-13 | 0.9, IRFs 0.10 |
-| Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; two endogenous states missing | 0.9 |
+| Heterogeneous agents by the sequence-space Jacobian | ✅ sequence-jacobian | **done** for one asset and one Markov chain: `HetBlock`, `SimpleBlock`, `SolvedBlock` and `BlockModel`, against sequence-jacobian 1.0.0 on its Krusell–Smith and one-asset HANK within 7.6e-10 in the steady state and 2.5e-10 in the Jacobians and impulse responses; a Markov matrix that moves along a path and a transition from a given distribution in 0.10, against its `labor_search.ipynb` within 8.1e-10; two endogenous states missing | 0.9, 0.10 |
 | Markov regime switching, solution and estimation | 📄 RISE | **done**: first-order partition perturbation with every solution found and mean-square stability, and Kim's filter; the nine solutions of Foerster et al. (2013), statsmodels' Hamilton filter and the exact likelihood over regime paths. RISE runs only in MATLAB, as P-code that Octave cannot execute | 0.9 |
 
 ---

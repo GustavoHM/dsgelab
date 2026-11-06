@@ -759,20 +759,27 @@ mean under `D`: the policy `a` gives `A` and consumption `c` gives `C`. `inputs`
 list the block's aggregate inputs and outputs.
 
 `Dbeg_t` is the distribution over last period's income state and the assets carried into `t`.
-The income shock turns it into `D_t = Pi' Dbeg_t`, and the policy's lottery turns `D_t` into
+The income shock turns it into `D_t = Pi_t' Dbeg_t`, and the policy's lottery turns `D_t` into
 `Dbeg_{t+1}`. At the steady state, `Dbeg` is the null vector of the sparse transition matrix minus
 the identity, found by one sparse solve with the mass at one recurrent point set to one.
 `steady_state(values, start=None)` gives the aggregates and the internals, which `BlockModel`
-stores. `path(ss, paths, T)` gives the aggregates' paths after paths of some inputs, in levels,
-with the backward iteration from `T - 1`, where next period is the steady state, and the
-distribution from the steady state's `Dbeg`.
+stores. `path(ss, paths, T, *, Dbeg=None)` gives the aggregates' paths after paths of some inputs,
+in levels, with the backward iteration from `T - 1`, where next period is the steady state, and
+the distribution from `Dbeg`, by default the steady state's. A `Dbeg` of another shape, with a
+negative mass or with masses that do not sum to one within 1e-10, raises `ValueError`.
+
+The Markov matrix may be an output of `hetinputs` that moves with the inputs along a path, as in
+sequence-jacobian's `labor_search.ipynb`, where the job-finding and separation rates make the
+employment chain. `Pi_t` moves the distribution at `t`, and the step at `t` takes the expectation
+with `Pi_{t+1}`. The asset grid may depend on parameters but not on an input that moves along a
+path, which raises `NotImplementedError`. Several chains go into one by their Kronecker product,
+and a block has one endogenous state.
 
 `jacobian(ss, inputs, T, outputs=None, *, method="fake_news")` gives `J[O][i]`, `T x T`. The
 fake-news algorithm takes `T` backward steps per input, against the `T^2` of differentiating the
-path once for every date of the input, which `method="direct"` does to check it. The Markov
-matrix and the grid may depend on parameters but not on an input that moves along a path, which
-raises `NotImplementedError`. Several chains go into one by their Kronecker product, and a block
-has one endogenous state.
+path once for every date of the input, which `method="direct"` does to check it. An input that
+moves the Markov matrix also moves, through the matrix's derivative, the distribution in the
+period of the shock and the expectation a period before it, as in sequence-jacobian 1.0.0.
 
 ### `SimpleBlock(f, outputs, name=None)` and `@simple(*outputs)`
 
@@ -799,7 +806,7 @@ output made by two blocks and a cycle are refused. `inputs` lists the inputs no 
 | `jacobian(ss, inputs, outputs=None, T=300)` | the Jacobians of the outputs with respect to the inputs, by the chain rule along the graph |
 | `solve_jacobian(ss, unknowns, targets, inputs, outputs=None, T=300)` | `G[o][i]`, the general-equilibrium Jacobians, the unknowns among them: with `H_U` and `H_Z` the targets' Jacobians with respect to the unknowns and to the inputs, `G_U = -H_U^{-1} H_Z` |
 | `impulse_linear(ss, unknowns, targets, shocks, outputs=None)` | `G` times the paths in `shocks`, in deviations from the steady state; the horizon is their length |
-| `impulse_nonlinear(ss, unknowns, targets, shocks, *, tol=1e-10, max_iter=50, jacobian=None)` | the perfect-foresight transition, in deviations, by a quasi-Newton iteration on the paths of the unknowns with the fixed `H_U`, until every target is below `tol` |
+| `impulse_nonlinear(ss, unknowns, targets, shocks, *, tol=1e-10, max_iter=50, jacobian=None, initial=None)` | the perfect-foresight transition, in deviations, by a quasi-Newton iteration on the paths of the unknowns with the fixed `H_U`, until every target is below `tol`. `initial` maps the name of a `HetBlock`, inside a `SolvedBlock` too, to the `Dbeg` it starts from, such as another steady state's `internals[name]["Dbeg"]`; with shocks of zeros the transition is the return from it to the steady state. Lags in the first period keep their steady-state values |
 
 ### `BlockSteadyState`
 

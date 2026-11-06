@@ -54,6 +54,21 @@ features, without changing the API of an earlier release. The rest of the milest
   iteration, as parameterized expectations, and 0.4.9.20 does not implement it. On stochastic
   growth with log utility and full depreciation it agrees with `time_iteration` on the same grid
   within 5e-12 and with the closed form as time iteration does. Without damping it diverges there.
+- A `HetBlock`'s Markov matrix may be an output of `hetinputs` that moves with the inputs along a
+  path, in the steady state, the fake-news Jacobians, `G` and the nonlinear transition. `Pi_t`
+  moves the distribution at `t` and the expectation the step takes at `t - 1`, as in
+  sequence-jacobian 1.0.0. `HetBlock.path(..., Dbeg=...)` and
+  `BlockModel.impulse_nonlinear(..., initial={name: Dbeg})` start a transition from a given
+  distribution in place of the steady state's. `validation/compare_heterogeneous.py` adds the
+  household of sequence-jacobian's `labor_search.ipynb`, whose employment chain moves with the
+  job-finding and separation rates, closed by a fixed supply of bonds that the notebook does not
+  have and that both packages write identically. The steady state agrees within 8.1e-10, the
+  Jacobians with respect to the rates within 2.9e-10, `G` within 8.3e-11, the linear and
+  nonlinear responses within 2.2e-10, and the return from the distribution of another steady
+  state, sequence-jacobian's `ss_initial`, within 6.0e-10. The fake-news Jacobians agree with the
+  brute-force ones within 1.6e-9, and a path from a given distribution agrees with the
+  distribution moved period by period within 3.1e-13. The asset grid still stays fixed along a
+  path, and a `NotImplementedError` now names only it.
 
 ### Changed
 
