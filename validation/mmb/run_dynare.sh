@@ -20,9 +20,9 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
 fi
 [ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
-# EACZ_GEM03 declares an innovation (interest_) that no equation uses, which Dynare 7 refuses
-# without nostrict. Dynare then drops it, and compare.py matches shocks by name.
-NOSTRICT=" EACZ_GEM03 "
+# EACZ_GEM03 and G2_SIGMA08 declare an innovation (interest_) that no equation uses, which
+# Dynare 7 refuses without nostrict. Dynare then drops it, and compare.py matches shocks by name.
+NOSTRICT=" EACZ_GEM03 G2_SIGMA08 "
 
 FILES=()
 if [ $# -eq 0 ]; then

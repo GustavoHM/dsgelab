@@ -1,6 +1,6 @@
 """compare.py: central-bank models of the Macroeconomic Model Data Base, read by from_mod.
 
-The thirteen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
+The fifteen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
 ../compare_import.py does for Dynare's own examples, with the same comparison: steady state,
 orthogonalised IRFs of every variable to every shock with nonzero variance, 40 periods, and
 theoretical standard deviations. Parameters that the .mod leaves undefined, and the starting
@@ -35,7 +35,12 @@ def main() -> int:
         return 1
     for path in mods:
         name = path.stem
-        r = compare(name, path, out=HERE / "out", ss_floor=1.0)
+        try:
+            r = compare(name, path, out=HERE / "out", ss_floor=1.0)
+        except Exception as exc:
+            print(f"{name:<13} DIVERGE {type(exc).__name__}: {exc}")
+            bad += 1
+            continue
         if r.get("missing"):
             print(f"{name:<13} no out/{name}.mat, run run_dynare.sh")
             bad += 1

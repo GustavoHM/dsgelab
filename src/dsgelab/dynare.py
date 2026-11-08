@@ -83,6 +83,8 @@ def _strip_comments(text: str) -> str:
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     out = []
     for line in text.splitlines():
+        if line.strip() in ("close all", "clear all", "clc"):
+            continue
         if line.lstrip().startswith("@#"):
             out.append(line.split("//")[0])
             continue
@@ -1269,6 +1271,9 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
                 occbin_body = body
             i = j + 1
             continue
+        if st in ("close all", "clear all", "clc"):
+            i += 1
+            continue
         if word == "var" and not st.startswith("var_"):
             names_ = _declared(st, "var")
             vo = _options(st[len(word):])
@@ -1319,6 +1324,8 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
 
     if model_stmts is None:
         raise DynareImportError("no model block")
+    # Dynare tolerates repeated parameter declarations; the last assignment wins.
+    params = list(dict.fromkeys(params))
     for kind_, names_ in (("var", endo), ("varexo", exo), ("parameters", params)):
         dup = sorted({n_ for n_ in names_ if names_.count(n_) > 1})
         if dup:

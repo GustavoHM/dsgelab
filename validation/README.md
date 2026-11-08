@@ -352,13 +352,13 @@ The Macroeconomic Model Data Base (MMB, [macromodelbase.com](https://www.macromo
 collects models in Dynare, and its replication toolbox Rep-MMB
 ([github.com/AlexMeyer-Gohde/Rep-MMB](https://github.com/AlexMeyer-Gohde/Rep-MMB)) holds 148 of
 them at the commit `fetch.sh` uses. The folder
-`mmb/` reads thirteen of them with `from_mod`, as they are, and compares them with Dynare in the
+`mmb/` reads fifteen of them with `from_mod`, as they are, and compares them with Dynare in the
 same way as `compare_import.py`. The set covers models built or used at the Banco Central do
 Brasil, the ECB, the Federal Reserve, the Banco Central de Chile, the Bank of England, the
 Riksbank and the IMF, from 9 to 361 variables.
 
 ```bash
-bash mmb/fetch.sh          # 13 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
+bash mmb/fetch.sh          # 15 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
 bash mmb/run_dynare.sh     # ../strip_mod.py and the same stoch_simul(order=1) for all
 python mmb/compare.py
 ```
@@ -372,6 +372,8 @@ EACZ_GEM03     239  100   3.9e-16  6.8e-13  1.1e-11   1.2e-08  OK
              s.s. starting point taken from Dynare for 2 variable(s)
 EAUS_NAWM08    226  127   0.0e+00  4.8e-06  6.8e-05   7.0e-05  OK  (Dynare's s.s. with residual 5e-06)
 EA_ALSV06        9   12   0.0e+00  0.0e+00  1.3e-13   1.5e-13  OK
+EA_AWM05       205  214  3.7e-16  0.0e+00  4.6e-10   3.2e-09  OK  (unit root accepted with qz_criterium)
+G2_SIGMA08     238  148  3.2e-15  0.0e+00  1.7e-10   6.9e-09  OK
 EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
 HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
 UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
@@ -394,6 +396,8 @@ US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
 | `CL_MS07` | Medina and Soto (2007), Banco Central de Chile |
 | `UK_SM11` | Harrison, Thomas and de Weymarn (2008), Bank of England, in the version estimated by Barriel and Millard |
 | `EA_ALSV06` | Adolfson, Laséen, Lindé and Villani, Riksbank, in the MMB's reduced version |
+| `EA_AWM05` | Area-Wide Model, ECB (Fagan, Henry and Mestre, 2001) |
+| `G2_SIGMA08` | SIGMA, Federal Reserve (Erceg, Guerrieri and Gust, 2008) |
 | `EACZ_GEM03` | Global Economy Model, IMF (Laxton and Pesenti, 2003), euro area and Czech Republic |
 | `HK_FP13`, `CA_LS07` | Funke and Paetz (2013) for Hong Kong, Lubik and Schorfheide (2007) for Canada |
 
@@ -409,18 +413,18 @@ programs, against responses of order 1e4 in other variables. This rule leaves th
 
 **What limits the comparison.** In `EAUS_NAWM08`, Dynare's steady state leaves a residual of
 5e-06, and the one `dsgelab` finds leaves 9e-14. The IRFs and moments inherit that residual, as
-in `example2`. `EACZ_GEM03` declares an innovation (`interest_`) that no equation uses. Dynare 7
-refuses the file unless it runs with `nostrict`, which drops the innovation, and `run_dynare.sh`
-passes that option for this model only. The parameters listed as taken from Dynare are declared
-and never assigned in the `.mod`.
+in `example2`. `EACZ_GEM03` and `G2_SIGMA08` declare an innovation (`interest_`) that no equation
+uses. Dynare 7 refuses these files unless they run with `nostrict`, which drops the innovation,
+and `run_dynare.sh` passes that option for these models. The parameters listed as taken from
+Dynare are declared and never assigned in the `.mod`.
 
-**What the set leaves out.** Eleven other Rep-MMB models from central banks and official
-institutions were tried, and `from_mod` does not yet read or solve them. `G2_SIGMA08` (Federal
-Reserve), `EA_AWM05` (ECB) and `CA_BMZ12` (Bank of Canada) declare a parameter twice, `ESREA_FIMOD12` stops on an expression the reader does not parse, and
-`US_CMR14` uses `@#for`. `CA_ToTEM10` (Bank of Canada), `DEREA_GEAR16` (Bundesbank),
-`EA_GNSS10` (Banca d'Italia), `EA_QUEST3` (European Commission) and `FI_AINO16` (Bank of
-Finland) take parameters or the steady state from MATLAB files, and the steady state of
-`GPM6_IMF13` does not converge from the file's starting point.
+**What the set leaves out.** Nine other Rep-MMB models from central banks and official
+institutions were tried, and `from_mod` does not yet read or solve them. The `rntfp` equation of
+`CA_BMZ12` (Bank of Canada) evaluates to NaN at Dynare's steady state. `ESREA_FIMOD12` stops on
+an expression the reader does not parse, and `US_CMR14` uses `@#for`. `CA_ToTEM10` (Bank of
+Canada), `DEREA_GEAR16` (Bundesbank), `EA_GNSS10` (Banca d'Italia), `EA_QUEST3` (European
+Commission) and `FI_AINO16` (Bank of Finland) take parameters or the steady state from MATLAB
+files. `GPM6_IMF13` contains nonstationary variables and uses `steady(nocheck)` in its source.
 
 ## Published-model files from DSGE_mod
 

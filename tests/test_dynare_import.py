@@ -149,3 +149,22 @@ def test_steady_state_operator_and_unit_root():
 def test_what_is_not_read_is_refused(text, match):
     with pytest.raises(DynareImportError, match=match):
         from_mod(text)
+
+
+def test_repeated_parameter_declaration_uses_the_last_assignment():
+    mf = from_mod("""
+    close all
+    var x y;
+    varexo e;
+    parameters rho rho;
+    rho = 0.5;
+    rho = 0.8;
+    model;
+    x = rho*x(-1) + e;
+    y = x;
+    end;
+    shocks; var e = 1; end;
+    """)
+    assert mf.params["rho"] == 0.8
+    sol = dsg.solve(mf.model, mf.params, steady=mf.steady_state())
+    assert sol.P[0, 0] == pytest.approx(0.8)
