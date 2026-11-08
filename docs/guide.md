@@ -590,7 +590,9 @@ The parser applies two rules to names and dates.
   no global namespace to bind them to.
 - A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, and a lead
   `x(+k)` with `k >= 2` by the jumps `LEAD1_x`, …, `LEAD{k-1}_x`, where `LEADj_x`
-  holds `x` at `t+j` (so `y(+2)` creates `LEAD1_y`). Each auxiliary has its own
+  holds `x` at `t+j` (so `y(+2)` creates `LEAD1_y`). For a state the chain starts
+  from the jump `LEAD0_x = x`, so that the lead of an exogenous state holds in
+  expectation. Each auxiliary has its own
   equation and is listed in `model.auxiliary`. What is predetermined is still
   declared in one place, since the lag of a jump becomes a new state and the jump
   keeps its classification. A lagged innovation is refused with an explanation.

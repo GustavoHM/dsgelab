@@ -609,19 +609,35 @@ initval; c = 0.8; k = 10; y = 1; end;
 """)
 ss_t = tendencia.steady_state()                  # o modelo já sai destendenciado
 
+mesmo = dsg.from_equations(                      # as mesmas declarações, em equações de texto
+    ["1/c = beta/c(+1)*(alpha*y(+1)/k + 1 - delta)", "c + k = y + (1-delta)*k(-1)",
+     "y = k(-1)**alpha*A**(1-alpha)"],
+    states=[], jumps=["c", "k", "y"], shocks=[], parameters=["alpha", "beta", "delta", "g"],
+    trend_vars={"A": "g"}, deflators={"c": "A", "k": "A", "y": "A"})
+ss_e = dsg.steady_state(mesmo, dict(c=0.8, k=10, y=1), tendencia.params)
+round(ss_e.values["k"] / ss_e.values["y"], 4)
+max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12
+
 solow = dsg.from_equations(
     ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
     states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
-<pre class="output" data-label="Saída"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+<pre class="output" data-label="Saída"><code><span class="out-expr">round(ss_e.values["k"] / ss_e.values["y"], 4)</span>
+8.26
+<span class="out-expr">max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
 True
 <span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
 True</code></pre>
   <p>Num <code>.mod</code> escrito em níveis, as variáveis declaradas com <code>trend_var</code> e
   <code>var(deflator=)</code> são destendenciadas como no Dynare, e uma equação que continue
-  dependendo do nível da tendência é recusada. <code>balanced_growth</code> calcula os fatores de
+  dependendo do nível da tendência é recusada. Em <code>from_equations</code> as mesmas declarações
+  são <code>trend_vars=</code> e <code>deflators=</code>, com a mesma destendenciação e a mesma
+  verificação, e o estado estacionário acima é o do <code>.mod</code>. A razão k/y é
+  αg/(g/β − 1 + δ). <code>balanced_growth</code> calcula os fatores de
   crescimento e as razões entre variáveis que compartilham a tendência, o mesmo problema que o
   <code>bgp.write</code> do Dynare resolve.</p>
 

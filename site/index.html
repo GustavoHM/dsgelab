@@ -603,19 +603,35 @@ initval; c = 0.8; k = 10; y = 1; end;
 """)
 ss_t = trended.steady_state()                    # the model comes out already detrended
 
+same = dsg.from_equations(                       # the same declarations, as text equations
+    ["1/c = beta/c(+1)*(alpha*y(+1)/k + 1 - delta)", "c + k = y + (1-delta)*k(-1)",
+     "y = k(-1)**alpha*A**(1-alpha)"],
+    states=[], jumps=["c", "k", "y"], shocks=[], parameters=["alpha", "beta", "delta", "g"],
+    trend_vars={"A": "g"}, deflators={"c": "A", "k": "A", "y": "A"})
+ss_e = dsg.steady_state(same, dict(c=0.8, k=10, y=1), trended.params)
+round(ss_e.values["k"] / ss_e.values["y"], 4)
+max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12
+
 solow = dsg.from_equations(
     ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
     states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
-<pre class="output" data-label="Output"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+<pre class="output" data-label="Output"><code><span class="out-expr">round(ss_e.values["k"] / ss_e.values["y"], 4)</span>
+8.26
+<span class="out-expr">max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
 True
 <span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
 True</code></pre>
   <p>In a <code>.mod</code> written in levels, <code>trend_var</code> and <code>var(deflator=)</code>
   are detrended as Dynare does it, and an equation that still depends on the level of the trend is
-  refused. <code>balanced_growth</code> computes the growth factors and the ratios between variables
+  refused. In <code>from_equations</code> the same declarations are <code>trend_vars=</code> and
+  <code>deflators=</code>, with the same detrending and the same check, and the steady state above
+  is the one of the <code>.mod</code>. The ratio k/y is αg/(g/β − 1 + δ).
+  <code>balanced_growth</code> computes the growth factors and the ratios between variables
   that share the trend, which is the problem Dynare's <code>bgp.write</code> solves.</p>
   <h3>19. Is the model identified before it is estimated?</h3>
 <pre><code>ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],

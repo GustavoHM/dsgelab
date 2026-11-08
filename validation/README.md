@@ -657,7 +657,8 @@ that ask for a fourth-order perturbation (`hybrid_order = 4`) are not compared.
 
 ```bash
 bash fetch.sh                # mods/bgp/, from Dynare 7.2's tests/bgp
-bash run_bgp.sh              # evaluates, at five points, the bgpfun that Dynare's bgp.write generates
+bash run_bgp.sh              # evaluates, at five points, the bgpfun that Dynare's bgp.write
+                             # generates, and solves the models with their trends declared
 python compare_bgp.py
 ```
 
@@ -670,6 +671,15 @@ the solution (assertions of Dynare's tests)
   solow   300 starts: K/Y 2.8e-12, g_Y 2.6e-14, g_K 2.3e-14, gE 1.1e-14  OK
   ramsey  growth factors against 1.02: 1.3e-15  OK
   nk      levels and factors against 1: 2.0e-15  OK
+trends declared in from_equations
+  model   against        s.s.     IRFs    paths  variance
+  solow   Dynare      4.0e-15  2.3e-14  1.1e-14   2.3e-14  OK
+  solow   from_mod    4.4e-15  1.2e-14  1.3e-14   2.5e-14  OK
+  ramsey  Dynare      5.7e-16        -        -         -  OK
+  ramsey  from_mod    0.0e+00        -        -         -  OK
+  fs2000  Dynare      3.4e-14  9.7e-14  8.2e-14   7.8e-14  OK
+  fs2000  from_mod    1.4e-15  1.4e-13  1.0e-13   2.1e-14  OK
+  ramsey  closed form of the detrended steady state: 5.4e-15  OK
 ```
 
 Dynare's tests solve the problem with MATLAB's `fsolve` from random points, and the Solow test is
@@ -679,6 +689,23 @@ level of a growing variable is not identified. A model in levels also has trivia
 population or zero capital), which `balanced_growth` discards before restarting from another
 point. The detrending of a `.mod` with `trend_var` and `var(deflator=)` is validated in
 `compare_import.py`, with `fs2000_nonstationary`.
+
+The third part checks the trends declared in `from_equations`. `run_bgp.sh` rewrites Solow and
+Ramsey with their trends declared (`trend_var(growth_factor=EfficiencyGrowth) Efficiency;`,
+`var(deflator=Efficiency*Population) Output PhysicalCapitalStock;`, and
+`trend_var(growth_factor=1.02) x;` with `c` and `k` deflated by `x`), removes the trend equations they replace and saves them as
+`out_bgp/<name>_trend.mod`. Solow gets shocks with standard deviations 0.01 and 0.005, which
+the test file does not set. `fs2000_nonstationary.mod` is read unchanged up to its `steady`
+command. Dynare solves each with `solve_tolf = 1e-14`, and for the two with shocks runs
+`stoch_simul(order=1, irf=40, periods=0)` and simulates 200 periods of the shocks
+`0.01 sin(0.7 t j + j)` with `simult_`. `compare_bgp.py` writes the three models as text equations
+with `trend_vars=` and `deflators=`, starts the steady state from the `initval` block and
+compares it with Dynare and with `from_mod` on the same `.mod`. The IRFs and the paths are
+measured against each variable's largest response, and the variance matrix against its largest
+entry. Equal paths under the same shocks mean equal decision rules, whatever the choice of
+states. In `from_equations` the growth factors are states with the innovation dated `t+1`, so
+the models have different states from `from_mod`'s, and fs2000's `del` is `delta`, because
+`del` is a Python keyword and the parser refuses it.
 
 ## Local identification
 

@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from itertools import combinations_with_replacement, permutations
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import numpy as np
 
@@ -299,9 +299,14 @@ def _expand_dating(equations, states, jumps, shocks):
             states.append(n)
             aux[n] = ("lag", v)
             out.append(f"{n}(+1) = {prev}")
+        copy = v in states and max_lead.get(v, 0) > 0
+        if copy:
+            jumps.append(f"LEAD0_{v}")
+            aux[f"LEAD0_{v}"] = ("lead", v)
+            out.append(f"LEAD0_{v} = {v}")
         for k in range(1, max_lead.get(v, 0) + 1):
             n = f"LEAD{k}_{v}"
-            prev = v if k == 1 else f"LEAD{k - 1}_{v}"
+            prev = (f"LEAD0_{v}" if copy else v) if k == 1 else f"LEAD{k - 1}_{v}"
             jumps.append(n)
             aux[n] = ("lead", v)
             out.append(f"{n} = {prev}(+1)")
@@ -311,12 +316,103 @@ def _expand_dating(equations, states, jumps, shocks):
     return out, states, jumps, aux
 
 
+_TOKEN = re.compile(r"\b([A-Za-z_]\w*)(?:\s*\(\s*([+-]?)\s*(\d+)\s*\))?")
+
+
+def _dated(name, off):
+    return name if off == 0 else f"{name}({off:+d})"
+
+
+def _on_dated(text, names, fn):
+    """Replace each ``name`` or ``name(k)`` of ``names`` in ``text`` by ``fn(name, k)``."""
+    def sub(m):
+        if m.group(1) not in names:
+            return m.group(0)
+        off = int(m.group(3) or 0)
+        return fn(m.group(1), -off if m.group(2) == "-" else off)
+    return _TOKEN.sub(sub, str(text))
+
+
+def _names_in(text):
+    return {m.group(1) for m in _TOKEN.finditer(str(text))}
+
+
+def _trend_declarations(variables, shocks, parameters, trend_vars, log_trend_vars,
+                        deflators, log_deflators):
+    """Check the declared trends; return ``{trend: (kind, g)}`` and ``{var: (kind, D)}``."""
+    trends, defl = {}, {}
+    for kind, given in (("mul", trend_vars), ("log", log_trend_vars)):
+        for a, g in dict(given or {}).items():
+            if a in trends:
+                raise SymbolicError(f"trend variable {a!r} declared twice")
+            if a in variables or a in shocks or a in parameters:
+                raise SymbolicError(f"trend variable {a!r} is also declared as a variable, "
+                                    f"a shock or a parameter")
+            trends[a] = (kind, str(g))
+    for kind, given in (("mul", deflators), ("log", log_deflators)):
+        for v, d in dict(given or {}).items():
+            if v in defl:
+                raise SymbolicError(f"deflator declared twice for {v!r}")
+            if v not in variables:
+                raise SymbolicError(f"deflator declared for {v!r}, which is not a state or "
+                                    f"a jump")
+            defl[v] = (kind, str(d))
+    for v, (_, d) in defl.items():
+        bad = _names_in(d) & (set(shocks) | set(defl))
+        if bad:
+            raise SymbolicError(f"the deflator of {v} may not contain the shock or deflated "
+                                f"variable(s) {sorted(bad)}")
+    for a, (_, g) in trends.items():
+        bad = _names_in(g) & (set(shocks) | set(defl) | set(trends))
+        if bad:
+            raise SymbolicError(f"the growth factor of {a} may not contain the shock or "
+                                f"trended name(s) {sorted(bad)}")
+    return trends, defl
+
+
+def _detrend(equations, variables, trends, defl):
+    """Dynare's detrending, on the text of the equations.
+
+    Each ``x(k)`` of a deflated variable becomes ``x(k) * D(k)`` (``x(k) + D(k)``
+    with a log deflator). Each ``A(k)`` of a trend then becomes its level at ``t``
+    times the growth since, ``A(k) = A g(+1) ... g(+k)`` and
+    ``A(-k) = A / (g g(-1) ... g(-k+1))``, with sums for a log trend. The level is
+    the name ``__TREND__A``, which :func:`from_equations` sets to 1 (0 for a log
+    trend) once the balanced-growth check has passed.
+    """
+    dated = set(variables) | set(trends)
+
+    def shift(text, k):
+        return _on_dated(text, dated, lambda n, o: _dated(n, o + k))
+
+    def deflate(name, off):
+        kind, d = defl[name]
+        return f"({_dated(name, off)}{'*' if kind == 'mul' else '+'}({shift(d, off)}))"
+
+    def trend_at(a, off):
+        kind, g = trends[a]
+        up, down = ("*", "/") if kind == "mul" else ("+", "-")
+        out = f"__TREND__{a}"
+        for j in range(1, off + 1):
+            out += f"{up}({shift(g, j)})"
+        for j in range(0, -off):
+            out += f"{down}({shift(g, -j)})"
+        return f"({out})"
+
+    return [_on_dated(_on_dated(e, set(defl), deflate), set(trends), trend_at)
+            for e in equations]
+
+
 def from_equations(equations: Sequence[str], *, states: Sequence[str],
                    jumps: Sequence[str], shocks: Sequence[str],
                    parameters: Sequence[str], name: str = "model",
                    derivatives: str = "both",
                    steady_state_model: Sequence[str] | None = None,
-                   calibration_equations: dict | None = None) -> Model:
+                   calibration_equations: dict | None = None,
+                   trend_vars: Mapping[str, str] | None = None,
+                   log_trend_vars: Mapping[str, str] | None = None,
+                   deflators: Mapping[str, str] | None = None,
+                   log_deflators: Mapping[str, str] | None = None) -> Model:
     """Build a :class:`~dsgelab.model.Model` from text equations.
 
     Parameters
@@ -351,6 +447,24 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         ``{parameter: "steady-state condition"}``, attached as
         ``model.calibration_equations`` and solved with the steady state by
         :func:`dsgelab.steady_state` (see its ``calibrate`` argument).
+    trend_vars, log_trend_vars : mapping, optional
+        ``{trend: "growth factor"}``, the ``trend_var(growth_factor=...)`` and
+        ``log_trend_var(log_growth_factor=...)`` of a ``.mod``. A trend is not a
+        state or a jump and has no equation: ``A(+1) = g(+1) A`` (``A(+1) = A +
+        g(+1)`` for a log trend) is implied. The growth factor may contain
+        variables and parameters, but no shock and nothing trended.
+    deflators, log_deflators : mapping, optional
+        ``{variable: "deflator"}``, the ``var(deflator=...)`` and
+        ``var(log_deflator=...)`` of a ``.mod``. The equations are written in
+        levels, and the declared variable is the detrended one: every ``x(k)`` is
+        read as ``x(k) * D(k)`` (``x(k) + D(k)``), and each trend as its level
+        times the growth since ``t``. Each equation must then depend on the
+        level of a trend only through a common factor, which is checked at
+        random points, as Dynare checks it, and refused with a
+        :class:`SymbolicError` otherwise. The model returned is the detrended
+        one, with the declarations in ``model.trends``, as in ``ModFile.trends``.
+        The parameters have no values at this point, so an equation balanced
+        only for some values of its parameters is refused.
     """
     states, jumps = list(states), list(jumps)
     n = len(states) + len(jumps)
@@ -358,13 +472,36 @@ def from_equations(equations: Sequence[str], *, states: Sequence[str],
         raise SymbolicError(
             f"{len(equations)} equations for {n} variables "
             f"({len(states)} states + {len(jumps)} jumps)")
+    trends, defl = _trend_declarations(states + jumps, list(shocks), list(parameters),
+                                       trend_vars, log_trend_vars, deflators, log_deflators)
+    written = list(equations)
+    if trends or defl:
+        equations = _detrend(written, states + jumps, trends, defl)
+    levels = [f"__TREND__{a}" for a in trends]
     eqs, states_x, jumps_x, aux = _expand_dating(equations, states, jumps, list(shocks))
     parsed = parse_system(eqs, variables=states_x + jumps_x, shocks=shocks,
-                          parameters=parameters)
-    model = model_from_expressions(parsed["expressions"], states=states_x, jumps=jumps_x,
+                          parameters=list(parameters) + levels)
+    exprs = parsed["expressions"]
+    if trends:
+        from .bgp import _check_balanced
+        sympy = _require_sympy()
+        level = {a: parsed["par"][f"__TREND__{a}"] for a in trends}
+        start = {a: 1 if kind == "mul" else 0 for a, (kind, _) in trends.items()}
+        # the parameters have no values here: one draw, held at every point of the check
+        rng = np.random.default_rng(0)
+        draw = {p: float(rng.uniform(0.6, 1.4)) for p in parameters}
+        for k, e in enumerate(exprs[:n]):
+            _check_balanced(sympy, e, level, trends, written[k], k, draw, 1e-8,
+                            error=SymbolicError)
+        exprs = [e.xreplace({level[a]: sympy.Integer(start[a]) for a in trends})
+                 for e in exprs]
+        for a in trends:
+            eqs = [re.sub(rf"\b__TREND__{a}\b", str(start[a]), e) for e in eqs]
+    model = model_from_expressions(exprs, states=states_x, jumps=jumps_x,
                                    shocks=shocks, parameters=parameters, name=name,
                                    derivatives=derivatives, source_equations=eqs)
     model.auxiliary = aux
+    model.trends = dict(deflators=dict(defl), trend_vars=dict(trends))
     if steady_state_model is not None:
         model.steady_state_model = _closed_form(list(steady_state_model), parameters)
     if calibration_equations:

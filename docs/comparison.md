@@ -175,9 +175,9 @@ each validated as the table in the following section indicates. Version 0.6 adds
 identification, the method of moments, the moments of filtered variables, calibration
 restrictions, out-of-sample forecast evaluation, global sensitivity, mixed-frequency data and
 plots, milestone 0.9 the BVAR, the DSGE-VAR, heterogeneous agents and first-order regime
-switching, and milestone 0.10 improved time iteration and expectations iteration. Still absent
-are regime switching beyond the first order and the declaration of trends in `from_equations`.
-The README lists them under *Known limitations*, and `ROADMAP.md` gives the version for each.
+switching, and milestone 0.10 improved time iteration, expectations iteration and the declaration
+of trends in `from_equations`. Still absent is regime switching beyond the first order. The
+README lists it under *Known limitations*, and `ROADMAP.md` gives its version.
 
 ### How `dsgelab` differs from the other Python packages
 
@@ -252,7 +252,7 @@ column gives the [`ROADMAP.md`](../ROADMAP.md) milestone in which each item arri
 | Declared analytic steady state | ✅ Dynare (`steady_state_model`), ✅ gEconpy | **done**, checked against the model before use and refused as Dynare refuses it | 0.4 |
 | Calibration equations in the model | ✅ MacroModelling | **done**, against MacroModelling at 4.4e-15 | 0.4 |
 | Homotopy | ✅ Dynare (`homotopy_setup`) | **done**, with adaptive step, and reaches the closed form where direct Newton fails | 0.4 |
-| Declared trends and balanced growth | ✅ Dynare (`trend_var`, `deflator`, `+bgp`) | **done**: detrending with Dynare's check, and the `bgp.write` problem, with the same residuals that Dynare generates | 0.4 |
+| Declared trends and balanced growth | ✅ Dynare (`trend_var`, `deflator`, `+bgp`) | **done**: detrending with Dynare's check, in the `.mod` and in `from_equations` (0.10, within 9.7e-14 of Dynare on three models), and the `bgp.write` problem, with the same residuals that Dynare generates | 0.4 |
 | Model diagnostics | ✅ Dynare (`model_diagnostics`) | **done**: `diagnose`, same report as Dynare on a deliberately broken model | 0.4 |
 | Several agents in one equilibrium | 📄 gEconpy (blocks) | **done**: `assemble`, within the limits of `Problem` | 0.4 |
 | Local identification | ✅ Dynare (`+identification`) | **done**: `identification`, the moments, spectrum and minimal-system criteria and the collinearity search, with the same verdicts as Dynare on three models and derivatives within 2e-8 | 0.6 |
