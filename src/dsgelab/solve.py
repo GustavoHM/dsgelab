@@ -20,7 +20,7 @@ def solve(model: Model, params: Params, *, steady: SteadyState | None = None,
           ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
           positive: Sequence[str] = (), h: float = 1e-6,
           equilibrate: bool = True, tol: float = 1e-11,
-          qz_criterium: float | None = None) -> FirstOrderSolution:
+          qz_criterium: float | None = None, check_steady: bool = True) -> FirstOrderSolution:
     """Solve ``model`` at ``params`` to first order.
 
     Either pass an already-solved ``steady`` state or a ``guess`` from which one
@@ -31,7 +31,9 @@ def solve(model: Model, params: Params, *, steady: SteadyState | None = None,
     impulse responses and moments need no further arguments.
 
     ``qz_criterium`` is forwarded to :func:`dsgelab.klein`: set it to Dynare's
-    ``1 + 1e-6`` to accept a unit root.
+    ``1 + 1e-6`` to accept a unit root. ``check_steady=False`` linearises at the
+    supplied point even when its equations have a nonzero residual, corresponding
+    to Dynare's ``steady(nocheck)``; the default refuses such a point.
     """
     if steady is None:
         if guess is None:
@@ -43,7 +45,7 @@ def solve(model: Model, params: Params, *, steady: SteadyState | None = None,
 
     system = first_order_system(model, steady, params, ctx=steady.ctx, h=h,
                                 equilibrate=equilibrate)
-    if system.steady_residual > max(tol, 1e-8):
+    if check_steady and system.steady_residual > max(tol, 1e-8):
         raise RuntimeError(
             f"the point handed to the linearisation is not a steady state "
             f"(residual {system.steady_residual:.3e}); solve it first")

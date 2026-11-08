@@ -161,6 +161,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                                 f"{sorted(str(x) for x in stray)}")
     equations = (list(source_equations) if source_equations is not None
                  else [str(e) for e in exprs])
+    exprs = [e.xreplace({sympy.pi: sympy.Float(np.pi)}) for e in exprs]
 
     w_syms = ([nxt[v] for v in var_names] + [cur[v] for v in var_names]
               + [eps[s] for s in shocks])

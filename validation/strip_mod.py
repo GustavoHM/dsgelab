@@ -6,7 +6,7 @@ last block that defines the model (model, initval, steady_state_model, shocks), 
 stand-alone commands in that stretch and appends the same computation for all of them: steady
 and an order-1 stoch_simul, 40 periods of IRF and theoretical moments.
 
-Usage:  python strip_mod.py source.mod destination.mod
+Usage:  python strip_mod.py source.mod destination.mod [steady options]
 """
 import re
 import sys
@@ -15,6 +15,8 @@ BLOCKS = ("model", "initval", "steady_state_model", "shocks")
 COMMANDS = r"steady|check|resid|model_diagnostics|write_latex_\w+|stoch_simul"
 
 src, dst = sys.argv[1], sys.argv[2]
+steady_options = sys.argv[3] if len(sys.argv) > 3 else ""
+steady = f"steady({steady_options});" if steady_options else "steady;"
 text = open(src).read()
 masked = re.sub(r"/\*.*?\*/", lambda m: " " * len(m.group(0)), text, flags=re.S)
 masked = re.sub(r"(//|%)[^\n]*", lambda m: " " * len(m.group(0)), masked)
@@ -29,4 +31,4 @@ head = text[:last]
 head_masked = masked[:last]
 for m in reversed(list(re.finditer(rf"^\s*({COMMANDS})\b[^;]*;", head_masked, flags=re.M))):
     head = head[:m.start()] + head[m.end():]
-open(dst, "w").write(head + "\n\nsteady;\nstoch_simul(order=1, irf=40, periods=0, nograph, noprint);\n")
+open(dst, "w").write(head + f"\n\n{steady}\nstoch_simul(order=1, irf=40, periods=0, nograph, noprint);\n")

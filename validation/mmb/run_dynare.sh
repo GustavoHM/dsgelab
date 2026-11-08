@@ -37,7 +37,12 @@ for src in "${FILES[@]}"; do
   m="$(basename "$src")"; base="${m%.mod}"
   echo ">>> $m"
   rm -rf work/*
-  "$PY" ../strip_mod.py "$src" "work/$m"
+  steady_opts=""
+  case "$base" in
+    GPM6_IMF13) steady_opts="nocheck" ;;
+    US_CMR14) steady_opts="maxit=1000, solve_algo=1" ;;
+  esac
+  "$PY" ../strip_mod.py "$src" "work/$m" "$steady_opts"
   opts="noclearall nograph"
   case "$NOSTRICT" in *" $base "*) opts="$opts nostrict" ;; esac
   ( cd work && "$OCTAVE" --no-gui --eval "
@@ -46,6 +51,7 @@ for src in "${FILES[@]}"; do
     dynare $m $opts;
     ex = struct();
     ex.ys          = oo_.dr.ys;
+    ex.eigval      = oo_.dr.eigval;
     ex.endo_names  = M_.endo_names(1:M_.orig_endo_nbr);
     ex.exo_names   = M_.exo_names;
     ex.params      = M_.params;

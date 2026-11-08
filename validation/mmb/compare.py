@@ -1,6 +1,6 @@
 """compare.py: central-bank models of the Macroeconomic Model Data Base, read by from_mod.
 
-The fifteen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
+The seventeen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
 ../compare_import.py does for Dynare's own examples, with the same comparison: steady state,
 orthogonalised IRFs of every variable to every shock with nonzero variance, 40 periods, and
 theoretical standard deviations. Parameters that the .mod leaves undefined, and the starting
@@ -24,19 +24,27 @@ sys.path.insert(0, str(HERE.parent))
 
 from compare_import import compare  # noqa: E402
 
+VALIDATED = (
+    "BRA_SAMBA08", "CA_LS07", "CL_MS07", "EACZ_GEM03", "EAUS_NAWM08", "EA_ALSV06",
+    "EA_AWM05", "ESREA_FIMOD12", "G2_SIGMA08", "GPM6_IMF13", "EA_SWW14", "HK_FP13",
+    "UK_SM11", "US_DNGS15", "US_FRB03", "US_FRB08", "US_SW07",
+)
+
 
 def main() -> int:
     bad = 0
     print(f"{'model':<13}{'vars':>5}{'aux':>5}  {'params':>8} {'s.s.':>8} {'IRFs':>8} "
           f"{'moments':>9}")
-    mods = sorted((HERE / "mods").glob("*.mod"))
+    mods = ([HERE / "mods" / f"{name}.mod" for name in sys.argv[1:]]
+            if len(sys.argv) > 1 else [HERE / "mods" / f"{name}.mod" for name in VALIDATED])
     if not mods:
         print("no .mod in mods/, run fetch.sh")
         return 1
     for path in mods:
         name = path.stem
         try:
-            r = compare(name, path, out=HERE / "out", ss_floor=1.0)
+            r = compare(name, path, out=HERE / "out", ss_floor=1.0,
+                        steady_from_dynare=name in {"GPM6_IMF13", "US_CMR14"})
         except Exception as exc:
             print(f"{name:<13} DIVERGE {type(exc).__name__}: {exc}")
             bad += 1
@@ -47,7 +55,9 @@ def main() -> int:
             continue
         mom = f"{r['mom']:.1e}" if r["mom"] is not None else "n/a"
         note = ""
-        if r["r_dy"] > 1e3 * max(r["r_dk"], 1e-16):
+        if r["steady_from_dynare"]:
+            note = f"  (common Dynare point, residual {r['r_dy']:.0e})"
+        elif r["r_dy"] > 1e3 * max(r["r_dk"], 1e-16):
             note = f"  (Dynare's s.s. with residual {r['r_dy']:.0e})"
         print(f"{name:<13}{r['n']:>5}{r['aux']:>5}  {r['par']:>8.1e} {r['ss']:>8.1e} "
               f"{r['irf']:>8.1e} {mom:>9}  {'OK' if r['ok'] else 'DIVERGE ' + r['worst']}{note}")

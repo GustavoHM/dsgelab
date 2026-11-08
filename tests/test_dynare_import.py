@@ -168,3 +168,66 @@ def test_repeated_parameter_declaration_uses_the_last_assignment():
     assert mf.params["rho"] == 0.8
     sol = dsg.solve(mf.model, mf.params, steady=mf.steady_state())
     assert sol.P[0, 0] == pytest.approx(0.8)
+
+
+def test_macro_for_expands_arrays_and_numeric_string_arithmetic():
+    mf = from_mod("""
+    @#if 0
+    @#for index in undefined
+    this branch is not expanded
+    @#endfor
+    @#endif
+    var x y;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    x = rho*x(-1) + e;
+    y = 0
+    @#for index in ["1", "2"]
+      + x(-@{index}) / (@{index} - 0)
+    @#endfor
+    ;
+    end;
+    shocks; var e = 1; end;
+    """)
+    assert "LAG2_x" in mf.auxiliary
+    sol = dsg.solve(mf.model, mf.params, steady=mf.steady_state())
+    irf = sol.irf("e", periods=4, percent=False)
+    assert np.allclose(irf["y"][1:], irf["x"][:-1] + 0.5*np.r_[0, irf["x"][:-2]])
+
+
+def test_parameter_lead_or_lag_is_the_parameter_itself():
+    mf = from_mod("""
+    var x y;
+    varexo e;
+    parameters rho;
+    rho = 0.8;
+    model;
+    x = rho(-1)*x(-1) + e;
+    y = rho(+1);
+    end;
+    shocks; var e = 1; end;
+    """)
+    assert mf.steady_state().values["y"] == pytest.approx(0.8)
+    sol = dsg.solve(mf.model, mf.params, steady=mf.steady_state())
+    assert sol.P[0, 0] == pytest.approx(0.8)
+
+
+def test_variable_named_pi_does_not_replace_the_constant_in_normpdf():
+    mf = from_mod("""
+    var pi x y;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    pi = rho*pi(-1) + e;
+    x = normpdf(0);
+    y = x;
+    end;
+    """)
+    expected = 1 / np.sqrt(2*np.pi)
+    values = mf.full_guess({"pi": 2.0, "x": expected, "y": expected})
+    x = mf.model.vector(values)
+    residual = mf.model.residuals(x, x, np.zeros(mf.model.n_shocks), mf.params)
+    assert np.allclose(residual[1:3], 0.0, atol=1e-15)
