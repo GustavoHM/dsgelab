@@ -656,8 +656,9 @@ of 0.9.0 records, and each keeps the six conditions above.
 
 ### 1.0
 
-Everything in the list above is covered, the API is frozen, and from then on versioning is strictly
-semantic.
+Everything in the list above is covered. The `1.0.0rc1` release candidate is prepared, and the API
+is frozen for the release-candidate process. The final 1.0 release has not been published;
+versioning is strictly semantic from 1.0 on.
 
 ## Integration with `cgelab`
 
