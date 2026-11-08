@@ -685,8 +685,9 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 
 ### 1.0
 
-Tudo o que está na lista acima coberto, a API congelada e, a partir daí, versionamento semântico
-estrito.
+Tudo o que está na lista acima está coberto. O candidato a lançamento `1.0.0rc1` está preparado,
+e a API está congelada para o processo de candidato a lançamento. A versão final 1.0 ainda não foi
+publicada; a partir da 1.0, o versionamento é estritamente semântico.
 
 ## Integração com o `cgelab`
 

@@ -8,6 +8,10 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+## 1.0.0rc1 — 2026-11-08
+
+Release candidate for 1.0, covering milestone 0.10 and the API audit before the freeze.
+
 ### Added
 
 - `value_iteration` takes a `SmolyakGrid`, as `solve_projection` and `time_iteration` do, with the
