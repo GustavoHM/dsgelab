@@ -645,6 +645,14 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
   dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
   Markov que muda ao longo de uma trajetória de transição.
+  - [x] *Mudança de regime em segunda ordem* (8 de novembro de 2026), por
+    `solve_second_order_switching` e `solve_markov_switching(..., order=2)`. A validação reproduz
+    os 96 coeficientes de segunda ordem que Foerster et al. (2016) imprimem para o seu RBC após o
+    arredondamento a quatro casas decimais, com a maior diferença de 0,48 unidade da quarta casa
+    decimal. Regimes idênticos concordam com `solve_second_order` em 7,9e-15, e o crescimento
+    estocástico com utilidade logarítmica, depreciação total e produtividade, persistência e
+    volatilidade com mudança de regime concorda com a forma fechada em 1,3e-10. A simulação é
+    podada por padrão.
   - [x] *A matriz de Markov que muda ao longo da trajetória* (6 de novembro de 2026), com
     transições a partir de uma distribuição dada (`initial`). No domicílio do `labor_search.ipynb`
     do sequence-jacobian 1.0.0, cuja cadeia de emprego muda com as taxas de obtenção e de perda de

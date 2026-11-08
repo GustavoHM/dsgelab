@@ -108,7 +108,7 @@ examples in English and Portuguese.
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
 | BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts, IRFs) and the DSGE-VAR of Del Negro and Schorfheide with its IRFs, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)`, `dsge_var_irf` |
 | Heterogeneous agents by the sequence-space Jacobian: one asset by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
-| Markov regime switching to first order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions` |
+| Markov regime switching to first and second order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments, pruned at second order | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions`, `solve_second_order_switching` |
 | Likelihood of regime switching by Kim's filter, filtered and smoothed regime probabilities, estimation of switching parameters and transition probabilities | `kim_filter`, `MarkovSwitchingProblem` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
@@ -299,9 +299,10 @@ planned.
   of the points on each axis. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.
-- **Markov regime switching is first order only,** with exogenous transition probabilities, and
+- **Markov regime switching stops at second order,** with exogenous transition probabilities, and
   Newton's method from finitely many starting points cannot prove that a stable solution is
-  unique. Kim's filter is an approximation, whose error the validation measures.
+  unique. Kim's filter, which uses the first-order solution, is an approximation, whose error the
+  validation measures.
 - **Heterogeneous agents have one endogenous state,** the asset, on a grid that stays fixed along
   a path. The Markov matrix may move with the inputs, and a transition may start from any
   distribution on the grid.

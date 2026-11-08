@@ -618,6 +618,13 @@ of 0.9.0 records, and each keeps the six conditions above.
   Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
   in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
   along a transition path.
+  - [x] *Regime switching at second order* (8 November 2026), by
+    `solve_second_order_switching` and `solve_markov_switching(..., order=2)`. The validation
+    reproduces all 96 second-order coefficients that Foerster et al. (2016) print for their RBC
+    once rounded to four decimals, with the largest difference 0.48 of a unit of the fourth
+    decimal. Identical regimes agree with `solve_second_order` within 7.9e-15, and stochastic
+    growth with log utility, full depreciation and switching productivity, persistence and
+    volatility agrees with the closed form within 1.3e-10. Simulation is pruned by default.
   - [x] *The Markov matrix that moves along a path* (6 November 2026), with transitions from a
     given distribution (`initial`). On the household of sequence-jacobian 1.0.0's
     `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates,

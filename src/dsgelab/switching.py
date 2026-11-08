@@ -50,7 +50,7 @@ how many stable solutions they found.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, overload
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -783,6 +783,45 @@ class MarkovSwitchingSolution:
         if len(stable) > 1:
             lines.append("  several stable solutions: the first found is used")
         return "\n".join(lines)
+
+
+@overload
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: Literal[1] = 1, cov: Covariance = None
+                           ) -> MarkovSwitchingSolution: ...
+
+
+@overload
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: Literal[2], cov: Covariance = None
+                           ) -> SecondOrderSwitchingSolution: ...
+
+
+@overload
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: int = 1, cov: Covariance = None
+                           ) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution: ...
 
 
 def solve_markov_switching(model: Model, params: Params,

@@ -1920,6 +1920,7 @@ python compare_switching.py                   # about 20 seconds
 3. Foerster et al. (2016), section 5: phi(s) pi_t + sigma(s) eps_t = E_t pi_{t+1}
   pi_t = -0.080000 eps_t in regime 1, -0.625000 in regime 2 (printed -0.08 and -0.625)
   ok   solution minus -sigma/phi                                       1.39e-17  (limit 1e-14)
+  ok   second-order terms (Proposition 3: zero)                        0.00e+00  (limit 1e-10)
   with the lag of inflation as a state, coefficients on it: (0.0000, 0.0000) radius 0.000; (-0.0000, 1.1294) radius 1.084; (1.2681, 0.9056) radius 1.539; (1.3158, -0.0000) radius 1.645
   ok   solutions found minus four                                      0.00e+00  (limit 0e+00)
   ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
@@ -1931,6 +1932,50 @@ python compare_switching.py                   # about 20 seconds
 5. Identical regimes: the Klein solution of the constant-parameter model
   ok   rbc: F, P, Q minus Klein's, and constants                       1.78e-15  (limit 1e-13)
   ok   nk3: F, P, Q minus Klein's, and constants                       4.44e-16  (limit 1e-13)
+
+6. Foerster et al. (2016), Markov-switching RBC: printed second-order coefficients
+  residual of the second-order conditions 4.9e-17
+  ok   law of motion of k, second order: next regime 1 minus next regime 2  0.00e+00  (limit 1e-15)
+  regime 1, rows (k,k) (k,z) (k,eps) (k,1) (z,z) (z,eps) (z,1) (eps,eps) (eps,1) (1,1), columns c, k, z:
+     -0.000921  -0.000335   0.000000
+      0.002195  -0.095672   0.000000
+      0.000159  -0.006937   0.000000
+     -0.000417  -0.016844   0.000000
+     -0.117336   2.336394  -0.089369
+      0.000599   0.015284   0.000720
+      0.000777   0.037355   0.001833
+      0.000043   0.001108   0.000052
+      0.000056   0.002708   0.000133
+     -0.049467   0.055734   0.000338
+  regime 2, rows (k,k) (k,z) (k,eps) (k,1) (z,z) (z,eps) (z,1) (eps,eps) (eps,1) (1,1), columns c, k, z:
+     -0.000921  -0.000335   0.000000
+      0.000000   0.000000   0.000000
+      0.000465  -0.020799   0.000000
+     -0.002138   0.040474   0.000000
+      0.000000   0.000000   0.000000
+      0.000000   0.000000   0.000000
+     -0.000000  -0.000000  -0.000000
+      0.000373   0.009964   0.000470
+     -0.001176  -0.019310  -0.000886
+     -0.046740   0.086896   0.001671
+       96 printed entries, largest |computed - printed| 0.48 of a unit of the fourth decimal
+  ok   96 coefficients rounded to four decimals minus printed          0.00e+00  (limit 1e-12)
+
+7. Identical regimes at second order: solve_second_order, validated against Dynare
+  ok   rbc: g_kk, h_kk, h_ku, h_uu, g_ss, h_ss minus solve_second_order's  7.88e-15  (limit 1e-13)
+  ok   rbc: terms in (k, chi) and (eps, chi)                           0.00e+00  (limit 1e-13)
+  ok   rbc: ergodic mean minus solve_second_order's                    1.67e-13  (limit 1e-12)
+  ok   nk3: g_kk, h_kk, h_ku, h_uu, g_ss, h_ss minus solve_second_order's  0.00e+00  (limit 1e-13)
+  ok   nk3: terms in (k, chi) and (eps, chi)                           0.00e+00  (limit 1e-13)
+  ok   nk3: ergodic mean minus solve_second_order's                    0.00e+00  (limit 1e-12)
+
+8. Log utility and full depreciation: k' = alpha beta y and c = (1 - alpha beta) y
+  perturbed ['A']; in proportional deviations, with d = A(s)/Abar - 1,
+  1 + y = (1 + chi d)(1 + z)(1 + k)^alpha and 1 + z' = (1 + z)^rho(s') exp(sigma(s') eps)
+       c in regime 1: g_kk [[-0.2211, 0.33], [0.33, -0.0]], g_ks [0.01082, 0.032787] (alpha = 0.33)
+  ok   every second-order coefficient minus the closed form            1.27e-10  (limit 1e-09)
+       mean of c given each regime: closed form [ 0.043492 -0.083583], 100000 simulated periods [0.043291, -0.084135]
+  ok   conditional mean of c, simulated minus closed form, in s.d. of c  7.50e-03  (limit 5e-02)
 
 all checks passed
 ```
@@ -1954,6 +1999,15 @@ substitutes the law of motion of `z_t` into the solution. The printed values are
 decimals (0.018459 is printed as 0.0184, 0.12648 as 0.1264), and 23 of the 24 then agree exactly.
 The constant of consumption in regime 1, printed to six decimals as 0.000049, is 0.0000459 here.
 Complex Newton finds the four solutions the paper reports, one stable.
+
+The second-order comparison makes the same change of coordinates and uses the paper's convention
+`1/2 H [w kron w]`. All 96 printed coefficients agree once rounded to four decimals; the largest
+difference before rounding is 0.48 of a unit of the fourth decimal, and the residual of the
+second-order conditions is 4.9e-17. With identical regimes, all second-order blocks agree with
+`solve_second_order` within 7.88e-15. Stochastic growth with log utility and full depreciation
+adds a closed form with switching productivity, persistence and volatility: every coefficient
+agrees within 1.27e-10, and the regime-conditional means from 100,000 simulated periods agree
+with the closed-form means within 0.0075 standard deviations of consumption.
 
 ```bash
 python compare_kim.py --prepare               # simulates the series, writes out_kim/input.json

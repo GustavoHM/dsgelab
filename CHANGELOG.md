@@ -90,6 +90,20 @@ features, without changing the API of an earlier release. The rest of the milest
   brute-force ones within 1.6e-9, and a path from a given distribution agrees with the
   distribution moved period by period within 3.1e-13. The asset grid still stays fixed along a
   path, and a `NotImplementedError` now names only it.
+- `solve_second_order_switching` and `solve_markov_switching(..., order=2)`: the second-order
+  solution of a Markov-switching model, by the partition perturbation of Foerster,
+  Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). Given the first-order solution, the laws
+  of motion give the states' second derivatives in terms of the jumps', and the expected rows
+  give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, one block per regime.
+  `SecondOrderSwitchingSolution` has the blocks by regime, `decision_rule(i, j)` the rule for
+  `[k'; u']` on `(k, eps', chi)` (`SwitchingDecisionRule`), pruned simulation and impulse
+  responses along a regime path, and the conditional and ergodic means in closed form.
+  `validation/compare_switching.py` reproduces the 96 second-order coefficients that Foerster et
+  al. (2016) print for their RBC, all of them once rounded to four decimals (the largest
+  difference is 0.48 of a unit of the fourth decimal). With identical regimes it agrees with
+  `solve_second_order` within 7.9e-15, and on stochastic growth with log utility and full
+  depreciation, with switching productivity, persistence and volatility, every coefficient agrees
+  with the closed form within 1.3e-10.
 
 ### Changed
 

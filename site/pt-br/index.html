@@ -1484,6 +1484,48 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   dos filtros de Kalman das 4096 trajetórias de regime, pelo último número. A validação reproduz as
   nove soluções que Foerster et al. (2013) imprimem para um modelo novo-keynesiano e compara o
   filtro de Kim com o filtro de Hamilton do statsmodels.</p>
+<pre><code>crescimento = dsg.Model(
+    states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.k - (cur.y - cur.c),                                       # depreciação total
+        nxt.z - np.exp(p["rho"] * np.log(cur.z) + p["sigma"] * eps.e),
+        1 / cur.c - p["beta"] * p["alpha"] * nxt.y / (nxt.k * nxt.c),  # utilidade logarítmica
+        cur.y - p["A"] * cur.z * cur.k ** p["alpha"]])
+A = np.array([1.05, 0.95])
+ms2 = dsg.solve_markov_switching(
+    crescimento, {"alpha": 0.33, "beta": 0.96, "A": 1.0, "rho": 0.9, "sigma": 0.01},
+    {"A": A, "rho": (0.9, 0.5), "sigma": (0.01, 0.03)}, T, next_regime=("rho", "sigma"),
+    guess={"k": 0.2, "z": 1.0, "c": 0.4, "y": 0.6}, order=2)
+ms2.first.perturbed, f"{ms2.residual:.0e}"
+d = A / (ms2.first.ergodic @ A) - 1
+np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)     # y sobre k e chi: alpha d(s)
+np.round(ms2.h_uu[0, :, 1, 0, 0], 6)                       # z' sobre eps^2: sigma(s')^2
+subida, descida = (ms2.irf("e", size=s, regime=1)["y"][:3] for s in (1.0, -1.0))
+np.round(subida + descida, 4)
+primeira = ms2.first.moments()["conditional_mean"][:, 3]
+ms2.to_levels({"y": primeira})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ms2.first.perturbed, f"{ms2.residual:.0e}"</span>
+(['A'], '4e-16')
+<span class="out-expr">np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)</span>
+([0.01082 -0.02164], [0.01082 -0.02164])
+<span class="out-expr">np.round(ms2.h_uu[0, :, 1, 0, 0], 6)</span>
+[0.0001 0.0009]
+<span class="out-expr">np.round(subida + descida, 4)</span>
+[0.09 0.062 0.0247]
+<span class="out-expr">ms2.to_levels({"y": primeira})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</span>
+([0.6084 0.5288], [0.6089 0.5301])</code></pre>
+  <p>Em segunda ordem (<code>order=2</code>), a perturbação de partição obtém as derivadas
+  segundas das regras de decisão resolvendo sistemas lineares, com um bloco por regime (Foerster
+  et al., 2016). O crescimento estocástico com utilidade logarítmica e depreciação total tem a
+  forma fechada <code>k' = alpha beta y</code>, seja qual for o processo da produtividade, de modo
+  que todos os coeficientes de segunda ordem são conhecidos: o nível da produtividade muda de
+  regime e é perturbado, e a persistência e a volatilidade de <code>z</code> mudam em
+  <code>t+1</code> sem serem perturbadas. O coeficiente do produto sobre capital e
+  <code>chi</code> é <code>alpha d(s)</code>, com <code>d(s)</code> a produtividade do regime em
+  relação à sua média ergódica, e o de <code>z'</code> sobre a inovação ao quadrado é a variância
+  do próximo regime. Uma inovação positiva e uma negativa não produzem mais respostas espelhadas,
+  e as médias do produto em cada regime se afastam das de primeira ordem. A validação reproduz os
+  96 coeficientes de segunda ordem que Foerster et al. (2016) imprimem para o seu RBC.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1516,8 +1558,8 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
     <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
     restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
     <div class="card"><h4>Mudança de regime</h4><p>Parâmetros que mudam com uma cadeia de Markov,
-    em primeira ordem, com todas as soluções encontradas e a estabilidade em média quadrática, e o
-    filtro de Kim para a estimação.</p></div>
+    em primeira e segunda ordem, com todas as soluções encontradas e a estabilidade em média
+    quadrática, e o filtro de Kim para a estimação.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
     ou cheia, com a correção de risco híbrida.</p></div>
     <div class="card"><h4>Modelos em níveis</h4><p>Tendências declaradas, verificação do crescimento

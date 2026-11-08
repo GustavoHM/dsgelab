@@ -1468,6 +1468,48 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   likelihood, the mixture of the Kalman filters of all 4096 regime paths, by the last number. The
   validation reproduces the nine solutions that Foerster et al. (2013) print for a New Keynesian
   model, and checks Kim's filter against statsmodels' Hamilton filter.</p>
+<pre><code>growth = dsg.Model(
+    states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.k - (cur.y - cur.c),                                       # full depreciation
+        nxt.z - np.exp(p["rho"] * np.log(cur.z) + p["sigma"] * eps.e),
+        1 / cur.c - p["beta"] * p["alpha"] * nxt.y / (nxt.k * nxt.c),  # log utility
+        cur.y - p["A"] * cur.z * cur.k ** p["alpha"]])
+A = np.array([1.05, 0.95])
+ms2 = dsg.solve_markov_switching(
+    growth, {"alpha": 0.33, "beta": 0.96, "A": 1.0, "rho": 0.9, "sigma": 0.01},
+    {"A": A, "rho": (0.9, 0.5), "sigma": (0.01, 0.03)}, T, next_regime=("rho", "sigma"),
+    guess={"k": 0.2, "z": 1.0, "c": 0.4, "y": 0.6}, order=2)
+ms2.first.perturbed, f"{ms2.residual:.0e}"
+d = A / (ms2.first.ergodic @ A) - 1
+np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)     # y on k and chi: alpha d(s)
+np.round(ms2.h_uu[0, :, 1, 0, 0], 6)                       # z' on eps^2: sigma(s')^2
+up, down = (ms2.irf("e", size=s, regime=1)["y"][:3] for s in (1.0, -1.0))
+np.round(up + down, 4)
+first = ms2.first.moments()["conditional_mean"][:, 3]
+ms2.to_levels({"y": first})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ms2.first.perturbed, f"{ms2.residual:.0e}"</span>
+(['A'], '4e-16')
+<span class="out-expr">np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)</span>
+([0.01082 -0.02164], [0.01082 -0.02164])
+<span class="out-expr">np.round(ms2.h_uu[0, :, 1, 0, 0], 6)</span>
+[0.0001 0.0009]
+<span class="out-expr">np.round(up + down, 4)</span>
+[0.09 0.062 0.0247]
+<span class="out-expr">ms2.to_levels({"y": first})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</span>
+([0.6084 0.5288], [0.6089 0.5301])</code></pre>
+  <p>At second order (<code>order=2</code>), the partition perturbation gives the second
+  derivatives of the decision rules by solving linear systems, one block per regime (Foerster et al.,
+  2016). Stochastic growth with log utility and full depreciation has the closed form
+  <code>k' = alpha beta y</code>, whatever the process of productivity, so every second-order
+  coefficient is known: the productivity level switches and is perturbed, and the persistence and
+  volatility of <code>z</code> switch at <code>t+1</code> without being perturbed. The coefficient
+  of output on capital and <code>chi</code> is <code>alpha d(s)</code>, with <code>d(s)</code> the
+  regime's productivity relative to its ergodic mean, and that of <code>z'</code> on the squared
+  innovation is the variance of the next regime. A positive and a negative innovation no longer
+  give mirror responses, and the means of output given each regime move away from the first-order
+  ones. The validation reproduces the 96 second-order coefficients that Foerster et al. (2016)
+  print for their RBC.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1497,8 +1539,8 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
     Diebold–Mariano and PIT, mixed-frequency observables, and plots of the results.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
-    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first order, with
-    every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
+    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first and second
+    order, with every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
     tree, with the hybrid risk correction.</p></div>
     <div class="card"><h4>Models in levels</h4><p>Declared trends, the balanced-growth check and the

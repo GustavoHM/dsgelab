@@ -785,7 +785,7 @@ sequence-jacobian's `agrid`.
 
 ## Markov regime switching
 
-### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100) -> MarkovSwitchingSolution`
+### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100, order=1, cov=None) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution`
 
 The first-order solution of a model some of whose parameters switch with a Markov chain. The model
 is an ordinary `Model`; it holds in expectation over the next regime and the next innovation,
@@ -822,7 +822,9 @@ stable solution found is used and every distinct solution is kept. Newton's meth
 many points does not prove that a stable solution is the only one, as the Gröbner-basis search of
 Foerster et al. (2016) does; more `starts` make a second one more likely to be found if it exists.
 `MarkovSwitchingError` is raised when no starting point converges or no solution found is stable,
-with what was found in its `solutions`.
+with what was found in its `solutions`. With `order=2` the first-order solution is passed to
+`solve_second_order_switching`, with `cov` as the shock covariance, and the result is a
+`SecondOrderSwitchingSolution`.
 
 ### `MarkovSwitchingSolution`
 
@@ -841,12 +843,55 @@ ergodic distribution of the regimes) and `coords`.
 | `regime_moments(cov=None)` | `(pi, mean, second)`: the ergodic probabilities and the mean and second moment of the states given each regime |
 | `variables(k, regimes, constants=True)`, `to_levels(paths)`, `regime_params(regime)`, `summary()` | paths from states, levels, the parameters of one regime, a report |
 
+### `solve_second_order_switching(first, cov=None, *, h=1e-4, direct_limit=20000) -> SecondOrderSwitchingSolution`
+
+The second order of a Markov-switching model, around the `MarkovSwitchingSolution` `first`, by the
+partition perturbation of Foerster, Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). The
+perturbation parameter `chi` scales the innovations and the perturbed switching parameters, and is
+one in the model. The second derivatives of the residuals are taken at each pair of regimes, with
+the switching parameters that are not perturbed at their regime values, so every coefficient may
+differ across regimes. The derivatives along `chi` are central differences; with a model that has
+exact first derivatives (`from_equations`), the cross derivatives with the variables come from
+them. Given the first-order solution, the laws of motion give the second derivatives of the
+states in terms of those of the jumps, and the expected rows, averaged over the next regime and
+the next innovation, give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, each
+with one block of unknowns per regime, coupled through the transition matrix. The first has
+`h * n_jumps * n_states**2` unknowns and is solved as one dense system up to `direct_limit`.
+`cov` enters `g_ss` and `h_ss` only.
+
+### `SecondOrderSwitchingSolution`
+
+With `i = s_t`, `j = s_{t+1}`, `k = k_t` and `eps = eps_{t+1}`, in the rescaled deviations and
+at `chi = 1`,
+
+```
+u_t     = F[i] k + f[i] + 1/2 g_kk[i](k, k) + g_ks[i] k + 1/2 g_ss[i]
+k_{t+1} = P[i,j] k + Q[i,j] eps + p[i,j] + 1/2 h_kk[i,j](k, k) + h_ku[i,j](k, eps)
+          + 1/2 h_uu[i,j](eps, eps) + h_ks[i,j] k + h_us[i,j] eps + 1/2 h_ss[i,j]
+```
+
+The index `s` stands for `chi`, and `g_ss` and `h_ss` are its full second derivatives, the
+convention of Dynare's `g_s2`. `first` is the first-order solution, whose `F`, `f`, `P`, `Q`,
+`p`, `h`, `transition`, `steady` and `model` are repeated here. `Sigma` is the shock covariance and
+`residual` the largest residual of the second-order conditions of the expected rows, recomputed
+from the solution. With identical regimes, `g_kk`, `h_kk`, `h_ku`, `h_uu` and `g_ss` are those of
+`solve_second_order`, `h_ss` is its `h_s2`, and the terms in `chi` with `k` or `eps` are zero.
+
+| Method | Meaning |
+|---|---|
+| `decision_rule(regime, next_regime)` | a `SwitchingDecisionRule`: `[k_{t+1}; u_{t+1}]` on `(k_t, eps_{t+1}, chi)`, with `g_k`, `g_u`, `g_s`, `g_kk`, `g_ku`, `g_uu`, `g_ks`, `g_us` and `g_ss`, rows `model.states + model.jumps`, the form in which Foerster et al. (2016) print their solutions. The jumps' `g_ss` includes `F h_ss`, the effect of `chi` through the states |
+| `irf(name, size=1.0, periods=40, *, regime=0, state=None, pruning=True, levels=False, percent=True)` | the path with the innovation minus the path without it, from `state` (the deviation of the states in the period before, the steady state by default) along a regime held or a path of `periods` regimes, as `MarkovSwitchingSolution.irf` dates them. The response depends on the regimes and the state, and a negative innovation is not the mirror of a positive one |
+| `simulate(periods=1000, cov=None, *, seed=None, burn=100, levels=False, regimes=None, pruning=True)` | the draws of `MarkovSwitchingSolution.simulate` with the same `seed`, through the second-order rules, pruned as in Andreasen, Fernández-Villaverde and Rubio-Ramírez (2018), with the first-order part, regime constants included, feeding the quadratic terms |
+| `conditional_mean(cov=None)`, `ergodic_mean(cov=None, levels=True)` | the mean of every variable given each regime (`(h, n_vars)`, rescaled deviations) and the unconditional mean, in closed form under the pruned rules |
+| `jumps(k, regime)`, `next_states(k, eps, regime, next_regime)` | the rules, without pruning |
+| `at_covariance(cov)`, `to_levels(paths)`, `summary()` | the solution at another covariance, levels, a report |
+
 ### `switching_system(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, ctx=None, positive=(), h=1e-6, tol=1e-11) -> (SwitchingSystem, SteadyState, perturbed)`
 
 The linearisation behind `solve_markov_switching`. `SwitchingSystem` holds `A`, `B`, `C`, `c`,
 one block per pair of regimes, in `A[i,j] E y' = B[i,j] y + C[i,j] eps' + c[i,j]`, with one row
-scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion) and `expected` (the
-other rows).
+scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion), `expected` (the
+other rows) and `row_scale` (the divisor of each row).
 
 ### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=100) -> (solutions, tried, converged)`
 
