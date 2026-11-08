@@ -257,10 +257,11 @@ No new features. The items below are conditions for publishing.
   5 November.
 - [x] Site on GitHub Pages, published from `site/` by `.github/workflows/pages.yml` on every
   change, with the links to `docs/` pointed at GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 0.9.0 is
-  10.5281/zenodo.23992839 (0.7.2 is 10.5281/zenodo.23835374, 0.7.1 is 10.5281/zenodo.23827669, 0.7.0
-  is 10.5281/zenodo.23825088, 0.5.0 is 10.5281/zenodo.23456475), and the concept DOI
-  10.5281/zenodo.23456474, which resolves to the latest release, is in `CITATION.cff`.
+- [x] DOI on Zenodo for each release, and `CITATION.cff` with ORCID and DOI. Version 1.0.0rc1 is
+  10.5281/zenodo.24057764, 0.9.0 is 10.5281/zenodo.23992839 (0.7.2 is 10.5281/zenodo.23835374,
+  0.7.1 is 10.5281/zenodo.23827669, 0.7.0 is 10.5281/zenodo.23825088, 0.5.0 is
+  10.5281/zenodo.23456475), and the concept DOI 10.5281/zenodo.23456474, which resolves to the
+  latest release, is in `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, code of conduct, issue and pull-request templates.
 - [x] `py.typed` and type annotations on the public API, with no public function or method left
   unannotated and no new error reported by `mypy`. The lazy-import wrappers in `__init__.py`
@@ -656,9 +657,11 @@ of 0.9.0 records, and each keeps the six conditions above.
 
 ### 1.0
 
-Everything in the list above is covered. The `1.0.0rc1` release candidate is prepared, and the API
-is frozen for the release-candidate process. The final 1.0 release has not been published;
-versioning is strictly semantic from 1.0 on.
+Everything in the list above is covered. The `1.0.0rc1` release candidate is published as a
+prerelease on GitHub and archived on Zenodo (DOI
+[10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), and the API is frozen for
+the release-candidate process. The final 1.0 release has not been published; versioning is
+strictly semantic from 1.0 on.
 
 ## Integration with `cgelab`
 
