@@ -139,3 +139,45 @@ def balanced_growth(model: Model, params: Params, *,
         if first is None or (out.success and not first.success):
             first = out
     return first
+
+
+def _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol,
+                    error: type[Exception] = ValueError):
+    """d/dy [d log(e)/dT] = 0 for every trend level T: checked at random points.
+
+    Shared by the detrending of ``from_mod`` and of ``from_equations``. A value
+    missing from ``pvals`` is drawn from (0.6, 1.4).
+    """
+    present = [a for a in level if level[a] in e.free_symbols]
+    if not present:
+        return
+    others = sorted((s_ for s_ in e.free_symbols if s_ not in level.values()), key=str)
+    rng = np.random.default_rng(k)
+    for a in present:
+        T = level[a]
+        # the other trends at their level of 1 (0 for a log trend), so that two trends can
+        # share an equation
+        ea = e.xreplace({level[b]: (1 if trend_vars[b][0] == "mul" else 0)
+                         for b in present if b != a})
+        dlog = sympy.diff(ea, T)
+        f = sympy.lambdify([T] + others, [ea, dlog], "numpy")
+        t0 = 1.0 if trend_vars[a][0] == "mul" else 0.0
+        ratios = []
+        for _ in range(6):
+            vals = []
+            for s_ in others:
+                nm = str(s_)
+                v = pvals.get(nm)
+                vals.append(float(v) if v is not None and np.isfinite(v)
+                            else float(rng.uniform(0.6, 1.4)))
+            for t_ in (t0, t0 + 0.37):
+                fe, fd = (complex(x) for x in f(t_, *vals))
+                if abs(fe) > 1e-8 and np.isfinite(abs(fe)) and np.isfinite(abs(fd)):
+                    ratios.append((t_, fd / fe))
+        for t_ in {r[0] for r in ratios}:
+            rs = [r[1] for r in ratios if r[0] == t_]
+            if len(rs) > 1 and max(abs(r - rs[0]) for r in rs) > tol * max(1.0, abs(rs[0])):
+                raise error(
+                    f"equation {k + 1} ({raw!r}) is not compatible with balanced growth: "
+                    f"after detrending it still depends on the level of the trend {a!r} "
+                    f"other than through a common factor")

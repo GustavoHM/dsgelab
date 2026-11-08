@@ -62,6 +62,20 @@ def test_lags_and_leads_are_carried_by_listed_auxiliaries():
     assert np.allclose(sol.irf("eps_a", periods=20, percent=False)["y"], y, atol=1e-13)
 
 
+def test_the_lead_of_a_state_starts_from_a_jump_copy():
+    # a(+2) of an exogenous state: LEAD1_a = a(+1) alone would hold only in expectation
+    # with no t+1 jump in it, so the chain starts from the jump LEAD0_a = a
+    import numpy as np
+    import dsgelab as dsg
+    m = from_equations(["a(+1) = 0.9*a + eps_a", "y = a(+2)"],
+                       states=["a"], jumps=["y"], shocks=["eps_a"], parameters=[])
+    assert m.jumps == ["y", "LEAD0_a", "LEAD1_a"]
+    assert m.auxiliary == {"LEAD0_a": ("lead", "a"), "LEAD1_a": ("lead", "a")}
+    sol = dsg.solve(m, {}, guess={v: 0.0 for v in m.names})
+    irf = sol.irf("eps_a", periods=10, percent=False)
+    assert np.allclose(irf["y"], 0.81 * irf["a"], atol=1e-15)
+
+
 def test_a_lagged_innovation_is_refused_with_an_explanation():
     with pytest.raises(SymbolicError, match="innovation"):
         from_equations(["k(+1) = rho*k + eps_a(-1)", "a(+1) = rho*a + eps_a"],

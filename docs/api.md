@@ -48,7 +48,7 @@ Name-indexed view over one period's vector, handed to the equations.
 | `v.vec(prefix, n=None)` | gather `K0, K1, …` (prefix `"K"`) into an array, in index order |
 | `v.to_dict()`, `v.array` | the whole period |
 
-### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None)`
+### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None, trend_vars=None, log_trend_vars=None, deflators=None, log_deflators=None)`
 
 Requires sympy. Builds a `Model` from text equations, with exact analytic
 derivatives. `x` is the variable at `t` and `x(+1)` at `t+1`.
@@ -58,9 +58,26 @@ A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, with
 A lead `x(+k)` with `k >= 2` is rewritten as `LEAD{k-1}_x(+1)` and carried by the
 jumps `LEAD1_x`, …, `LEAD{k-1}_x`, with `LEAD1_x = x(+1)` and
 `LEADj_x = LEAD{j-1}_x(+1)`. `LEADj_x` therefore holds `x` at `t+j`, and `y(+2)`
-creates `LEAD1_y`. Each auxiliary has its own equation and is listed in
+creates `LEAD1_y`. For a state the chain starts from the jump `LEAD0_x = x`, with
+`LEAD1_x = LEAD0_x(+1)`, so that the equation of `LEAD1_x` has a jump at `t+1` and
+holds in expectation (`a(+2)` of an exogenous state `a` creates `LEAD0_a` and
+`LEAD1_a`). Each auxiliary has its own equation and is listed in
 `model.auxiliary`. The lag of a jump becomes a new state, and the jump keeps its
 classification.
+
+`trend_vars`, `log_trend_vars`, `deflators` and `log_deflators` declare the trends
+of a model written in levels, as `trend_var(growth_factor=g) A;`,
+`log_trend_var(log_growth_factor=g) A;`, `var(deflator=D) x;` and
+`var(log_deflator=D) x;` do in a `.mod`: `trend_vars={"A": "gA"}` and
+`deflators={"k": "A", "P": "M(-1)/A"}`. A trend variable is not a state or a jump
+and has no equation, since `A(+1) = A g(+1)` is implied. The growth factor may
+contain variables and parameters, and the deflator trend variables, variables and
+parameters, but neither contains a shock or a deflated variable. The equations are
+detrended as `from_mod` detrends a `.mod` (see Reading Dynare files), with the
+same balanced-growth check, and the model returned is the detrended one, with the
+declarations in `model.trends`. The parameters have no values at this point, so
+the check holds them at one random draw, and an equation balanced only at some
+values of its parameters is refused.
 
 `derivatives` is `"third"`, `"both"`, `"jacobian"` or `"none"`. The default
 `"both"` builds the Jacobian and Hessian. `"third"` adds the exact third-derivative
@@ -70,7 +87,8 @@ closed form given as assignments `"name = expr"` in order (Dynare's block), whic
 `calibration_equations` is `{parameter: "steady-state condition"}`, the
 counterpart of MacroModelling's `k[ss]/q[ss] = 2.5 | β`, solved together with the
 steady state. Raises `dsgelab.symbolic.SymbolicError` (a `ValueError`) on an
-undeclared name, a lagged innovation, a wrong equation count or a parse failure.
+undeclared name, a lagged innovation, a wrong equation count, a parse failure or a
+declared trend that the equations do not balance.
 
 ### `optimality_conditions(problem) -> dict`
 
@@ -533,6 +551,46 @@ not held within the bounds. The policy at the grid points is in `values`
 `grid`, `chain` (the product chain if there are several), `markov_states`, `interpolation`
 (`"smolyak"` on a `SmolyakGrid`),
 `iterations`, `converged`, `distance` (the last change) and `history` (every change).
+
+### `improved_time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=100, linear_tol=1e-10, linear_max_iter=1000) -> TimeIterationSolution`
+
+Improved time iteration, as dolo's `improved_time_iteration`: Newton's method on the equilibrium
+conditions of every grid point at once, with next period's policy interpolated from the unknowns
+themselves, on the same declaration and with the same arguments and result as `time_iteration`.
+The Jacobian is a block for each point, the derivative with next period's policy held fixed, plus
+the derivative through next period's policy, which is linear in the policy's values because the
+interpolant is. That term is applied without forming the matrix, and each Newton step is solved by
+GMRES, preconditioned by the blocks, to a residual of `linear_tol` relative to the right-hand side
+or for at most `linear_max_iter` iterations. A step that does not reduce the sum of squares of
+the conditions, in complementarity form, is halved up to nine times, and when none does the
+iteration takes one step of time iteration instead. It stops when a step moves no jump by more
+than `tol`, and `iterations` counts the Newton steps.
+
+The fixed point is that of `time_iteration` on the same grid. On dolo's RBC, its Markov RBC and
+its consumption–savings model, the Newton steps number 4 to 10 where time iteration takes 114 to
+361 iterations to a tolerance of 1e-11. Newton's method needs a start close enough to the solution:
+with a borrowing limit that binds on part of the grid, it may not converge from a distant policy.
+A `TimeIterationSolution` with a loose `tol`, passed as `initial`, is such a start.
+
+### `expectations_iteration(model, params, *, expectations, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), damping=0.5, tol=1e-8, max_iter=5000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
+
+Iteration on the conditional expectations of the Euler equations, the parameterized expectations
+that dolo's documentation describes for its `fgh` models, `0 = f(s, x, E[h(s', x')])`, and that
+dolo 0.4.9.20 does not implement. Each expectation is a jump, named in `expectations`, whose
+equilibrium condition involves `t+1`, such as `z - beta E[c'^(-gamma) R']`, and the controls'
+conditions involve nothing at `t+1`, such as `c^(-gamma) - z`. The conditions are paired with the
+jumps by position, as in `time_iteration`, and the call raises `ValueError` when the condition in
+an expectation's position has nothing at `t+1` or the one in a control's position has something.
+
+Each iteration integrates the expectations at every grid point, with today's controls and next
+period's policy both taken from the current policy, averages them with the old ones with weight
+`damping` on the new, and solves the controls' conditions for today's controls, point by point
+and with no integral. Bounds apply to the controls only. At the fixed point the policy solves the
+equations that `time_iteration` solves on the same grid. Without damping the iteration can
+diverge: on stochastic growth with log utility and full depreciation, a change in consumption
+moves the next update by about `-(1 - alpha beta) / (alpha beta)` times as much, -1.8 with
+`alpha = 0.36` and `beta = 0.99`, and by about `1 - damping / (alpha beta)` times as much with
+damping.
 
 ### `CartesianGrid(axes)`
 
@@ -1084,6 +1142,11 @@ restarts. `fixed` holds variables that do not grow at a given level.
 
 `dsgelab.bgp.bgp_residual(model, params, X, G, ctx=None)` is the residual itself,
 the model evaluated at the two dates.
+
+The trends of a model in levels are declared in `from_mod` (`trend_var`,
+`var(deflator=)`) or in `from_equations` (`trend_vars=`, `deflators=`), which detrend
+it with the same check. `balanced_growth` takes the model in levels without
+declarations.
 
 ---
 
