@@ -270,10 +270,11 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
   5 de novembro.
 - [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
   mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 0.9.0 é
-  10.5281/zenodo.23992839 (a 0.7.2 é 10.5281/zenodo.23835374, a 0.7.1 é 10.5281/zenodo.23827669, a
-  0.7.0 é 10.5281/zenodo.23825088, a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual
-  10.5281/zenodo.23456474, que leva sempre à versão mais recente, está no `CITATION.cff`.
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 1.0.0rc1 é
+  10.5281/zenodo.24057764, a 0.9.0 é 10.5281/zenodo.23992839 (a 0.7.2 é 10.5281/zenodo.23835374,
+  a 0.7.1 é 10.5281/zenodo.23827669, a 0.7.0 é 10.5281/zenodo.23825088, a 0.5.0 é
+  10.5281/zenodo.23456475), e o DOI conceitual 10.5281/zenodo.23456474, que leva sempre à versão
+  mais recente, está no `CITATION.cff`.
 - [x] `CONTRIBUTING.md`, código de conduta, modelos de *issue* e de *pull request*.
 - [x] `py.typed` e anotações de tipo na API pública, sem nenhuma função ou método público sem
   anotação e sem erro novo acusado pelo `mypy`. Os wrappers de importação preguiçosa (*lazy*) de
@@ -685,9 +686,11 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 
 ### 1.0
 
-Tudo o que está na lista acima está coberto. O candidato a lançamento `1.0.0rc1` está preparado,
-e a API está congelada para o processo de candidato a lançamento. A versão final 1.0 ainda não foi
-publicada; a partir da 1.0, o versionamento é estritamente semântico.
+Tudo o que está na lista acima está coberto. O candidato a lançamento `1.0.0rc1` está publicado
+como prerelease no GitHub e arquivado no Zenodo (DOI
+[10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), e a API está congelada para
+o processo de candidato a lançamento. A versão final 1.0 ainda não foi publicada; a partir da
+1.0, o versionamento é estritamente semântico.
 
 ## Integração com o `cgelab`
 
