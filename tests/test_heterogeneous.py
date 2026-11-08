@@ -398,3 +398,60 @@ def test_a_step_that_misses_the_backward_expectation_is_refused():
     with pytest.raises(ValueError, match="Va_p"):
         HetBlock(lambda a_grid, r: (a_grid, a_grid, a_grid), ["Va", "a", "c"], backward="Va",
                  policy="a", init=lambda a_grid: a_grid)
+
+
+# -- two endogenous states ------------------------------------------------------------------------
+
+
+def two_asset_grid():
+    b_grid = np.array([0.0, 0.5, 1.0])
+    a_grid = np.array([0.0, 0.5, 1.0])
+    e_grid = np.array([0.8, 1.2])
+    Pi = np.array([[0.9, 0.1], [0.2, 0.8]])
+    return b_grid, a_grid, e_grid, Pi
+
+
+def two_asset_init(b_grid, a_grid, e_grid):
+    shape = (e_grid.size, b_grid.size, a_grid.size)
+    return np.zeros(shape), np.zeros(shape)
+
+
+def two_asset_step(Vb_p, Va_p, b_grid, a_grid, e_grid, beta, rb, ra):
+    shape = (e_grid.size, b_grid.size, a_grid.size)
+    b = np.broadcast_to(0.2 + 0.1 * b_grid[:, None] + 0.05 * a_grid + 0.01 * rb, shape)
+    a = np.broadcast_to(0.3 + 0.05 * b_grid[:, None] + 0.1 * a_grid + 0.01 * ra, shape)
+    c = (e_grid[:, None, None] + rb * b_grid[:, None] + ra * a_grid - b - a)
+    return c + beta * Vb_p, 2 * c + beta * Va_p, b, a, c
+
+
+@pytest.fixture(scope="module")
+def two_assets():
+    hh = HetBlock(two_asset_step, ["Vb", "Va", "b", "a", "c"], backward=["Vb", "Va"],
+                  policy=["b", "a"], init=two_asset_init,
+                  hetinputs=[(two_asset_grid, ["b_grid", "a_grid", "e_grid", "Pi"])],
+                  backward_tol=1e-12, h=1e-6, name="household")
+    ss = BlockModel([hh]).steady_state({"beta": 0.95, "rb": 0.01, "ra": 0.02})
+    return hh, ss
+
+
+def test_two_asset_distribution_is_on_the_two_grids(two_assets):
+    hh, ss = two_assets
+    internals = ss.internals["household"]
+    assert internals["D"].shape == (2, 3, 3)
+    assert internals["Dbeg"].shape == (2, 3, 3)
+    assert np.all(internals["D"] >= 0) and np.all(internals["Dbeg"] >= 0)
+    assert internals["D"].sum() == pytest.approx(1.0, abs=1e-14)
+    assert internals["Dbeg"].sum() == pytest.approx(1.0, abs=1e-14)
+    assert ss["B"] == pytest.approx(np.vdot(internals["D"], internals["b"]), rel=1e-14)
+    assert ss["A"] == pytest.approx(np.vdot(internals["D"], internals["a"]), rel=1e-14)
+
+
+def test_two_asset_fake_news_matches_the_direct_jacobian(two_assets):
+    hh, ss = two_assets
+    T = 8
+    J = hh.jacobian(ss, ["rb", "ra"], T)
+    Jd = hh.jacobian(ss, ["rb", "ra"], T, method="direct")
+    for O in ("B", "A", "C"):
+        for i in ("rb", "ra"):
+            scale = np.abs(Jd[O][i]).max()
+            assert np.abs(J[O][i] - Jd[O][i]).max() < 1e-8 + 1e-6 * scale, (O, i)

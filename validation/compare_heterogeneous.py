@@ -23,15 +23,19 @@ sequence-jacobian and against brute force.
      Jacobians with respect to f and s, the notebook's linear response to s, and the return to
      the steady state from the distribution of the steady state with s = 0.12, which
      sequence-jacobian computes with ss_initial and dsgelab with initial.
-  3. dsgelab against itself. The fake-news Jacobian against the direct one, the nonlinear path
+  3. The two-asset HANK of two_asset.ipynb, with a liquid and an illiquid asset, on 3 income
+     states by 50 liquid by 70 illiquid points. Compared as in 1, including the two-dimensional
+     distribution and the adjustment costs, with both packages' backward and nonlinear iterations
+     tightened as in the other models.
+  4. dsgelab against itself. The fake-news Jacobian against the direct one, the nonlinear path
      differentiated by central differences for a shock in each period, on ten of the 300 columns
      and with steps of 1e-5, 1e-6 and 1e-7 in both (1e-3, 1e-4 and 1e-5 for the labor-search
      household, with respect to f and s). The linear impulse responses of Krusell-Smith and of
      labor search against the nonlinear transitions, for shocks of 1, 0.1 and 0.01 per cent to
      productivity and of 1, 0.1 and 0.01 points to s: the difference must fall as the square of
-     the shock. And the labor-search household's path from the distribution with s = 0.12, at
-     the steady state's prices, against the steady state's transition matrix applied period by
-     period.
+     the shock. The labor-search household's path from the distribution with s = 0.12 is checked
+     against its transition matrix applied period by period, and the two-asset household's
+     fake-news Jacobian is checked on 3 by 15 by 20 points.
 
 Prerequisites:
     bash validation/sequence_jacobian/setup.sh
@@ -58,6 +62,9 @@ T = 300
 BACKWARD_TOL = 1e-12
 NONLINEAR_TOL = 1e-11
 COLUMNS = [0, 1, 2, 5, 10, 20, 50, 100, 200, 299]
+TWO_AGGREGATES = ["vphi", "mup", "alpha", "Z", "w", "p", "mc", "pi", "Q", "ra", "rb",
+                  "tax", "div", "I", "psip", "pshare", "A", "B", "C", "UCE", "CHI", "wealth",
+                  "asset_mkt", "goods_mkt", "wnkpc", "fisher", "nkpc", "equity", "inv", "val"]
 failures: list[str] = []
 
 
@@ -530,13 +537,13 @@ def compare_jacobians(J, ref, key, label, limit):
     check(f"{label} (largest: {name})", value, limit)
 
 
-def fake_news_vs_direct(block, ss, inputs, label, steps=(1e-5, 1e-6, 1e-7)):
+def fake_news_vs_direct(block, ss, inputs, label, steps=(1e-5, 1e-6, 1e-7), check_at=-1):
     """The fake-news Jacobian against the direct one, on the columns in COLUMNS.
 
     Both are finite differences with the same step, of one backward step in the first and of the
     whole path in the second. The policy has kinks, where the borrowing limit starts to bind and
     at every grid point the lottery crosses, so the two differ by the error of the differences,
-    which falls with the step.
+    which falls with the step until roundoff dominates.
     """
     saved = (block.h, block.twosided)
     gaps = []
@@ -560,7 +567,7 @@ def fake_news_vs_direct(block, ss, inputs, label, steps=(1e-5, 1e-6, 1e-7)):
         block.h, block.twosided = saved
     print(f"       {label}: fake news against direct, {len(COLUMNS)} columns, steps "
           + ", ".join(f"{h:.0e}" for h in steps) + ": " + ", ".join(f"{g:.1e}" for g in gaps))
-    check(f"{label}: fake news against direct, step {steps[-1]:.0e}", gaps[-1], 1e-7)
+    check(f"{label}: fake news against direct, step {steps[check_at]:.0e}", gaps[check_at], 1e-7)
 
 
 def compare_impulses(irf, ref, key, label, limit):
@@ -728,7 +735,61 @@ def main() -> None:
           f"{meta['seconds']['ls nonlinear']:.1f}")
     ls_hh, ls_model, ls_steady, ls_D0 = hh, ls, ss, D0
 
-    print("4. dsgelab against itself")
+    print("4. Two-asset HANK (two_asset.ipynb), 3 income states by 50 liquid by 70 illiquid "
+          "points")
+    hh, two_ss, two_model = two_asset()
+    t0 = time.perf_counter()
+    cali = two_ss.steady_state(calibration_two_asset(), {"beta": 0.976, "chi1": 6.5},
+                               {"asset_mkt": 0.0, "B": 1.04}, solver="hybr")
+    ss = two_model.steady_state(cali)
+    t_ss = time.perf_counter() - t0
+    compare_grids(ss, ref, "two", ["a_grid", "b_grid", "k_grid", "e_grid", "Pi", "z_grid",
+                                   "Psi1"])
+    compare_steady_state(ss, ref, "two", ["beta", "chi1"], ["a", "b", "c", "uce", "chi"],
+                         [k for k in TWO_AGGREGATES if abs(float(ref[f"two/ss/{k}"])) > 1e-6])
+    internals = ss.internals["hh"]
+    value, name = worst((k, internals[k], ref[f"two/internals/{k}"]) for k in ["Va", "Vb"])
+    print(f"       marginal values Va and Vb, where each package's backward iteration stopped: "
+          f"{value:.1e} ({name})")
+    print(f"       goods market (Walras), at asset market clearing: dsgelab "
+          f"{ss['goods_mkt']:.1e}, sequence-jacobian {float(ref['two/ss/goods_mkt']):.1e}")
+    hh.twosided = False
+    inputs = ["N", "ra", "rb", "tax", "w"]
+    t0 = time.perf_counter()
+    J = hh.jacobian(ss, inputs, T)
+    t_j = time.perf_counter() - t0
+    compare_jacobians(J, ref, "two/J", "household Jacobians, forward differences", 1e-7)
+    unknowns, targets = ["r", "w", "Y"], ["asset_mkt", "fisher", "wnkpc"]
+    t0 = time.perf_counter()
+    G = two_model.solve_jacobian(ss, unknowns, targets, ["rstar", "Z", "G"], T=T)
+    t_g = time.perf_counter() - t0
+    compare_jacobians(G, ref, "two/G", "general-equilibrium Jacobians G", 2e-2)
+    # the linear approximations differ more than the nonlinear paths; these selected entries are
+    # differentiated directly through sequence-jacobian's nonlinear transition in run_ssj.py
+    direct = ref["two/direct/K_Z"]
+    check("G K/Z, first eight entries against direct sequence-jacobian",
+          float(np.max(np.abs(G["K"]["Z"][:8, 0] - direct)) / np.max(np.abs(direct))), 2e-3)
+    shock = {"rstar": -0.0025 * 0.6 ** np.arange(T)}
+    compare_impulses(two_model.impulse_linear(ss, unknowns, targets, shock), ref, "two/linear",
+                     "linear impulse responses to rstar", 2e-4)
+    t0 = time.perf_counter()
+    nonlin = two_model.impulse_nonlinear(ss, unknowns, targets, shock, tol=NONLINEAR_TOL)
+    t_nl = time.perf_counter() - t0
+    compare_impulses(nonlin, ref, "two/nonlinear", "nonlinear transition after rstar", 2e-8)
+    hh.twosided = True
+    J2 = hh.jacobian(ss, inputs, T)
+    compare_jacobians(J2, ref, "two/J2", "household Jacobians, central differences", 1e-3)
+    direct = float(ref["two/direct/A_ra"])
+    check("household A/ra at (299, 299) against direct sequence-jacobian",
+          abs(J2["A"]["ra"][-1, -1] - direct) / abs(direct), 1e-4)
+    print(f"       seconds, dsgelab / sequence-jacobian: steady state {t_ss:.1f} / "
+          f"{meta['seconds']['two steady state']:.1f}, household Jacobians {t_j:.1f} / "
+          f"{meta['seconds']['two household Jacobians']:.1f}, G {t_g:.1f} / "
+          f"{meta['seconds']['two G']:.1f}, nonlinear {t_nl:.1f} / "
+          f"{meta['seconds']['two nonlinear']:.1f}")
+    two_steady = ss
+
+    print("5. dsgelab against itself")
     hh, ks = krusell_smith()
     ss = ks.steady_state({**calibration_ks(), "beta": float(ref["ks/ss/beta"]),
                           "Z": float(ref["ks/ss/Z"]), "K": float(ref["ks/ss/K"])})
@@ -774,6 +835,15 @@ def main() -> None:
         Dbeg = M @ Dbeg
     check("labor search: path from an initial distribution against forward simulation",
           largest, 1e-12)
+
+    # the two-asset household on 3 by 15 by 20 points, at the prices of the steady state of 4:
+    # the direct Jacobian costs a path of 300 backward steps per column and step; a coarser grid
+    # makes consumption invalid at some points during the backward iteration
+    hh, _, _ = two_asset()
+    small = {**two_steady, "nB": 15, "nA": 20, "nK": 15}
+    small_ss = BlockModel([hh]).steady_state(small)
+    fake_news_vs_direct(hh, small_ss, ["ra", "rb"], "two-asset household, 3 by 15 by 20",
+                        check_at=0)
 
     if failures:
         print(f"\n{len(failures)} checks failed: {failures}")

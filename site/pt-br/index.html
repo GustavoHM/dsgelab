@@ -1441,6 +1441,48 @@ True
   volta ao novo estado estacionário com os choques em zero. A validação compara os mesmos recursos
   com o sequence-jacobian na família do <code>labor_search.ipynb</code> dele, cuja cadeia de
   emprego muda com as taxas de obtenção e de perda de emprego, dentro de 6e-10.</p>
+<pre><code>def grades_dois():
+    b_grid = np.array([0.0, 0.5, 1.0])
+    a_grid = np.array([0.0, 0.5, 1.0])
+    e_grid = np.array([0.8, 1.2])
+    Pi = np.array([[0.9, 0.1], [0.2, 0.8]])
+    return b_grid, a_grid, e_grid, Pi
+
+def inicio_dois(b_grid, a_grid, e_grid):
+    forma = (e_grid.size, b_grid.size, a_grid.size)
+    return np.zeros(forma), np.zeros(forma)
+
+def passo_dois(Vb_p, Va_p, b_grid, a_grid, e_grid, beta, rb, ra):
+    forma = (e_grid.size, b_grid.size, a_grid.size)
+    b = np.broadcast_to(0.2 + 0.1 * b_grid[:, None] + 0.05 * a_grid + 0.01 * rb, forma)
+    a = np.broadcast_to(0.3 + 0.05 * b_grid[:, None] + 0.1 * a_grid + 0.01 * ra, forma)
+    c = e_grid[:, None, None] + rb * b_grid[:, None] + ra * a_grid - b - a
+    return c + beta * Vb_p, 2 * c + beta * Va_p, b, a, c
+
+dois = dsg.HetBlock(passo_dois, ["Vb", "Va", "b", "a", "c"], backward=["Vb", "Va"],
+                    policy=["b", "a"], init=inicio_dois,
+                    hetinputs=[(grades_dois, ["b_grid", "a_grid", "e_grid", "Pi"])],
+                    backward_tol=1e-12, h=1e-6, name="hh")
+dois_ss = dsg.BlockModel([dois]).steady_state({"beta": 0.95, "rb": 0.01, "ra": 0.02})
+D = dois_ss.internals["hh"]["D"]
+D.shape, float(D.sum()), dois_ss["B"], dois_ss["A"]
+J = dois.jacobian(dois_ss, ["rb"], 8)["B"]["rb"]
+Jd = dois.jacobian(dois_ss, ["rb"], 8, method="direct")["B"]["rb"]
+float(np.abs(J - Jd).max())</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">D.shape, float(D.sum()), dois_ss["B"], dois_ss["A"]</span>
+((2, 3, 3), 1, 0.2416, 0.347)
+<span class="out-expr">float(np.abs(J - Jd).max())</span>
+2.847e-11</code></pre>
+  <p>Com <code>policy=["b", "a"]</code> o bloco tem dois estados endógenos, e cada política,
+  variável defasada e distribuição tem um eixo de renda e dois de ativos. A loteria bidimensional
+  é o produto das loterias unidimensionais, preservando a massa e as médias dos dois ativos. O
+  último número compara o jacobiano do fake news com a diferenciação direta de toda a trajetória.
+  A validação resolve o HANK de dois ativos do sequence-jacobian em 3 por 50 por 70 pontos: o
+  estado estacionário concorda em 9,9e-10, os jacobianos domésticos para a frente em 1,3e-9 e a
+  transição não linear em 1,9e-8. Numa grade menor, o fake news concorda com a diferenciação
+  direta em 1,3e-8. As aproximações lineares completas de <code>G</code> nos dois pacotes diferem
+  em 1,3e-2, enquanto entradas selecionadas de <code>K/Z</code>, conferidas contra a transição
+  não linear direta do sequence-jacobian, concordam em 1,4e-3.</p>
   <h3>36. Uma regra de Taylor que muda de regime, resolvida e filtrada</h3>
 <pre><code>fisher = dsg.Model(
     states=["r"], jumps=["pi"], shocks=["e"],
@@ -1877,8 +1919,9 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   cadernos na tag v1.0.0, em 7 estados de renda por 500 pontos de ativos, com a mesma calibração,
   as mesmas incógnitas e os mesmos alvos. A família do <code>labor_search.ipynb</code>, cuja cadeia
   de emprego muda com as taxas de obtenção e de perda de emprego, em 10 estados por 100 pontos,
-  fechada por um mercado de títulos que os dois pacotes escrevem do mesmo modo. As diferenças são
-  relativas ao maior valor comparado.</p>
+  fechada por um mercado de títulos que os dois pacotes escrevem do mesmo modo. O
+  <code>two_asset.ipynb</code>, em 3 estados de renda por 50 pontos de ativos líquidos por 70 de
+  iliquidos. As diferenças são relativas ao maior valor comparado.</p>
   <table>
     <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
@@ -1890,6 +1933,10 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
       <tr><td>busca no mercado de trabalho, matriz de Markov movida por f e s: estado estacionário</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
       <tr><td>busca no mercado de trabalho: jacobianos, G, respostas lineares e não lineares</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
       <tr><td>busca no mercado de trabalho: retorno a partir da distribuição de outro estado estacionário</td><td class="num">6e-10</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: estado estacionário e jacobianos domésticos para a frente</td><td class="num">9,9e-10; 1,3e-9</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: G e resposta lineares, contra a outra aproximação linear</td><td class="num">1,3e-2; 1,4e-4</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: entradas de G contra diferenciação não linear direta</td><td class="num">1,4e-3</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: resposta não linear e fake news contra diferenciação direta</td><td class="num">1,9e-8; 1,3e-8</td><td class="ok">OK</td></tr>
   <h3>Mudança de regime markoviana comparada com soluções publicadas e com o statsmodels</h3>
   <p>O RISE, o toolbox de mudança de regime, é distribuído como P-code do MATLAB, que o GNU Octave
   não executa. A solução é comparada, no lugar dele, com as soluções que Foerster, Rubio-Ramírez,
@@ -1997,10 +2044,10 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal, da iteração da
   função valor e do método da grade endógena, como a iteração das expectativas, o
   <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
-  heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
-  validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
-  que também resolve modelos com dois ativos, assim como o
-  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
+  heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ou dois ativos,
+  validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>;
+  o <a href="https://github.com/gboehl/econpizza">econpizza</a> também resolve modelos com dois
+  ativos.</p></div>
   <p>No <code>dsgelab</code>, um problema declarado vai das condições de primeira ordem derivadas a
   uma solução e a uma exportação para o Dynare ou o MacroModelling.jl, com a convenção temporal
   traduzida automaticamente. A mesma função de resíduos serve à perturbação e à transição

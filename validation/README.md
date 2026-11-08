@@ -1740,8 +1740,8 @@ and 31 by time iteration, and the anisotropic one 13 and 30.
 
 ```bash
 bash sequence_jacobian/setup.sh                                  # if not run already
-sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 60 seconds
-python compare_heterogeneous.py                                  # about 50 seconds
+sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 2 minutes
+python compare_heterogeneous.py                                  # about 2 minutes
 ```
 
 ```
@@ -1787,7 +1787,23 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
   ok   distribution of the steady state with s = 0.12, relative to its largest mass  5.83e-10  (limit 1e-07)
   ok   transition from the distribution with s = 0.12 (largest: r)   5.99e-10  (limit 1e-08)
        seconds, dsgelab / sequence-jacobian: steady state 0.2 / 0.4, household Jacobians 0.8 / 2.1, G 0.9 / 3.0, nonlinear 2.0 / 7.0
-4. dsgelab against itself
+4. Two-asset HANK (two_asset.ipynb), 3 income states by 50 liquid by 70 illiquid points
+  ok   grids and income chain (largest: Psi1)                        3.50e-10  (limit 1e-09)
+  ok   steady state: unknowns (largest: chi1)                        3.50e-10  (limit 1e-09)
+  ok   steady state: policies (largest: chi)                         2.07e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    9.90e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: CHI)                       1.71e-10  (limit 1e-09)
+       marginal values Va and Vb, where each package's backward iteration stopped: 3.7e-10 (Vb)
+       goods market (Walras), at asset market clearing: dsgelab -7.2e-14, sequence-jacobian -3.3e-11
+  ok   household Jacobians, forward differences (largest: A/N)       1.23e-09  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: K/Z)                1.31e-02  (limit 2e-02)
+  ok   G K/Z, first eight entries against direct sequence-jacobian   1.35e-03  (limit 2e-03)
+  ok   linear impulse responses to rstar (largest: K)                1.44e-04  (limit 2e-04)
+  ok   nonlinear transition after rstar (largest: A)                 1.94e-08  (limit 2e-08)
+  ok   household Jacobians, central differences (largest: A/ra)      5.13e-04  (limit 1e-03)
+  ok   household A/ra at (299, 299) against direct sequence-jacobian  7.61e-05  (limit 1e-04)
+       seconds, dsgelab / sequence-jacobian: steady state 23.1 / 10.2, household Jacobians 6.2 / 2.4, G 6.4 / 12.6, nonlinear 15.9 / 8.7
+5. dsgelab against itself
        Krusell-Smith household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.4e-07, 2.7e-09, 3.2e-08
   ok   Krusell-Smith household: fake news against direct, step 1e-07  3.25e-08  (limit 1e-07)
        HANK household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.5e-06, 6.7e-07, 4.1e-08
@@ -1799,16 +1815,19 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
        labor search, largest gap between the nonlinear and the linear response, for shocks to s of 1, 0.1, 0.01 points: 1.01e-04, 1.02e-06, 1.02e-08
   ok   labor search: smallest ratio of the gaps, shock / 10             99.38  (at least 90)
   ok   labor search: path from an initial distribution against forward simulation  3.07e-13  (limit 1e-12)
+       two-asset household, 3 by 15 by 20: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.3e-08, 3.7e-08, 4.3e-07
+  ok   two-asset household, 3 by 15 by 20: fake news against direct, step 1e-05  1.27e-08  (limit 1e-07)
 
 all checks passed
 ```
 
-The three models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb`,
-`notebooks/hank.ipynb` and `notebooks/labor_search.ipynb` at its v1.0.0 tag, which `setup.sh`
-downloads and checks against their sha256 sums. `run_ssj.py` copies the model code from the notebooks and checks that each piece
-appears in them verbatim before running it. The household of the HANK model is
-`hetblocks.hh_labor.hh`, part of the package. `compare_heterogeneous.py` writes the same models
-for `dsgelab`, with the same calibration, unknowns and targets, the household's endogenous grid
+The four models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb`,
+`notebooks/hank.ipynb`, `notebooks/labor_search.ipynb` and `notebooks/two_asset.ipynb` at its
+v1.0.0 tag, which `setup.sh` downloads and checks against their sha256 sums. `run_ssj.py` copies
+the model code from the notebooks and checks that each piece appears in them verbatim before
+running it. The households of the HANK models are `hetblocks.hh_labor.hh` and
+`hetblocks.hh_twoasset.hh`, part of the package. `compare_heterogeneous.py` writes the same models
+for `dsgelab`, with the same calibration, unknowns and targets, the households' endogenous grid
 method again in numpy, and the constrained households' labour supply solved by the same Newton
 iteration on `log u'(c)`. Three settings differ from the notebooks. In both packages the
 household's backward iteration stops when the policy moves by less than 1e-12, where
@@ -1820,7 +1839,7 @@ states would differ by the tolerance, some 1e-7 in the policies, and hide the co
 The grids differ by 4.3e-10. sequence-jacobian computes the income chain's stationary distribution
 by iterating to 1e-11, and `dsgelab` by GTH elimination, which is exact to rounding. The
 normalisation of income to a mean of one carries that difference to every node. Everything else
-agrees within 7.6e-10, relative to the largest value compared. The goods market, which neither
+agrees within 9.9e-10, relative to the largest value compared. The goods market, which neither
 model targets, clears to 1.9e-13 and 1.2e-14 in `dsgelab`, against 7.6e-11 and 1.1e-11 in
 sequence-jacobian, whose distribution stops at its tolerance.
 
@@ -1849,22 +1868,37 @@ household Jacobians with respect to `f`, `s`, `r` and `w` within 2.9e-10, `G` wi
 linear and nonlinear responses within 2.2e-10, and the return to the steady state from the
 distribution with `s = 0.12` within 6.0e-10.
 
-Section 4 checks the fake-news algorithm against brute force, the nonlinear path differentiated
+Section 4 is the two-asset HANK of Auclert, Bardóczy, Rognlie and Straub (2021), with a liquid
+and an illiquid asset and a convex adjustment cost, on 3 income states by 50 liquid by 70
+illiquid points. The two-dimensional lottery is the product of the two one-dimensional lotteries.
+The policies, distribution and aggregates agree within 9.9e-10, the forward household Jacobians
+within 1.23e-9 and the nonlinear transition within 1.94e-8. The packages' full linear
+approximations of `G` differ by 1.31e-2, and the linear responses by 1.44e-4. Selected entries
+therefore also use derivatives through sequence-jacobian's nonlinear transition: the first eight
+`K/Z` entries agree within 1.35e-3, and `A/ra` at `(299, 299)` within 7.61e-5. Those direct
+checks distinguish the difference between the linear approximations from an error in the
+nonlinear model, whose paths agree.
+
+Section 5 checks the fake-news algorithm against brute force, the nonlinear path differentiated
 for a shock at each of ten dates, both by central differences with the same step. The two are
 different finite differences of the same derivative, and the policy has kinks where the borrowing
 limit starts to bind and at every grid point. Their gap falls with the step, to 3e-8 and 4e-8 at
 1e-7, below which rounding takes over. For the labor-search household, with respect to `f` and
 `s`, the gap is 1.6e-9 at 1e-5 and rises to 1.7e-8 and 1.6e-7 at 1e-6 and 1e-7, where rounding
-takes over sooner. In Krusell–Smith and in labor search, the gap between the nonlinear transition
-and the linear response falls by at least 98 each time the shock falls by ten, as the square of
-the shock. The household's path from the distribution with `s = 0.12`, at the steady state's
-prices, agrees within 3.1e-13 with the steady state's transition matrix applied for 300 periods. The test suite checks the same on a grid of 3 by 40 points, together with Walras's law
-along the path, the stationarity of the distribution, the simple blocks' exact Jacobians and a
-solved block against the closed form of a forward-looking equation.
+takes over sooner. The two-asset check uses 3 by 15 by 20 points and agrees within 1.27e-8 at
+1e-5; a coarser grid makes consumption invalid at some points during the backward iteration. In
+Krusell–Smith and in labor search, the gap between the nonlinear transition and the linear
+response falls by at least 98 each time the shock falls by ten, as the square of the shock. The
+household's path from the distribution with `s = 0.12`, at the steady state's prices, agrees
+within 3.1e-13 with the steady state's transition matrix applied for 300 periods. The test suite
+checks the same on a grid of 3 by 40 points, the two-asset distribution and fake-news Jacobian on
+2 by 3 by 3 points, Walras's law along the path, the stationarity of the distribution, the simple
+blocks' exact Jacobians and a solved block against the closed form of a forward-looking equation.
 
-`dsgelab` has no numba, and its times depend on the load of the machine. The numbers come from a
-run on 6 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and `dsgelab` on Python 3.13.
-The differences of sections 1 and 2 are those of the first run, on 5 November.
+`dsgelab` has no numba, and its times depend on the load of the machine. The numbers of sections
+1 to 3 come from a run on 6 November 2026, and those of sections 4 and 5 from 8 November, with
+sequence-jacobian 1.0.0 on Python 3.11 and `dsgelab` on Python 3.13. The differences of sections
+1 and 2 are those of the first run, on 5 November.
 
 ## Markov regime switching: published solutions, statsmodels and the exact likelihood
 

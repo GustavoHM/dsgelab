@@ -90,6 +90,15 @@ features, without changing the API of an earlier release. The rest of the milest
   brute-force ones within 1.6e-9, and a path from a given distribution agrees with the
   distribution moved period by period within 3.1e-13. The asset grid still stays fixed along a
   path, and a `NotImplementedError` now names only it.
+- `HetBlock` accepts two endogenous states: `policy` and `grid` take two names, every individual
+  array has two asset axes, and the distribution moves by the product of the two one-dimensional
+  lotteries, as in sequence-jacobian's two-asset HANK. The steady state, the fake-news and direct
+  Jacobians and the nonlinear transition work on the two grids. The validation reproduces
+  sequence-jacobian 1.0.0's `two_asset.ipynb` on 3 by 50 by 70 points, with the steady state within
+  9.9e-10, the forward household Jacobians within 1.3e-9 and the nonlinear transition within
+  1.9e-8. The full linear approximations of `G` differ by 1.3e-2, while selected `K/Z` entries
+  checked against sequence-jacobian's direct nonlinear transition agree within 1.4e-3. On a
+  smaller grid, fake news agrees with direct differentiation within 1.3e-8.
 
 ### Changed
 

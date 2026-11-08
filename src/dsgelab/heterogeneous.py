@@ -3,8 +3,8 @@
 A model here is a set of blocks joined by the names of their inputs and outputs, as in Auclert,
 Bardóczy, Rognlie and Straub (2021). Each block maps paths of aggregate inputs to paths of
 aggregate outputs, and the model is the directed acyclic graph the names define. A
-:class:`HetBlock` holds a continuum of agents on a grid of one asset and the nodes of a Markov
-chain, and a distribution over that grid. A :class:`SimpleBlock` is a set of equations in the
+:class:`HetBlock` holds a continuum of agents on the grids of one or two assets and the nodes of
+a Markov chain, and a distribution over them. A :class:`SimpleBlock` is a set of equations in the
 aggregates, with lags and leads, and a :class:`SolvedBlock` solves a smaller model of blocks for
 some of its inputs. The perturbation's :class:`Model`, with ``vec`` for a finite number of groups,
 is unchanged: a distribution over a grid is a different algorithm, and it lives here.

@@ -641,10 +641,17 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   sensibilidade da sua forma reduzida e do seu modelo dinâmico (6 de novembro de 2026).
 - [ ] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
   `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4.
-- [ ] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
+- [x] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
   (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
   dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
   Markov que muda ao longo de uma trajetória de transição.
+  - [x] *Dois ativos em agentes heterogêneos* (8 de novembro de 2026), com `policy` e `grid`
+    aceitando dois nomes e a distribuição movida pelo produto das duas loterias. No
+    `two_asset.ipynb` do sequence-jacobian 1.0.0, em 3 por 50 por 70 pontos, o estado
+    estacionário concorda em 9,9e-10, os jacobianos domésticos para a frente em 1,3e-9 e a
+    transição não linear em 1,9e-8. Entradas selecionadas de `G` concordam com a transição não
+    linear direta em 1,4e-3, e o fake news concorda com a diferenciação direta numa grade menor
+    em 1,3e-8.
   - [x] *A matriz de Markov que muda ao longo da trajetória* (6 de novembro de 2026), com
     transições a partir de uma distribuição dada (`initial`). No domicílio do `labor_search.ipynb`
     do sequence-jacobian 1.0.0, cuja cadeia de emprego muda com as taxas de obtenção e de perda de

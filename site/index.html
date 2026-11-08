@@ -1425,6 +1425,48 @@ True
   returns to the new steady state with the shocks at zero. The validation compares the same
   features with sequence-jacobian on the household of its <code>labor_search.ipynb</code>, whose
   employment chain moves with the job-finding and separation rates, within 6e-10.</p>
+<pre><code>def two_grids():
+    b_grid = np.array([0.0, 0.5, 1.0])
+    a_grid = np.array([0.0, 0.5, 1.0])
+    e_grid = np.array([0.8, 1.2])
+    Pi = np.array([[0.9, 0.1], [0.2, 0.8]])
+    return b_grid, a_grid, e_grid, Pi
+
+def two_init(b_grid, a_grid, e_grid):
+    shape = (e_grid.size, b_grid.size, a_grid.size)
+    return np.zeros(shape), np.zeros(shape)
+
+def two_step(Vb_p, Va_p, b_grid, a_grid, e_grid, beta, rb, ra):
+    shape = (e_grid.size, b_grid.size, a_grid.size)
+    b = np.broadcast_to(0.2 + 0.1 * b_grid[:, None] + 0.05 * a_grid + 0.01 * rb, shape)
+    a = np.broadcast_to(0.3 + 0.05 * b_grid[:, None] + 0.1 * a_grid + 0.01 * ra, shape)
+    c = e_grid[:, None, None] + rb * b_grid[:, None] + ra * a_grid - b - a
+    return c + beta * Vb_p, 2 * c + beta * Va_p, b, a, c
+
+two = dsg.HetBlock(two_step, ["Vb", "Va", "b", "a", "c"], backward=["Vb", "Va"],
+                   policy=["b", "a"], init=two_init,
+                   hetinputs=[(two_grids, ["b_grid", "a_grid", "e_grid", "Pi"])],
+                   backward_tol=1e-12, h=1e-6, name="hh")
+two_ss = dsg.BlockModel([two]).steady_state({"beta": 0.95, "rb": 0.01, "ra": 0.02})
+D = two_ss.internals["hh"]["D"]
+D.shape, float(D.sum()), two_ss["B"], two_ss["A"]
+J = two.jacobian(two_ss, ["rb"], 8)["B"]["rb"]
+Jd = two.jacobian(two_ss, ["rb"], 8, method="direct")["B"]["rb"]
+float(np.abs(J - Jd).max())</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">D.shape, float(D.sum()), two_ss["B"], two_ss["A"]</span>
+((2, 3, 3), 1, 0.2416, 0.347)
+<span class="out-expr">float(np.abs(J - Jd).max())</span>
+2.847e-11</code></pre>
+  <p>With <code>policy=["b", "a"]</code> the block has two endogenous states, and every policy,
+  backward variable and distribution has one income axis and two asset axes. The two-dimensional
+  lottery is the product of the one-dimensional lotteries, so mass and both asset means are
+  preserved. The last number compares the fake-news Jacobian with direct differentiation of the
+  whole path. The validation solves sequence-jacobian's two-asset HANK on 3 by 50 by 70 points:
+  the steady state agrees within 9.9e-10, the forward household Jacobians within 1.3e-9 and the
+  nonlinear transition within 1.9e-8. On a smaller grid, fake news agrees with direct
+  differentiation within 1.3e-8. The packages' full linear approximations of <code>G</code>
+  differ by 1.3e-2, while selected <code>K/Z</code> entries checked against sequence-jacobian's
+  direct nonlinear transition agree within 1.4e-3.</p>
   <h3>36. A Taylor rule that switches regime, solved and filtered</h3>
 <pre><code>fisher = dsg.Model(
     states=["r"], jumps=["pi"], shocks=["e"],
@@ -1852,7 +1894,8 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   the v1.0.0 tag, on 7 income states by 500 asset points, with the same calibration, unknowns and
   targets. The household of its <code>labor_search.ipynb</code>, whose employment chain moves with
   the job-finding and separation rates, on 10 states by 100 points, closed by a bond market that
-  both packages write identically. The differences are relative to the largest value compared.</p>
+  both packages write identically. Its <code>two_asset.ipynb</code>, on 3 income states by 50
+  liquid by 70 illiquid points. The differences are relative to the largest value compared.</p>
   <table>
     <thead><tr><th>What is compared</th><th>Deviation</th><th></th></tr></thead>
     <tbody>
@@ -1864,6 +1907,10 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
       <tr><td>labor search, Markov matrix moved by f and s: steady state</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
       <tr><td>labor search: Jacobians, G, linear and nonlinear responses</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
       <tr><td>labor search: return from another steady state's distribution</td><td class="num">6e-10</td><td class="ok">OK</td></tr>
+      <tr><td>two-asset HANK: steady state and forward household Jacobians</td><td class="num">9.9e-10; 1.3e-9</td><td class="ok">OK</td></tr>
+      <tr><td>two-asset HANK: linear G and response, against the other linear approximation</td><td class="num">1.3e-2; 1.4e-4</td><td class="ok">OK</td></tr>
+      <tr><td>two-asset HANK: selected G entries against direct nonlinear differentiation</td><td class="num">1.4e-3</td><td class="ok">OK</td></tr>
+      <tr><td>two-asset HANK: nonlinear response and fake news against direct</td><td class="num">1.9e-8; 1.3e-8</td><td class="ok">OK</td></tr>
   <h3>Markov regime switching against published solutions and statsmodels</h3>
   <p>RISE, the toolbox for regime switching, is distributed as MATLAB P-code, which GNU Octave cannot
   execute. The solution is checked instead against the solutions Foerster, Rubio-Ramírez, Waggoner
@@ -1968,10 +2015,9 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   second-order solution. For global methods beyond Chebyshev collocation (on tensor or Smolyak
   grids), time iteration, value function iteration and the endogenous grid method, such as
   expectations iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more.
-  For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one asset,
-  validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
-  which also solves models with two assets, as does
-  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
+  For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one or two assets,
+  validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>;
+  <a href="https://github.com/gboehl/econpizza">econpizza</a> also solves models with two assets.</p></div>
   <p>In <code>dsgelab</code> a declared problem goes from the derived first-order conditions to a
   solution and to an export for Dynare or MacroModelling.jl, with the timing translated
   automatically. The same residual function serves the perturbation and the deterministic

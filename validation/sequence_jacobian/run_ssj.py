@@ -504,10 +504,26 @@ def main() -> None:
     t0 = time.perf_counter()
     save(out, "two/G", ge(hank, ss, unknowns, targets, ns["exogenous"], TWO_G))
     times["two G"] = time.perf_counter() - t0
-    shock = {"rstar": -0.0025 * 0.6 ** np.arange(T)}
-    lin = hank.solve_impulse_linear(ss, unknowns, targets, shock)
     inner = {k: {"verbose": False, "tol": 1e-12} for k in
              ["pricing_solved", "arbitrage_solved", "labor_to_investment_combined_solved"]}
+    # selected entries differentiated through the nonlinear transition, independently of the
+    # solve_jacobian approximation used for the full matrices
+    h = 1e-4
+    up, dn = np.zeros(T), np.zeros(T)
+    up[0], dn[0] = h, -h
+    Yu = hank.solve_impulse_nonlinear(ss, unknowns, targets, {"Z": up}, tol=NONLINEAR_TOL,
+                                      maxit=50, verbose=False, options=inner)
+    Yd = hank.solve_impulse_nonlinear(ss, unknowns, targets, {"Z": dn}, tol=NONLINEAR_TOL,
+                                      maxit=50, verbose=False, options=inner)
+    direct = {"K_Z": (Yu["K"][:8] - Yd["K"][:8]) / (2 * h)}
+    up, dn = np.zeros(T), np.zeros(T)
+    up[-1], dn[-1] = h, -h
+    Yu = hh.impulse_nonlinear(ss, {"ra": up}, outputs=["A"])
+    Yd = hh.impulse_nonlinear(ss, {"ra": dn}, outputs=["A"])
+    direct["A_ra"] = (Yu["A"][-1] - Yd["A"][-1]) / (2 * h)
+    save(out, "two/direct", direct)
+    shock = {"rstar": -0.0025 * 0.6 ** np.arange(T)}
+    lin = hank.solve_impulse_linear(ss, unknowns, targets, shock)
     t0 = time.perf_counter()
     nonlin = hank.solve_impulse_nonlinear(ss, unknowns, targets, shock, tol=NONLINEAR_TOL,
                                           maxit=50, verbose=False, options=inner)

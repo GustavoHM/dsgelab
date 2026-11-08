@@ -614,10 +614,16 @@ of 0.9.0 records, and each keeps the six conditions above.
   its reduced form and dynamic model are left out (6 November 2026).
 - [ ] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
   `deflator`. Reference: Dynare, as for the balanced growth path of 0.4.
-- [ ] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
+- [x] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
   Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
   in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
   along a transition path.
+  - [x] *Two assets in heterogeneous agents* (8 November 2026), with `policy` and `grid` taking
+    two names and the distribution moved by the product of the two lotteries. On
+    sequence-jacobian 1.0.0's `two_asset.ipynb`, on 3 by 50 by 70 points, the steady state agrees
+    within 9.9e-10, the forward household Jacobians within 1.3e-9 and the nonlinear transition
+    within 1.9e-8. Selected `G` entries agree with its direct nonlinear transition within 1.4e-3,
+    and fake news agrees with direct differentiation on a smaller grid within 1.3e-8.
   - [x] *The Markov matrix that moves along a path* (6 November 2026), with transitions from a
     given distribution (`initial`). On the household of sequence-jacobian 1.0.0's
     `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates,

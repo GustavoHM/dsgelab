@@ -696,27 +696,31 @@ sequence-jacobian, against which the module is validated (`validation/compare_he
 
 ### `HetBlock(step, outputs, *, backward, policy, init, markov="Pi", grid=None, hetinputs=(), hetoutputs=(), name=None, backward_tol=1e-10, backward_max_iter=10000, h=1e-4, twosided=True)`
 
-A continuum of agents on a grid of one asset by the nodes of one Markov chain. `step` is one step
-of the backward iteration, written by the user, for example by the endogenous grid method. Its
-arguments are read by name: `v_p`, for each backward variable `v`, is the expectation of `v` at
-`t + 1` conditional on today's income state, and every other argument is an aggregate input or an
-output of `hetinputs`. It returns, in the order of `outputs` or as a mapping, the backward
-variables at `t`, the policy and the other individual outcomes, each an `(n_e, n_a)` array.
+A continuum of agents on the grids of one or two assets by the nodes of one Markov chain. `step`
+is one step of the backward iteration, written by the user, for example by the endogenous grid
+method. Its arguments are read by name: `v_p`, for each backward variable `v`, is the expectation
+of `v` at `t + 1` conditional on today's income state, and every other argument is an aggregate
+input or an output of `hetinputs`. It returns, in the order of `outputs` or as a mapping, the
+backward variables at `t`, the policies and the other individual outcomes, each an `(n_e, n_a)`
+array with one asset and an `(n_e, n_1, n_2)` array with two.
 
 | Argument | Meaning |
 |---|---|
-| `backward` | the backward variables, such as the marginal value of assets `Va` |
-| `policy` | the asset policy, whose lottery (Young, 2010) moves the distribution |
+| `backward` | the backward variables, such as the marginal values of assets `Va` and `Vb` |
+| `policy` | the asset policy, or the policies of two assets, whose lottery (Young, 2010) moves the distribution |
 | `init` | the backward variables the steady-state iteration starts from, as a function of the inputs |
-| `markov`, `grid` | the names of the transition matrix `(n_e, n_e)` and of the asset grid, by default `policy + "_grid"`, among the inputs or the outputs of `hetinputs` |
+| `markov`, `grid` | the names of the transition matrix `(n_e, n_e)` and of the asset grid or grids, by default `policy + "_grid"`, among the inputs or the outputs of `hetinputs` |
 | `hetinputs` | pairs `(function, outputs)` run in order before each step, which make the grids and the arrays of income by node from aggregates |
 | `hetoutputs` | pairs `(function, outputs)` of the step's outcomes, which make further individual outcomes |
 | `backward_tol`, `backward_max_iter` | the steady state's backward iteration stops when one step moves the policy by less than `backward_tol` at every point |
 | `h`, `twosided` | the step of the finite differences of `step` in the fake-news algorithm, central by default and forward with `twosided=False` |
 
-Every outcome that is not a backward variable is aggregated under its name in capitals, as the
-mean under `D`: the policy `a` gives `A` and consumption `c` gives `C`. `inputs` and `outputs`
-list the block's aggregate inputs and outputs.
+With two assets the assets' axes are in the order of `policy`, and the two-dimensional lottery is
+the product of the two one-dimensional lotteries, as in sequence-jacobian's two-asset HANK. The
+agent goes to each of the four neighbouring grid corners with the product of their weights, which
+keeps the mean of both assets. Every outcome that is not a backward variable is aggregated under
+its name in capitals, as the mean under `D`: the policies `b` and `a` give `B` and `A`, and
+consumption `c` gives `C`. `inputs` and `outputs` list the block's aggregate inputs and outputs.
 
 `Dbeg_t` is the distribution over last period's income state and the assets carried into `t`.
 The income shock turns it into `D_t = Pi_t' Dbeg_t`, and the policy's lottery turns `D_t` into
@@ -731,9 +735,9 @@ negative mass or with masses that do not sum to one within 1e-10, raises `ValueE
 The Markov matrix may be an output of `hetinputs` that moves with the inputs along a path, as in
 sequence-jacobian's `labor_search.ipynb`, where the job-finding and separation rates make the
 employment chain. `Pi_t` moves the distribution at `t`, and the step at `t` takes the expectation
-with `Pi_{t+1}`. The asset grid may depend on parameters but not on an input that moves along a
+with `Pi_{t+1}`. The asset grids may depend on parameters but not on an input that moves along a
 path, which raises `NotImplementedError`. Several chains go into one by their Kronecker product,
-and a block has one endogenous state.
+and a block has one or two endogenous states.
 
 `jacobian(ss, inputs, T, outputs=None, *, method="fake_news")` gives `J[O][i]`, `T x T`. The
 fake-news algorithm takes `T` backward steps per input, against the `T^2` of differentiating the
