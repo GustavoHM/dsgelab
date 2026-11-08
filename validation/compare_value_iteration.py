@@ -22,6 +22,12 @@
      chain's transition matrix. Linear and cubic interpolation, on grids of 10 to 80 capital
      points, at the grid points. The linear error falls as the square of the spacing, and the
      cubic one faster.
+  4. The same economy with three capital stocks, c + k_1' + k_2' + k_3' = z k_1^a_1 k_2^a_2 k_3^a_3,
+     on Smolyak grids of levels 1 to 3, with the shares of output saved in each stock as the
+     three controls, maximized by projected Newton. The policy is s_j = beta a_j and the value
+     V = sum_j b_j log k_j + h(z), with b_j = a_j / (1 - beta sum a) and h solving a linear system
+     in the chain's transition matrix. The value is compared at the grid's nodes and at 200
+     random points of the box, where it is the grid's polynomial.
 
 Prerequisites:
     bash validation/dolo/setup.sh
@@ -194,10 +200,58 @@ def compare_closed_form() -> None:
         check_at_least(f"{kind}: smallest error ratio when the spacing halves", min(ratios), 3.0)
 
 
+def compare_smolyak() -> None:
+    print("4. three capital stocks on Smolyak grids, against the closed form")
+    alpha = ALPHA * np.array([0.5, 0.3, 0.2])
+    ks = ["k1", "k2", "k3"]
+    chain = dsg.rouwenhorst(0.9, 0.02, 3)
+
+    def output(s):
+        return np.exp(s.z) * np.prod([s[k] ** a for k, a in zip(ks, alpha)], axis=0)
+
+    prog = dsg.DynamicProgram(
+        states=ks + ["z"], controls=["s1", "s2", "s3"],
+        reward=lambda s, x, p: np.log((1 - x.s1 - x.s2 - x.s3) * output(s)),
+        transition=lambda s, x, e, p: {k: x[f"s{j + 1}"] * output(s) for j, k in enumerate(ks)},
+        discount=BETA, bounds={f"s{j + 1}": (0.01, 0.3) for j in range(3)})
+    b = alpha / (1 - BETA * ALPHA)
+    a = (np.log(1 - BETA * ALPHA) + BETA * np.sum(b * np.log(BETA * alpha))
+         + (1 + BETA * b.sum()) * chain.nodes)
+    h = np.linalg.solve(np.eye(chain.n) - BETA * chain.transition, a)
+    kss = BETA * alpha * np.exp(np.sum(alpha * np.log(BETA * alpha)) / (1 - ALPHA))
+    box = {k: (0.7 * v, 1.3 * v) for k, v in zip(ks, kss)}
+    rng = np.random.default_rng(0)
+    K = np.column_stack([rng.uniform(lo, hi, 200) for lo, hi in box.values()])
+    node = np.repeat(np.arange(chain.n), len(K))
+    states = np.column_stack([np.tile(K, (chain.n, 1)), chain.nodes[node]])
+    off_grid = np.log(np.tile(K, (chain.n, 1))) @ b + h[node]
+    rows = []
+    for level in (1, 2, 3):
+        grid = dsg.SmolyakGrid(box, level)
+        start = time.perf_counter()
+        sol = dsg.value_iteration(prog, {}, grid=grid, markov={"z": chain}, tol=1e-10,
+                                  howard=50)
+        elapsed = time.perf_counter() - start
+        at_nodes = (np.log(grid.points) @ b)[None, :] + h[:, None]
+        rows.append((level, grid.n, sol.iterations, float(np.abs(sol.values - at_nodes).max()),
+                     float(np.abs(sol.value(states) - off_grid).max()),
+                     float(np.abs(sol.policy - BETA * alpha).max()), elapsed))
+    print("  level  nodes  iterations   V at nodes   V off the grid   policy    seconds")
+    for level, n, it, e_nodes, e_off, e_pol, sec in rows:
+        print(f"  {level:5d} {n:6d} {it:11d} {e_nodes:12.2e} {e_off:16.2e} {e_pol:9.2e} "
+              f"{sec:9.1f}")
+    check("level 3: largest error of V at the nodes", rows[-1][3], 2e-7)
+    check("level 3: largest error of V at 600 random points", rows[-1][4], 2e-7)
+    check("level 3: largest error of the saving shares", rows[-1][5], 2e-7)
+    check_at_least("smallest error ratio of V from one level to the next",
+                   min(r[3] / s[3] for r, s in zip(rows, rows[1:])), 30.0)
+
+
 if __name__ == "__main__":
     compare_quantecon()
     compare_dolo()
     compare_closed_form()
+    compare_smolyak()
     if failures:
         print(f"\n{len(failures)} failure(s): {failures}")
         sys.exit(1)

@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 __all__ = ["EstimationProblem", "ModeResult", "MCMCResult", "SMCResult",
            "posterior_mode", "maximum_likelihood", "metropolis_hastings", "smc",
            "prior_predictive", "model_probabilities", "rhat", "effective_sample_size",
-           "posterior_forecast", "hessian"]
+           "posterior_forecast", "posterior_conditional_forecast", "hessian"]
 
 
 def unpack_point(model: Model, params: Params, cov: Covariance,
@@ -955,3 +955,109 @@ def posterior_forecast(problem: EstimationProblem, draws: MCMCResult | SMCResult
                 lower={v: np.quantile(P[:, :, i], lo, axis=0) for i, v in enumerate(names)},
                 upper={v: np.quantile(P[:, :, i], hi, axis=0) for i, v in enumerate(names)},
                 paths=P, names=names, draws=len(paths))
+
+
+def posterior_conditional_forecast(problem: EstimationProblem,
+                                   draws: MCMCResult | SMCResult | ArrayLike,
+                                   conditions: Mapping[str, ArrayLike], *,
+                                   controlled: Sequence[str] | None = None,
+                                   periods: int | None = None,
+                                   variables: Sequence[str] | None = None, n_draws: int = 200,
+                                   replic: int = 10, coverage: float = 0.8,
+                                   logs: Sequence[str] = (), seed: int = 0):
+    """A conditional forecast whose bands carry parameter uncertainty as well as the shocks'.
+
+    For ``n_draws`` parameter vectors taken from ``draws`` (an :class:`MCMCResult`,
+    an :class:`SMCResult`, or a ``(N, k)`` array), the model is solved, the
+    sample smoothed, and ``replic`` conditional forecasts are made from the
+    smoothed state at the last date, as :func:`~dsgelab.conditional_forecast_bands`
+    makes them: the shocks not in ``controlled`` drawn, the controlled ones chosen
+    date by date to put the conditioned variables on their paths. Dynare's
+    ``conditional_forecast`` after estimation does this at one parameter vector
+    (``parameter_set``); here the bands are taken over every path of every draw,
+    ranked as Dynare ranks them. ``conditions`` and the paths returned are in
+    levels, or in logs for the variables in ``logs`` (Dynare's ``loglinear``).
+
+    Returns a :class:`~dsgelab.ConditionalForecast`, whose ``replic`` is the
+    number of paths.
+    """
+    from .kalman import ConditionalForecast, _conditional_paths, _order_bands
+    from .solution import shock_covariance
+    if problem.order != 1 or problem.is_dsge_var:
+        raise ValueError("posterior_conditional_forecast works on the first-order state space")
+    rng = np.random.default_rng(seed)
+    if isinstance(draws, MCMCResult):
+        X = draws.draws
+    elif isinstance(draws, SMCResult):
+        X = draws.particles[rng.choice(len(draws.particles), size=len(draws.particles),
+                                       p=draws.weights / draws.weights.sum())]
+    else:
+        X = np.atleast_2d(np.asarray(draws, float))
+    pick = X[rng.choice(len(X), size=min(n_draws, len(X)), replace=False)]
+    cnames = list(conditions)
+    series = [np.asarray(conditions[n], dtype=float).ravel() for n in cnames]
+    cl = series[0].size
+    if any(s.size != cl for s in series):
+        raise ValueError("every conditioned path must have the same length")
+    H = cl if periods is None else int(periods)
+    if H < cl:
+        raise ValueError(f"periods={H} is shorter than the conditions ({cl} dates)")
+    cond_paths, free_paths, shock_paths = [], [], []
+    names: list[str] | None = None
+    shocks: list[str] = []
+    ctrl: list[int] = []
+    for x in pick:
+        try:
+            sol, space = problem.solve(x)
+            sm = problem.smoother(x)
+        except Exception:
+            continue
+        names = list(variables) if variables is not None else list(sol.model.names)
+        shocks = list(sol.model.shocks)
+        ctrl = (list(range(len(shocks))) if controlled is None
+                else [shocks.index(c) for c in controlled])
+
+        def to_dev(n, y):
+            j = sol.model.position(n)
+            c, s = sol.coords.center[j], sol.coords.scale[j]
+            return y - np.log(c) if n in logs else (y - c) / s
+
+        def to_units(k):
+            flat = sol.variables(k.reshape(-1, k.shape[-1]))
+            out = np.empty(k.shape[:2] + (len(names),))
+            for i, v in enumerate(names):
+                j = sol.model.position(v)
+                c, s = sol.coords.center[j], sol.coords.scale[j]
+                y = flat[v].reshape(k.shape[:2])
+                out[:, :, i] = np.log(c) + y if v in logs else c + s * y
+            return out
+
+        targets = np.full((H, len(cnames)), np.nan)
+        targets[:cl] = np.column_stack([to_dev(n, s) for n, s in zip(cnames, series)])
+        Sigma = shock_covariance(shocks, space.Sigma)
+        L = (np.diag(np.sqrt(np.diag(Sigma))) if np.allclose(Sigma, np.diag(np.diag(Sigma)))
+             else np.linalg.cholesky(Sigma))
+        rows = [sol.model.position(n) for n in cnames]
+        k0 = sm.states[-1, :space.n_model_states]  # type: ignore[union-attr]
+        Z = rng.standard_normal((2, replic, H, len(shocks))) @ L.T
+        k_c, e_c = _conditional_paths(sol, targets, rows, ctrl, k0, Z[0])
+        k_u, _ = _conditional_paths(sol, np.full_like(targets, np.nan), rows, ctrl, k0, Z[1])
+        cond_paths.append(to_units(k_c))
+        free_paths.append(to_units(k_u))
+        shock_paths.append(e_c[:, :cl])
+    if not cond_paths or names is None:
+        raise RuntimeError("no draw could be solved")
+    C, U, E = (np.concatenate(a) for a in (cond_paths, free_paths, shock_paths))
+    bc = [_order_bands(C[:, :, i], coverage) for i in range(len(names))]
+    bu = [_order_bands(U[:, :, i], coverage) for i in range(len(names))]
+    sb = {}
+    for j, i in enumerate(ctrl):
+        m, lo, hi = _order_bands(E[:, :, j], coverage)
+        sb[shocks[i]] = {"mean": m, "lower": lo, "upper": hi}
+    return ConditionalForecast(
+        mean={v: b[0] for v, b in zip(names, bc)}, lower={v: b[1] for v, b in zip(names, bc)},
+        upper={v: b[2] for v, b in zip(names, bc)},
+        unconditional_mean={v: b[0] for v, b in zip(names, bu)},
+        unconditional_lower={v: b[1] for v, b in zip(names, bu)},
+        unconditional_upper={v: b[2] for v, b in zip(names, bu)},
+        shocks=sb, coverage=coverage, replic=int(C.shape[0]))

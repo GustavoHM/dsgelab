@@ -8,6 +8,145 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+## 1.0.0rc1 — 2026-11-08
+
+Release candidate for 1.0, covering milestone 0.10 and the API audit before the freeze.
+
+### Added
+
+- `value_iteration` takes a `SmolyakGrid`, as `solve_projection` and `time_iteration` do, with the
+  value and the policy interpolated by the grid's polynomial. `validation/compare_value_iteration.py`
+  solves stochastic growth with three capital stocks and the saving shares as three controls on
+  Smolyak grids of levels 1 to 3, against the closed-form value. At level 3, with 69 nodes, the
+  value agrees within 6.4e-8 at the nodes and 7.3e-8 at 600 random points of the box, and the
+  error falls by at least 58 from one level to the next.
+- The figures left out in 0.9. `identification(..., strength=True)` computes the identification
+  strength of Ratto and Iskrev (2011) as Dynare's `identification` does at first order, from the
+  asymptotic information matrix of the Gaussian likelihood on the data or on a simulated sample
+  (`IdentificationStrength`: the matrix, the strength and the sensitivity component relative to
+  the parameter and to its prior standard deviation, the sensitivity of the moments and the
+  identification patterns), drawn by `plot_identification_strength`,
+  `plot_identification_sensitivity` and `plot_identification_patterns`.
+  `realtime_shock_decomposition` takes `forecast` and `vintages` and returns Dynare's one-step
+  conditional and forecast pools and, for each vintage, its decomposition, its forecast and its
+  conditional decomposition, which `plot_decomposition` draws with `realtime` and `vintage`.
+  `annualise_decomposition` and `plot_decomposition(frequency=...)` give Dynare's `type=yoy` and
+  `type=aoa`, and `initial_condition_decomposition` Dynare's command of that name.
+  `conditional_forecast_bands` draws the shocks left free, as Dynare's `conditional_forecast`, and
+  returns a `ConditionalForecast` with its bands, `posterior_conditional_forecast` adds parameter
+  draws, and `plot_conditional_forecast` draws the bands. `validation/compare_plots.py` compares
+  them with Dynare's on `fs2000.mod` at the prior mean. On the sample Dynare simulates for its
+  information matrix, the matrix agrees within 1.2e-8 of the root of its diagonal and the strength
+  and sensitivity measures within 2.7e-7. The real-time, annualised and initial condition
+  decompositions agree within 2e-14, and the conditional forecast and its bands, on Dynare's 2,000
+  draws, within 7e-15. Dynare's `q2a` annualisation and its sensitivity bars for the reduced
+  form and the dynamic model are not reproduced.
+- `forecast_evaluation(bvar_lags=..., bvar_options=...)` adds a BVAR with the Sims–Zha prior as a
+  second benchmark, re-estimated at each origin on the model's window. Its forecasts at the
+  posterior mean are in `ForecastEvaluation.bvar_mean` and its errors in `bvar_errors`, and
+  `rmse`, `relative_rmse` and `diebold_mariano` take `benchmark="bvar"`. On Dynare 7.2's
+  `tests/bvar_a_la_sims/bvar_and_dsge.mod`, at four origins on an expanding and a rolling window,
+  the errors 1 to 4 steps ahead agree within 1.6e-16 with those of Dynare's `bvar.toolbox` on the
+  same windows (the largest error is 0.022).
+- `BVAR.irf`, Dynare's `bvar_irf`: impulse responses over draws from the posterior, identified by
+  the Cholesky factor, the symmetric square root or a callable, with the mean, median, variance,
+  HPD interval, deciles and the bounds of `oo_.bvar.irf`. On `bvar_standalone.mod`, with the
+  normal draws Octave took, the 1000 sampled responses agree with Dynare's within 1.9e-15 of the
+  largest response, and the statistics within 1.1e-15. Dynare 7.2 takes the rows of the
+  Cholesky factor `L` as the impulses, whose covariance is `L'L` rather than `Sigma`. `BVAR.irf`
+  takes its columns, and reproduces Dynare's numbers with the upper factor as identification.
+- `dsge_var_irf`, Dynare's `bayesian_irf` with `dsge_var`: the DSGE-VAR's impulse responses over
+  the posterior, identified by the rotation of Del Negro and Schorfheide (2004) from the model's
+  impact matrix. On `tests/dsge-var`, with the 1000 parameter draws and the normal draws Dynare
+  took, the sampled responses agree within 1.1e-13 of the largest response and the statistics of
+  `oo_.PosteriorIRF.bvardsge` within 5.7e-14. `plot_posterior_irf` draws the results of both.
+- `improved_time_iteration`: Newton's method on the equilibrium conditions of every grid point at
+  once, with next period's policy interpolated from the unknowns, as dolo's
+  `improved_time_iteration`. It takes the declaration, the arguments and the result of
+  `time_iteration`, on a `CartesianGrid` or a `SmolyakGrid`, with Markov or quadrature exogenous
+  states and bounds by complementarity, and reaches the same fixed point. The derivative through
+  next period's policy is applied as an operator, and each step is solved by GMRES, preconditioned
+  by the blocks for each point. `validation/compare_improved_time_iteration.py` checks it against
+  dolo 0.4.9.20's routine on dolo's RBC, Markov RBC and consumption–savings models, within 3.7e-10
+  with linear and cubic interpolation, in 4 to 10 Newton steps where time iteration takes 114 to
+  361 iterations. As published, dolo's routine does not converge on the consumption–savings model
+  from its calibration, and `validation/dolo/run_dolo_iti.py` starts it from its own time
+  iteration stopped at 1e-3, without editing dolo.
+- `expectations_iteration`: iteration on the conditional expectations of the Euler equations,
+  declared as jumps of the `Model` (`z - beta E[c'^(-gamma) R']`, with `c^(-gamma) - z` among the
+  conditions without `t+1`), with the controls found from the expectations at each grid point
+  without an integral, and `damping=0.5` on the update of the expectations. dolo documents this
+  iteration, as parameterized expectations, and 0.4.9.20 does not implement it. On stochastic
+  growth with log utility and full depreciation it agrees with `time_iteration` on the same grid
+  within 5e-12 and with the closed form as time iteration does. Without damping it diverges there.
+- A `HetBlock`'s Markov matrix may be an output of `hetinputs` that moves with the inputs along a
+  path, in the steady state, the fake-news Jacobians, `G` and the nonlinear transition. `Pi_t`
+  moves the distribution at `t` and the expectation the step takes at `t - 1`, as in
+  sequence-jacobian 1.0.0. `HetBlock.path(..., Dbeg=...)` and
+  `BlockModel.impulse_nonlinear(..., initial={name: Dbeg})` start a transition from a given
+  distribution in place of the steady state's. `validation/compare_heterogeneous.py` adds the
+  household of sequence-jacobian's `labor_search.ipynb`, whose employment chain moves with the
+  job-finding and separation rates, closed by a fixed supply of bonds that the notebook does not
+  have and that both packages write identically. The steady state agrees within 8.1e-10, the
+  Jacobians with respect to the rates within 2.9e-10, `G` within 8.3e-11, the linear and
+  nonlinear responses within 2.2e-10, and the return from the distribution of another steady
+  state, sequence-jacobian's `ss_initial`, within 6.0e-10. The fake-news Jacobians agree with the
+  brute-force ones within 1.6e-9, and a path from a given distribution agrees with the
+  distribution moved period by period within 3.1e-13. The asset grid still stays fixed along a
+  path, and a `NotImplementedError` now names only it.
+- `HetBlock` accepts two endogenous states: `policy` and `grid` take two names, every individual
+  array has two asset axes, and the distribution moves by the product of the two one-dimensional
+  lotteries, as in sequence-jacobian's two-asset HANK. The steady state, the fake-news and direct
+  Jacobians and the nonlinear transition work on the two grids. The validation reproduces
+  sequence-jacobian 1.0.0's `two_asset.ipynb` on 3 by 50 by 70 points, with the steady state within
+  9.9e-10, the forward household Jacobians within 1.3e-9 and the nonlinear transition within
+  1.9e-8. The full linear approximations of `G` differ by 1.3e-2, while selected `K/Z` entries
+  checked against sequence-jacobian's direct nonlinear transition agree within 1.4e-3. On a
+  smaller grid, fake news agrees with direct differentiation within 1.3e-8.
+- `solve_second_order_switching` and `solve_markov_switching(..., order=2)`: the second-order
+  solution of a Markov-switching model, by the partition perturbation of Foerster,
+  Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). Given the first-order solution, the laws
+  of motion give the states' second derivatives in terms of the jumps', and the expected rows
+  give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, one block per regime.
+  `SecondOrderSwitchingSolution` has the blocks by regime, `decision_rule(i, j)` the rule for
+  `[k'; u']` on `(k, eps', chi)` (`SwitchingDecisionRule`), pruned simulation and impulse
+  responses along a regime path, and the conditional and ergodic means in closed form.
+  `validation/compare_switching.py` reproduces the 96 second-order coefficients that Foerster et
+  al. (2016) print for their RBC, all of them once rounded to four decimals (the largest
+  difference is 0.48 of a unit of the fourth decimal). With identical regimes it agrees with
+  `solve_second_order` within 7.9e-15, and on stochastic growth with log utility and full
+  depreciation, with switching productivity, persistence and volatility, every coefficient agrees
+  with the closed form within 1.3e-10.
+- `from_equations(trend_vars=..., log_trend_vars=..., deflators=..., log_deflators=...)`
+  declares the trends of a model written in levels, as `trend_var`, `log_trend_var`,
+  `var(deflator=)` and `var(log_deflator=)` do in a `.mod`. The text equations are detrended as
+  `from_mod` detrends a `.mod`, with Dynare's balanced-growth check, and the declarations are in
+  `model.trends`. `validation/compare_bgp.py` writes Solow and Ramsey from Dynare 7.2's
+  `tests/bgp`, with their trends declared, and `tests/trend_var/fs2000_nonstationary.mod` as
+  text equations. Against Dynare, the steady state agrees within 3.4e-14, the IRFs within 9.7e-14
+  of each variable's largest response, the paths under the same 200 shocks within 8.2e-14 and the
+  variance matrix within 7.8e-14 of its largest entry. Against `from_mod` on the same `.mod` the
+  largest difference is 1.4e-13.
+
+### Changed
+
+- `value_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a
+  `CartesianGrid`, so that a `SmolyakGrid` can refuse a value. Calls that worked before give the
+  same results.
+- `max_iter` is the preferred iteration-limit keyword in `calibrate`, `perfect_foresight`,
+  `extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`. `maxiter`
+  remains accepted as a deprecated alias, with its previous default, and passing both names raises
+  `ValueError`.
+- In `from_equations`, the lead `x(+k)`, `k >= 2`, of a state starts from a new jump
+  `LEAD0_x = x`, with `LEAD1_x = LEAD0_x(+1)`. Before, `LEAD1_x = x(+1)` had no jump at `t+1`, and
+  with an exogenous state the solver refused the model as inconsistent. A model with the lead of
+  an endogenous state has one more auxiliary and the same solution.
+
+### Fixed
+
+- The balanced-growth check of a `.mod` failed with a `NameError` on an equation that holds two
+  trends after detrending, such as Solow with technology and population declared as trends.
+
 ## 0.9.0 — 2026-11-05
 
 The rest of the roadmap's milestone 0.8 (global methods): value function iteration, the

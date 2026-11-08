@@ -54,6 +54,7 @@ from typing import TYPE_CHECKING, Any, Mapping, Sequence
 import numpy as np
 from numpy.typing import ArrayLike
 
+from .bgp import _check_balanced
 from .model import Model
 from .steady import SteadyState, steady_state
 
@@ -788,7 +789,8 @@ class ModFile:
         default), ``"calibration"`` (the values the file assigns), or a mapping from
         the estimated names to values, which may leave some out. The shocks'
         covariance, the measurement errors and the steady state come from the file,
-        as in :meth:`estimation_problem`. ``kwargs`` go to
+        as in :meth:`estimation_problem`, and the priors, for the identification
+        strength (``strength=True``), from ``estimated_params``. ``kwargs`` go to
         :func:`~dsgelab.identification` and override anything.
         """
         from .identification import identification
@@ -830,7 +832,9 @@ class ModFile:
                                   measurement=meas or None,
                                   transforms="log" if "loglinear" in self.estimation_options
                                   else "level",
-                                  steady_fn=lambda p: self.steady_state(params=p))
+                                  steady_fn=lambda p: self.steady_state(params=p),
+                                  priors={e["name"]: e["prior"] for e in self.estimated
+                                          if e["prior"] is not None})
         kw.update(kwargs)
         return identification(self.model, params, **kw)
 
@@ -1954,41 +1958,8 @@ def _detrend(sympy, parser, eqs, endo, exo, deflators, trend_vars, pvals, tol=1e
             if ref and ref[0] in trend_vars:
                 sub[s_] = trend_at(*ref)
         e = e.xreplace(sub)
-        _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol)
+        _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol,
+                        error=DynareImportError)
         e = e.xreplace({level[a]: (1 if trend_vars[a][0] == "mul" else 0) for a in level})
         out.append((raw, e))
     return out
-
-
-def _check_balanced(sympy, e, level, trend_vars, raw, k, pvals, tol):
-    """d/dy [d log(e)/dT] = 0 for every trend level T: checked at random points."""
-    import numpy as np
-    present = [a for a in level if level[a] in e.free_symbols]
-    if not present:
-        return
-    others = sorted((s_ for s_ in e.free_symbols if s_ not in level.values()), key=str)
-    rng = np.random.default_rng(k)
-    for a in present:
-        T = level[a]
-        dlog = sympy.diff(e, T)
-        f = sympy.lambdify([T] + others, [e, dlog], "numpy")
-        t0 = 1.0 if trend_vars[a][0] == "mul" else 0.0
-        ratios = []
-        for _ in range(6):
-            vals = []
-            for s_ in others:
-                nm = str(s_)
-                v = pvals.get(nm)
-                vals.append(float(v) if v is not None and np.isfinite(v)
-                            else float(rng.uniform(0.6, 1.4)))
-            for t_ in (t0, t0 + 0.37):
-                fe, fd = (complex(x) for x in f(t_, *vals))
-                if abs(fe) > 1e-8 and np.isfinite(abs(fe)) and np.isfinite(abs(fd)):
-                    ratios.append((t_, fd / fe))
-        for t_ in {r[0] for r in ratios}:
-            rs = [r[1] for r in ratios if r[0] == t_]
-            if len(rs) > 1 and max(abs(r - rs[0]) for r in rs) > tol * max(1.0, abs(rs[0])):
-                raise DynareImportError(
-                    f"equation {k + 1} ({raw!r}) is not compatible with balanced growth: "
-                    f"after detrending it still depends on the level of the trend {a!r} "
-                    f"other than through a common factor")

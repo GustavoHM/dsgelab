@@ -12,6 +12,13 @@ of `FirstOrderSolution`, and methods and fields are listed under their class.
 Entries marked "Requires sympy" need the `symbolic` extra
 (`pip install "dsgelab[symbolic]"`).
 
+Iteration-limit keywords are named `max_iter`. In `calibrate`, `perfect_foresight`,
+`extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`, the older
+`maxiter` remains accepted as a deprecated alias, with its previous default. Passing both names
+raises `ValueError`. `T` stays in the sequence-jacobian-compatible heterogeneous-agent API, whose
+other solvers use `periods`; `maxit` and `max_nfev` retain Dynare's and SciPy's names where those
+interfaces call for them.
+
 ---
 
 ## Declaring
@@ -48,7 +55,7 @@ Name-indexed view over one period's vector, handed to the equations.
 | `v.vec(prefix, n=None)` | gather `K0, K1, …` (prefix `"K"`) into an array, in index order |
 | `v.to_dict()`, `v.array` | the whole period |
 
-### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None)`
+### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None, trend_vars=None, log_trend_vars=None, deflators=None, log_deflators=None)`
 
 Requires sympy. Builds a `Model` from text equations, with exact analytic
 derivatives. `x` is the variable at `t` and `x(+1)` at `t+1`.
@@ -58,9 +65,26 @@ A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, with
 A lead `x(+k)` with `k >= 2` is rewritten as `LEAD{k-1}_x(+1)` and carried by the
 jumps `LEAD1_x`, …, `LEAD{k-1}_x`, with `LEAD1_x = x(+1)` and
 `LEADj_x = LEAD{j-1}_x(+1)`. `LEADj_x` therefore holds `x` at `t+j`, and `y(+2)`
-creates `LEAD1_y`. Each auxiliary has its own equation and is listed in
+creates `LEAD1_y`. For a state the chain starts from the jump `LEAD0_x = x`, with
+`LEAD1_x = LEAD0_x(+1)`, so that the equation of `LEAD1_x` has a jump at `t+1` and
+holds in expectation (`a(+2)` of an exogenous state `a` creates `LEAD0_a` and
+`LEAD1_a`). Each auxiliary has its own equation and is listed in
 `model.auxiliary`. The lag of a jump becomes a new state, and the jump keeps its
 classification.
+
+`trend_vars`, `log_trend_vars`, `deflators` and `log_deflators` declare the trends
+of a model written in levels, as `trend_var(growth_factor=g) A;`,
+`log_trend_var(log_growth_factor=g) A;`, `var(deflator=D) x;` and
+`var(log_deflator=D) x;` do in a `.mod`: `trend_vars={"A": "gA"}` and
+`deflators={"k": "A", "P": "M(-1)/A"}`. A trend variable is not a state or a jump
+and has no equation, since `A(+1) = A g(+1)` is implied. The growth factor may
+contain variables and parameters, and the deflator trend variables, variables and
+parameters, but neither contains a shock or a deflated variable. The equations are
+detrended as `from_mod` detrends a `.mod` (see Reading Dynare files), with the
+same balanced-growth check, and the model returned is the detrended one, with the
+declarations in `model.trends`. The parameters have no values at this point, so
+the check holds them at one random draw, and an equation balanced only at some
+values of its parameters is refused.
 
 `derivatives` is `"third"`, `"both"`, `"jacobian"` or `"none"`. The default
 `"both"` builds the Jacobian and Hessian. `"third"` adds the exact third-derivative
@@ -70,7 +94,8 @@ closed form given as assignments `"name = expr"` in order (Dynare's block), whic
 `calibration_equations` is `{parameter: "steady-state condition"}`, the
 counterpart of MacroModelling's `k[ss]/q[ss] = 2.5 | β`, solved together with the
 steady state. Raises `dsgelab.symbolic.SymbolicError` (a `ValueError`) on an
-undeclared name, a lagged innovation, a wrong equation count or a parse failure.
+undeclared name, a lagged innovation, a wrong equation count, a parse failure or a
+declared trend that the equations do not balance.
 
 ### `optimality_conditions(problem) -> dict`
 
@@ -534,6 +559,46 @@ not held within the bounds. The policy at the grid points is in `values`
 (`"smolyak"` on a `SmolyakGrid`),
 `iterations`, `converged`, `distance` (the last change) and `history` (every change).
 
+### `improved_time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=100, linear_tol=1e-10, linear_max_iter=1000) -> TimeIterationSolution`
+
+Improved time iteration, as dolo's `improved_time_iteration`: Newton's method on the equilibrium
+conditions of every grid point at once, with next period's policy interpolated from the unknowns
+themselves, on the same declaration and with the same arguments and result as `time_iteration`.
+The Jacobian is a block for each point, the derivative with next period's policy held fixed, plus
+the derivative through next period's policy, which is linear in the policy's values because the
+interpolant is. That term is applied without forming the matrix, and each Newton step is solved by
+GMRES, preconditioned by the blocks, to a residual of `linear_tol` relative to the right-hand side
+or for at most `linear_max_iter` iterations. A step that does not reduce the sum of squares of
+the conditions, in complementarity form, is halved up to nine times, and when none does the
+iteration takes one step of time iteration instead. It stops when a step moves no jump by more
+than `tol`, and `iterations` counts the Newton steps.
+
+The fixed point is that of `time_iteration` on the same grid. On dolo's RBC, its Markov RBC and
+its consumption–savings model, the Newton steps number 4 to 10 where time iteration takes 114 to
+361 iterations to a tolerance of 1e-11. Newton's method needs a start close enough to the solution:
+with a borrowing limit that binds on part of the grid, it may not converge from a distant policy.
+A `TimeIterationSolution` with a loose `tol`, passed as `initial`, is such a start.
+
+### `expectations_iteration(model, params, *, expectations, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), damping=0.5, tol=1e-8, max_iter=5000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
+
+Iteration on the conditional expectations of the Euler equations, the parameterized expectations
+that dolo's documentation describes for its `fgh` models, `0 = f(s, x, E[h(s', x')])`, and that
+dolo 0.4.9.20 does not implement. Each expectation is a jump, named in `expectations`, whose
+equilibrium condition involves `t+1`, such as `z - beta E[c'^(-gamma) R']`, and the controls'
+conditions involve nothing at `t+1`, such as `c^(-gamma) - z`. The conditions are paired with the
+jumps by position, as in `time_iteration`, and the call raises `ValueError` when the condition in
+an expectation's position has nothing at `t+1` or the one in a control's position has something.
+
+Each iteration integrates the expectations at every grid point, with today's controls and next
+period's policy both taken from the current policy, averages them with the old ones with weight
+`damping` on the new, and solves the controls' conditions for today's controls, point by point
+and with no integral. Bounds apply to the controls only. At the fixed point the policy solves the
+equations that `time_iteration` solves on the same grid. Without damping the iteration can
+diverge: on stochastic growth with log utility and full depreciation, a change in consumption
+moves the next update by about `-(1 - alpha beta) / (alpha beta)` times as much, -1.8 with
+`alpha = 0.36` and `beta = 0.99`, and by about `1 - damping / (alpha beta)` times as much with
+damping.
+
 ### `CartesianGrid(axes)`
 
 A tensor grid: `axes` maps each name to an increasing vector of nodes, or to `(low, high, n)` for
@@ -561,7 +626,7 @@ and has no reward, so value function iteration takes this declaration instead.
 
 `beta(params)` returns the discount factor.
 
-### `value_iteration(program, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, interpolation="linear", choices=None, initial=None, howard=20, tol=1e-8, max_iter=10000, inner_tol=1e-10, inner_max_iter=100) -> ValueIterationSolution`
+### `value_iteration(program, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, interpolation=None, choices=None, initial=None, howard=20, tol=1e-8, max_iter=10000, inner_tol=1e-10, inner_max_iter=100) -> ValueIterationSolution`
 
 Value function iteration with Howard's (1960) improvement steps. The value is kept at the grid
 points, one copy per node of the Markov chain, and interpolated between them. Each iteration
@@ -582,8 +647,8 @@ exclude, say, negative consumption that the bounds alone do not rule out.
 
 | Argument | Meaning |
 |---|---|
-| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid (a `CartesianGrid`), the Markov states and the shocks' integration, as in `time_iteration` |
-| `interpolation` | `"linear"`, or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly |
+| `grid`, `markov`, `cov`, `n_quad`, `quadrature` | the continuous states' grid (a `CartesianGrid`, the mapping that builds one, or a `SmolyakGrid`), the Markov states and the shocks' integration, as in `time_iteration` |
+| `interpolation` | on a `CartesianGrid`, `"linear"` (the default) or `"cubic"` for a natural cubic spline along each axis, for the value and for the policy between grid points. Both extrapolate linearly. A `SmolyakGrid` interpolates both by its own polynomial, evaluated as it is beyond the box, and takes no value here |
 | `choices` | `{control: values}` for every control, to choose among finitely many values, all combinations of which are tried. With next period's states among the grid points, this is the problem QuantEcon's `DiscreteDP` solves |
 | `initial` | the starting value: a number, `initial(states, params)` at a row-stacked array of states, or a `ValueIterationSolution` (to refine on another grid, whose policy also starts the maximization). With `None`, zero |
 | `howard` | the number of applications of the policy's own operator after each maximization |
@@ -696,43 +761,54 @@ sequence-jacobian, against which the module is validated (`validation/compare_he
 
 ### `HetBlock(step, outputs, *, backward, policy, init, markov="Pi", grid=None, hetinputs=(), hetoutputs=(), name=None, backward_tol=1e-10, backward_max_iter=10000, h=1e-4, twosided=True)`
 
-A continuum of agents on a grid of one asset by the nodes of one Markov chain. `step` is one step
-of the backward iteration, written by the user, for example by the endogenous grid method. Its
-arguments are read by name: `v_p`, for each backward variable `v`, is the expectation of `v` at
-`t + 1` conditional on today's income state, and every other argument is an aggregate input or an
-output of `hetinputs`. It returns, in the order of `outputs` or as a mapping, the backward
-variables at `t`, the policy and the other individual outcomes, each an `(n_e, n_a)` array.
+A continuum of agents on the grids of one or two assets by the nodes of one Markov chain. `step`
+is one step of the backward iteration, written by the user, for example by the endogenous grid
+method. Its arguments are read by name: `v_p`, for each backward variable `v`, is the expectation
+of `v` at `t + 1` conditional on today's income state, and every other argument is an aggregate
+input or an output of `hetinputs`. It returns, in the order of `outputs` or as a mapping, the
+backward variables at `t`, the policies and the other individual outcomes, each an `(n_e, n_a)`
+array with one asset and an `(n_e, n_1, n_2)` array with two.
 
 | Argument | Meaning |
 |---|---|
-| `backward` | the backward variables, such as the marginal value of assets `Va` |
-| `policy` | the asset policy, whose lottery (Young, 2010) moves the distribution |
+| `backward` | the backward variables, such as the marginal values of assets `Va` and `Vb` |
+| `policy` | the asset policy, or the policies of two assets, whose lottery (Young, 2010) moves the distribution |
 | `init` | the backward variables the steady-state iteration starts from, as a function of the inputs |
-| `markov`, `grid` | the names of the transition matrix `(n_e, n_e)` and of the asset grid, by default `policy + "_grid"`, among the inputs or the outputs of `hetinputs` |
+| `markov`, `grid` | the names of the transition matrix `(n_e, n_e)` and of the asset grid or grids, by default `policy + "_grid"`, among the inputs or the outputs of `hetinputs` |
 | `hetinputs` | pairs `(function, outputs)` run in order before each step, which make the grids and the arrays of income by node from aggregates |
 | `hetoutputs` | pairs `(function, outputs)` of the step's outcomes, which make further individual outcomes |
 | `backward_tol`, `backward_max_iter` | the steady state's backward iteration stops when one step moves the policy by less than `backward_tol` at every point |
 | `h`, `twosided` | the step of the finite differences of `step` in the fake-news algorithm, central by default and forward with `twosided=False` |
 
-Every outcome that is not a backward variable is aggregated under its name in capitals, as the
-mean under `D`: the policy `a` gives `A` and consumption `c` gives `C`. `inputs` and `outputs`
-list the block's aggregate inputs and outputs.
+With two assets the assets' axes are in the order of `policy`, and the two-dimensional lottery is
+the product of the two one-dimensional lotteries, as in sequence-jacobian's two-asset HANK. The
+agent goes to each of the four neighbouring grid corners with the product of their weights, which
+keeps the mean of both assets. Every outcome that is not a backward variable is aggregated under
+its name in capitals, as the mean under `D`: the policies `b` and `a` give `B` and `A`, and
+consumption `c` gives `C`. `inputs` and `outputs` list the block's aggregate inputs and outputs.
 
 `Dbeg_t` is the distribution over last period's income state and the assets carried into `t`.
-The income shock turns it into `D_t = Pi' Dbeg_t`, and the policy's lottery turns `D_t` into
+The income shock turns it into `D_t = Pi_t' Dbeg_t`, and the policy's lottery turns `D_t` into
 `Dbeg_{t+1}`. At the steady state, `Dbeg` is the null vector of the sparse transition matrix minus
 the identity, found by one sparse solve with the mass at one recurrent point set to one.
 `steady_state(values, start=None)` gives the aggregates and the internals, which `BlockModel`
-stores. `path(ss, paths, T)` gives the aggregates' paths after paths of some inputs, in levels,
-with the backward iteration from `T - 1`, where next period is the steady state, and the
-distribution from the steady state's `Dbeg`.
+stores. `path(ss, paths, T, *, Dbeg=None)` gives the aggregates' paths after paths of some inputs,
+in levels, with the backward iteration from `T - 1`, where next period is the steady state, and
+the distribution from `Dbeg`, by default the steady state's. A `Dbeg` of another shape, with a
+negative mass or with masses that do not sum to one within 1e-10, raises `ValueError`.
+
+The Markov matrix may be an output of `hetinputs` that moves with the inputs along a path, as in
+sequence-jacobian's `labor_search.ipynb`, where the job-finding and separation rates make the
+employment chain. `Pi_t` moves the distribution at `t`, and the step at `t` takes the expectation
+with `Pi_{t+1}`. The asset grids may depend on parameters but not on an input that moves along a
+path, which raises `NotImplementedError`. Several chains go into one by their Kronecker product,
+and a block has one or two endogenous states.
 
 `jacobian(ss, inputs, T, outputs=None, *, method="fake_news")` gives `J[O][i]`, `T x T`. The
 fake-news algorithm takes `T` backward steps per input, against the `T^2` of differentiating the
-path once for every date of the input, which `method="direct"` does to check it. The Markov
-matrix and the grid may depend on parameters but not on an input that moves along a path, which
-raises `NotImplementedError`. Several chains go into one by their Kronecker product, and a block
-has one endogenous state.
+path once for every date of the input, which `method="direct"` does to check it. An input that
+moves the Markov matrix also moves, through the matrix's derivative, the distribution in the
+period of the shock and the expectation a period before it, as in sequence-jacobian 1.0.0.
 
 ### `SimpleBlock(f, outputs, name=None)` and `@simple(*outputs)`
 
@@ -759,7 +835,7 @@ output made by two blocks and a cycle are refused. `inputs` lists the inputs no 
 | `jacobian(ss, inputs, outputs=None, T=300)` | the Jacobians of the outputs with respect to the inputs, by the chain rule along the graph |
 | `solve_jacobian(ss, unknowns, targets, inputs, outputs=None, T=300)` | `G[o][i]`, the general-equilibrium Jacobians, the unknowns among them: with `H_U` and `H_Z` the targets' Jacobians with respect to the unknowns and to the inputs, `G_U = -H_U^{-1} H_Z` |
 | `impulse_linear(ss, unknowns, targets, shocks, outputs=None)` | `G` times the paths in `shocks`, in deviations from the steady state; the horizon is their length |
-| `impulse_nonlinear(ss, unknowns, targets, shocks, *, tol=1e-10, max_iter=50, jacobian=None)` | the perfect-foresight transition, in deviations, by a quasi-Newton iteration on the paths of the unknowns with the fixed `H_U`, until every target is below `tol` |
+| `impulse_nonlinear(ss, unknowns, targets, shocks, *, tol=1e-10, max_iter=50, jacobian=None, initial=None)` | the perfect-foresight transition, in deviations, by a quasi-Newton iteration on the paths of the unknowns with the fixed `H_U`, until every target is below `tol`. `initial` maps the name of a `HetBlock`, inside a `SolvedBlock` too, to the `Dbeg` it starts from, such as another steady state's `internals[name]["Dbeg"]`; with shocks of zeros the transition is the return from it to the steady state. Lags in the first period keep their steady-state values |
 
 ### `BlockSteadyState`
 
@@ -778,7 +854,7 @@ sequence-jacobian's `agrid`.
 
 ## Markov regime switching
 
-### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100) -> MarkovSwitchingSolution`
+### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=None, max_iter=None, order=1, cov=None) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution`
 
 The first-order solution of a model some of whose parameters switch with a Markov chain. The model
 is an ordinary `Model`; it holds in expectation over the next regime and the next innovation,
@@ -815,7 +891,9 @@ stable solution found is used and every distinct solution is kept. Newton's meth
 many points does not prove that a stable solution is the only one, as the Gröbner-basis search of
 Foerster et al. (2016) does; more `starts` make a second one more likely to be found if it exists.
 `MarkovSwitchingError` is raised when no starting point converges or no solution found is stable,
-with what was found in its `solutions`.
+with what was found in its `solutions`. With `order=2` the first-order solution is passed to
+`solve_second_order_switching`, with `cov` as the shock covariance, and the result is a
+`SecondOrderSwitchingSolution`.
 
 ### `MarkovSwitchingSolution`
 
@@ -834,14 +912,57 @@ ergodic distribution of the regimes) and `coords`.
 | `regime_moments(cov=None)` | `(pi, mean, second)`: the ergodic probabilities and the mean and second moment of the states given each regime |
 | `variables(k, regimes, constants=True)`, `to_levels(paths)`, `regime_params(regime)`, `summary()` | paths from states, levels, the parameters of one regime, a report |
 
+### `solve_second_order_switching(first, cov=None, *, h=1e-4, direct_limit=20000) -> SecondOrderSwitchingSolution`
+
+The second order of a Markov-switching model, around the `MarkovSwitchingSolution` `first`, by the
+partition perturbation of Foerster, Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). The
+perturbation parameter `chi` scales the innovations and the perturbed switching parameters, and is
+one in the model. The second derivatives of the residuals are taken at each pair of regimes, with
+the switching parameters that are not perturbed at their regime values, so every coefficient may
+differ across regimes. The derivatives along `chi` are central differences; with a model that has
+exact first derivatives (`from_equations`), the cross derivatives with the variables come from
+them. Given the first-order solution, the laws of motion give the second derivatives of the
+states in terms of those of the jumps, and the expected rows, averaged over the next regime and
+the next innovation, give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, each
+with one block of unknowns per regime, coupled through the transition matrix. The first has
+`h * n_jumps * n_states**2` unknowns and is solved as one dense system up to `direct_limit`.
+`cov` enters `g_ss` and `h_ss` only.
+
+### `SecondOrderSwitchingSolution`
+
+With `i = s_t`, `j = s_{t+1}`, `k = k_t` and `eps = eps_{t+1}`, in the rescaled deviations and
+at `chi = 1`,
+
+```
+u_t     = F[i] k + f[i] + 1/2 g_kk[i](k, k) + g_ks[i] k + 1/2 g_ss[i]
+k_{t+1} = P[i,j] k + Q[i,j] eps + p[i,j] + 1/2 h_kk[i,j](k, k) + h_ku[i,j](k, eps)
+          + 1/2 h_uu[i,j](eps, eps) + h_ks[i,j] k + h_us[i,j] eps + 1/2 h_ss[i,j]
+```
+
+The index `s` stands for `chi`, and `g_ss` and `h_ss` are its full second derivatives, the
+convention of Dynare's `g_s2`. `first` is the first-order solution, whose `F`, `f`, `P`, `Q`,
+`p`, `h`, `transition`, `steady` and `model` are repeated here. `Sigma` is the shock covariance and
+`residual` the largest residual of the second-order conditions of the expected rows, recomputed
+from the solution. With identical regimes, `g_kk`, `h_kk`, `h_ku`, `h_uu` and `g_ss` are those of
+`solve_second_order`, `h_ss` is its `h_s2`, and the terms in `chi` with `k` or `eps` are zero.
+
+| Method | Meaning |
+|---|---|
+| `decision_rule(regime, next_regime)` | a `SwitchingDecisionRule`: `[k_{t+1}; u_{t+1}]` on `(k_t, eps_{t+1}, chi)`, with `g_k`, `g_u`, `g_s`, `g_kk`, `g_ku`, `g_uu`, `g_ks`, `g_us` and `g_ss`, rows `model.states + model.jumps`, the form in which Foerster et al. (2016) print their solutions. The jumps' `g_ss` includes `F h_ss`, the effect of `chi` through the states |
+| `irf(name, size=1.0, periods=40, *, regime=0, state=None, pruning=True, levels=False, percent=True)` | the path with the innovation minus the path without it, from `state` (the deviation of the states in the period before, the steady state by default) along a regime held or a path of `periods` regimes, as `MarkovSwitchingSolution.irf` dates them. The response depends on the regimes and the state, and a negative innovation is not the mirror of a positive one |
+| `simulate(periods=1000, cov=None, *, seed=None, burn=100, levels=False, regimes=None, pruning=True)` | the draws of `MarkovSwitchingSolution.simulate` with the same `seed`, through the second-order rules, pruned as in Andreasen, Fernández-Villaverde and Rubio-Ramírez (2018), with the first-order part, regime constants included, feeding the quadratic terms |
+| `conditional_mean(cov=None)`, `ergodic_mean(cov=None, levels=True)` | the mean of every variable given each regime (`(h, n_vars)`, rescaled deviations) and the unconditional mean, in closed form under the pruned rules |
+| `jumps(k, regime)`, `next_states(k, eps, regime, next_regime)` | the rules, without pruning |
+| `at_covariance(cov)`, `to_levels(paths)`, `summary()` | the solution at another covariance, levels, a report |
+
 ### `switching_system(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, ctx=None, positive=(), h=1e-6, tol=1e-11) -> (SwitchingSystem, SteadyState, perturbed)`
 
 The linearisation behind `solve_markov_switching`. `SwitchingSystem` holds `A`, `B`, `C`, `c`,
 one block per pair of regimes, in `A[i,j] E y' = B[i,j] y + C[i,j] eps' + c[i,j]`, with one row
-scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion) and `expected` (the
-other rows).
+scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion), `expected` (the
+other rows) and `row_scale` (the divisor of each row).
 
-### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=100) -> (solutions, tried, converged)`
+### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=None, max_iter=None) -> (solutions, tried, converged)`
 
 Newton's method from the starting points above, returning the distinct `MSVSolution`s in the order
 found. With `complex=True` the random points are complex and the iteration runs in complex
@@ -901,7 +1022,7 @@ measurement sds, switching, transition)` and `start()`.
 
 ## Transitions
 
-### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
+### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=None, max_iter=None, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
 
 | Argument | Meaning |
 |---|---|
@@ -947,7 +1068,7 @@ Normalises a constant, a sequence or a callable into a list of length `periods`.
 `perfect_foresight` applies it to `params` and `ctx` with `periods = T+1`. A
 sequence of another length raises `ValueError`.
 
-### `extended_path(model, steady, params, shocks=None, *, periods=None, cov=None, seed=None, horizon=200, order=0, nodes=3, tree="sparse", hybrid=None, initial_states=None, ctx=None, tol=1e-12, maxiter=50) -> ExtendedPath`
+### `extended_path(model, steady, params, shocks=None, *, periods=None, cov=None, seed=None, horizon=200, order=0, nodes=3, tree="sparse", hybrid=None, initial_states=None, ctx=None, tol=1e-12, maxiter=None, max_iter=None) -> ExtendedPath`
 
 A stochastic simulation in which a nonlinear plan is solved every period (Fair
 and Taylor, 1983). At each date the shock arrives, the states it leads to are
@@ -1032,6 +1153,11 @@ restarts. `fixed` holds variables that do not grow at a given level.
 
 `dsgelab.bgp.bgp_residual(model, params, X, G, ctx=None)` is the residual itself,
 the model evaluated at the two dates.
+
+The trends of a model in levels are declared in `from_mod` (`trend_var`,
+`var(deflator=)`) or in `from_equations` (`trend_vars=`, `deflators=`), which detrend
+it with the same check. `balanced_growth` takes the model in levels without
+declarations.
 
 ---
 
@@ -1180,7 +1306,7 @@ ss = dsg.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), params)
 irf = dsg.solve(m, params, steady=ss).irf("e", size=1.0)
 ```
 
-### `discretionary_policy(equations, *, params, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, steady=None, cov=None, tol=1e-12, maxiter=3000, qz_criterium=1+1e-6) -> DiscretionSolution`
+### `discretionary_policy(equations, *, params, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, steady=None, cov=None, tol=1e-12, maxiter=None, max_iter=None, qz_criterium=1+1e-6) -> DiscretionSolution`
 
 Optimal policy without commitment, in the linear-quadratic class, by Dennis's
 (2007) algorithm as Dynare's `discretionary_policy` implements it. The private
@@ -1390,12 +1516,35 @@ condition, Dynare's definition. `initial_shock_states` (for a `.mod`,
 `ModFile.shock_states`) counts the first value of a shock-carrying state as the
 shock's.
 
-### `realtime_shock_decomposition(space, data, *, init="auto", variables=None, initial_shock_states=None, first=2) -> dict`
+### `realtime_shock_decomposition(space, data, *, init="auto", variables=None, initial_shock_states=None, first=2, forecast=0, vintages=()) -> dict`
 
 The decomposition each date would have shown with the data up to it, as Dynare's
 `realtime_shock_decomposition` pool, including its conventions (a first sample
 of two observations, and the first period's shock left in the initial
-condition).
+condition). The result also holds Dynare's other decompositions, each with the
+same keys: `"conditional"`, the one-step conditional pool (at each date, the
+impact of that date's innovations); with `forecast`, the pool runs `forecast`
+dates past the sample and `"forecast"` is the pool of one-step forecasts. For each
+cut in `vintages` (Dynare's `save_realtime`, the number of observations in the
+cut), `"vintages"` holds its decomposition, `"forecast_vintages"` that of its
+forecast and `"conditional_vintages"` the `forecast`-step conditional
+decomposition: what the cut did not forecast, with the forecast counted in the
+initial condition. `plot_decomposition` draws them with `realtime` and `vintage`.
+
+### `annualise_decomposition(decomposition, kind="yoy", *, quarter=1) -> dict`
+
+A quarterly decomposition at the frequency of `plot_shock_decomposition`'s `type`:
+`"yoy"` sums each contribution over four consecutive quarters, `"aoa"` keeps the
+fourth quarter of each year (`quarter` is the quarter of the first date) and
+`"qoq"` leaves it as it is. Dynare's `q2a` structure, which turns quarterly levels
+or growth rates into annual ones, is not reproduced.
+
+### `initial_condition_decomposition(smoothed, *, variables=None, initial_shock_states=None) -> dict`
+
+Dynare's `initial_condition_decomposition`: the initial condition split by the
+first value of each variable, each carried alone by the solution from the second
+date on, with what the first values do not explain under `"shocks"`. Returns
+`{"initial": {variable: {var: path}}, "shocks": {var: path}, "total": {var: path}}`.
 
 ### `forecast(space, data, horizon, *, init="auto", coverage=0.9, variables=None, include_measurement=False, logs=()) -> Forecast`
 
@@ -1403,6 +1552,24 @@ Point forecast from the last filtered state, and Gaussian bands from the
 forecast-error variance (state uncertainty and future shocks).
 
 `Forecast`: `mean`, `std`, `lower`, `upper`, `horizon`, `coverage`.
+
+### `conditional_forecast_bands(solution, conditions, *, controlled=None, periods=None, initial=None, cov=None, levels=False, replic=5000, coverage=0.8, seed=0, normals=None) -> ConditionalForecast`
+
+A conditional forecast with bands, as Dynare's `conditional_forecast` computes
+them. For each of `replic` draws the shocks not in `controlled` are drawn over the
+`periods` dates and the controlled ones, paired in order with the conditions, are
+chosen date by date to put the variables on their paths (zero after the last
+condition); the unconditional paths draw the same shocks with the controlled ones
+at zero. The bands hold `coverage` of the draws (Dynare's `conf_sig`), ranked as
+Dynare ranks them. `normals` (`(replic, periods, n_shocks)` standard normal draws,
+or a pair for the conditional and the unconditional paths) replaces the draws of
+`seed`. After an estimation, `initial` is the smoothed state at the last date, as
+Dynare takes it.
+
+`ConditionalForecast`: `mean`, `lower`, `upper`, `unconditional_mean`,
+`unconditional_lower`, `unconditional_upper` (by variable, over dates `0..H`),
+`shocks` (`{shock: {"mean", "lower", "upper"}}` for the controlled shocks),
+`coverage`, `replic`.
 
 ---
 
@@ -1543,7 +1710,16 @@ Posterior model probabilities from log marginal likelihoods.
 Forecast bands with parameter uncertainty (from MCMC or SMC draws) and shock
 uncertainty, with keys `mean`, `lower`, `upper` and `paths`.
 
-### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None) -> ForecastEvaluation`
+### `posterior_conditional_forecast(problem, draws, conditions, *, controlled=None, periods=None, variables=None, n_draws=200, replic=10, coverage=0.8, logs=(), seed=0) -> ConditionalForecast`
+
+A conditional forecast whose bands carry parameter uncertainty as well as the
+shocks': `replic` paths of `conditional_forecast_bands` from the smoothed state at
+the last date, at each of `n_draws` parameter vectors from `draws`, with the bands
+taken over all of them. Dynare's `conditional_forecast` uses one parameter vector
+(`parameter_set`). `conditions` and the paths are in levels, or in logs for the
+variables in `logs`.
+
+### `forecast_evaluation(problem, origins, horizon, *, estimate="mode", theta=None, window=None, coverage=0.9, include_measurement=True, options=None, bvar_lags=None, bvar_options=None) -> ForecastEvaluation`
 
 Out-of-sample forecasts, as Dynare's recursive estimation makes them with
 `nobs=[T1:T2]` and `forecast`. For each origin `n`, the sample is the first `n`
@@ -1562,21 +1738,29 @@ with mean `d + Z a_{T+h|T}` and variance `Z V_h Z' + H` (without `H` when
 Dynare's forecast after the mode is; `posterior_forecast` adds parameter
 uncertainty at one origin.
 
+With `bvar_lags`, a BVAR with the Sims–Zha prior is the second benchmark. At each
+origin `bvar` is estimated on the model's window, with its first `bvar_lags`
+observations starting the VAR (`first_obs=bvar_lags + 1`) and the other options from
+`bvar_options` (the hyperparameters, or `first_obs`, `presample` and `train` counted
+within the window), and its forecast at the posterior mean, the point forecast of
+Dynare's `bvar_forecast`, is kept in `bvar_mean`.
+
 `ForecastEvaluation` has `variables` (the observables), `origins`, `horizon`, and
 per observable `mean`, `std` and `actual` (arrays of origins by horizons, in the
 units of the data, with `actual` NaN past the end of the sample) and `last` (the
 observation at each origin). `covariance` holds the joint predictive covariances,
 `theta` the parameters used at each origin (in the order of `names`), and, when
 they were estimated, `modes` the `ModeResult` of each origin and `objective` the
-posterior kernel or likelihood there. Pairs with a missing outcome are left out of
+posterior kernel or likelihood there. With the BVAR benchmark, `bvar_mean` holds its
+forecasts and `bvar_lags` its lags. Pairs with a missing outcome are left out of
 every statistic:
 
 | Method | Returns |
 |---|---|
-| `errors`, `random_walk_errors` | `actual - mean`, and `actual - last` |
-| `rmse(benchmark=False)` | RMSE by horizon, of the model or of the random walk |
-| `relative_rmse()` | the model's RMSE over the random walk's |
-| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk or given errors |
+| `errors`, `random_walk_errors`, `bvar_errors` | `actual - mean`, `actual - last` and `actual - bvar_mean` |
+| `rmse(benchmark=False)` | RMSE by horizon, of the model, of the random walk (`True` or `"random_walk"`) or of the BVAR (`"bvar"`) |
+| `relative_rmse(benchmark="random_walk")` | the model's RMSE over the random walk's or the BVAR's |
+| `diebold_mariano(variable, horizon, *, benchmark="random_walk", power=2, alternative="two.sided", varestimator="acf")` | the test of the `horizon`-step forecasts against the random walk, the BVAR (`"bvar"`) or given errors |
 | `pit()` | `Phi((actual - mean) / std)`, uniform when the density is right |
 | `coverage_rate(coverage=None)` | share of outcomes inside the central band, by horizon |
 | `log_score(joint=False)` | log predictive density, per observable or joint |
@@ -1595,7 +1779,8 @@ This is R's `forecast::dm.test`. `DieboldMariano` has `statistic`, `p_value`,
 
 Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples,
 at Dynare's modes and with modes re-estimated by `dsgelab`, and against R's
-`forecast::dm.test` in 48 cases (see `validation/README.md`).
+`forecast::dm.test` in 48 cases. The BVAR's errors agree with those of Dynare's
+`bvar.toolbox` on the same windows (see `validation/README.md`).
 
 ```python
 import dsgelab as dsg
@@ -1690,6 +1875,41 @@ share of draws with a root of modulus above one, which are kept, as in Dynare), 
 the last a pair `(lower, upper)`. The default coverage is Dynare's `bvar.conf_sig`,
 0.6.
 
+`irf(periods=40, draws=2000, *, identification="Cholesky", seed=0, coverage=0.6,
+mass=0.9) -> dict` is Dynare's `bvar_irf`. Each draw takes `(Phi, Sigma)` from the
+posterior, as `forecast` does, and gives the responses `Psi_h B`, `h = 0..periods - 1`,
+to orthogonal impulses with impact matrix `B`, `B B' = Sigma`: the lower Cholesky
+factor (`"Cholesky"`), the symmetric square root (`"SquareRoot"`), or what a callable
+`identification(Sigma)` returns. Impulse `j` is named after the `j`-th variable, as in
+Dynare. The result has the layout of `posterior_irf`, `{statistic: {shock: {variable:
+path}}}`, with `mean`, `median`, `variance`, `lower` and `upper` (the HPD interval
+holding `mass`), `deciles` and `responses` `(draws, periods)`, and in addition
+`lower_bound` and `upper_bound`, the central band holding `coverage`, and `explosive`.
+The median, variance and bounds are those of Dynare's `oo_.bvar.irf`: ranked draws, and
+the variance with divisor `N`. `plot_posterior_irf` draws it. Dynare 7.2 takes the rows
+of `B` as the impulses: with `"SquareRoot"` its numbers are these, under field names
+in the order shock, variable, and with `"Cholesky"` its impulses have covariance `L'L`
+instead of `Sigma`, which `identification=lambda S: np.linalg.cholesky(S).T`
+reproduces.
+
+### `dsge_var_irf(problem, draws, *, periods=40, n_draws=1200, mass=0.9, seed=0, max_tries=1000) -> dict`
+
+The impulse responses of a DSGE-VAR over its posterior, Dynare's `bayesian_irf` with
+`dsge_var` (`oo_.PosteriorIRF.bvardsge`). `problem` is an `EstimationProblem` with
+`dsge_var` or with `dsge_prior_weight` estimated, with as many shocks as observables,
+and `draws` the model's parameters, an `MCMCResult` or an array, of which `n_draws` are
+taken at random (all, in order, with `n_draws=None`). At each `theta` one `(Phi,
+Sigma)` is drawn from `problem.dsge_var_posterior(theta)`, and drawn again while the
+VAR is explosive, as in Dynare. The impulses are identified as in Del Negro and
+Schorfheide (2004): with `A0` the model's impact matrix on the observables and `A0' =
+Q R` its QR decomposition (the diagonal of `R` positive), the VAR's impact matrix is
+`chol(Sigma) Q'`. The result has the layout of `posterior_irf`, one entry per model
+shock and observable, in the units of the data, with `mean`, `median`, `variance`,
+`lower` and `upper` (the HPD interval holding `mass`), `deciles`, `responses`, `draws`,
+`mass` and `explosive` (the share of the VAR's draws drawn again). `plot_posterior_irf`
+draws it. Dynare draws `Sigma` with `floor((1 + lambda) T) - k` degrees of freedom,
+and here they are the posterior's, `(1 + lambda) T - k`.
+
 ### `bvar_density(data, max_lags, **kwargs) -> dict`
 
 `{p: log marginal density}` for `p = 1..max_lags`, Dynare's `bvar_density(max_lags)`.
@@ -1706,8 +1926,8 @@ coefficients, `log_integral()` the log of the kernel's integral (Dynare's
 does, the inverse of `X'X` with `X` a `df x n` normal matrix times the Cholesky factor
 of `S^-1`, and a fractional one, as a DSGE-VAR has, by Bartlett's decomposition.
 
-Validated against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var` (see
-`validation/README.md`).
+Validated against Dynare 7.2's `tests/bvar_a_la_sims` and `tests/dsge-var`, the
+impulse responses of both included (see `validation/README.md`).
 
 ```python
 import numpy as np
@@ -1722,13 +1942,15 @@ data = {"x": y[:, 0], "z": y[:, 1]}
 print(dsg.bvar_density(data, 4, first_obs=5))      # every lag length on the same observations
 var = dsg.bvar(data, 1, first_obs=5)
 lower, upper = var.forecast(8, 2000, seed=1).bands(0.9)
+irf = var.irf(12, 1000, identification="SquareRoot", seed=1)
+print(irf["mean"]["x"]["z"][:4])                    # the response of z to the impulse to x
 ```
 
 ---
 
 ## Calibration
 
-### `calibrate(model, params, *, free, targets, guess, observables=None, bounds=None, ctx=None, ctx_update=None, positive=(), steady_tol=1e-11, tol=1e-10, maxiter=200, warm_start=True, raise_on_fail=True) -> CalibrationResult`
+### `calibrate(model, params, *, free, targets, guess, observables=None, bounds=None, ctx=None, ctx_update=None, positive=(), steady_tol=1e-11, tol=1e-10, maxiter=None, max_iter=None, warm_start=True, raise_on_fail=True) -> CalibrationResult`
 
 `free` maps parameter names to starting values, and `targets` maps target names
 to wanted values. `observables(ss, params) -> mapping` supplies targets that are
@@ -1751,7 +1973,7 @@ to), `condition`, `base_targets` and `base_params`.
 
 ## Identification
 
-### `identification(model, params, *, free, observables, cov=None, measurement=None, transforms=None, guess=None, steady_fn=None, qz_criterium=None, lags=1, grid=5000, max_group=2, criteria=("moments", "spectrum", "minimal"), tol_rank="auto", tol_deriv=1e-8, tol_sv=1e-3, step=1e-2, levels=8) -> Identification`
+### `identification(model, params, *, free, observables, cov=None, measurement=None, transforms=None, guess=None, steady_fn=None, qz_criterium=None, lags=1, grid=5000, max_group=2, criteria=("moments", "spectrum", "minimal"), tol_rank="auto", tol_deriv=1e-8, tol_sv=1e-3, step=1e-2, levels=8, strength=False, data=None, periods=300, seed=0, priors=None) -> Identification`
 
 Local identification of the parameters in `free` at one point, from the
 distribution of the `observables`, as Dynare's `identification` command computes
@@ -1790,6 +2012,27 @@ order) and `moment_labels`, `checks` (also by index, `ident["moments"]`),
 `collinearity[k][name]` is `(group, cosine)`: the `k` other parameters whose
 moment derivatives best reproduce those of `name`, as Dynare's brute-force search
 finds them. The group is shorter than `k` when a larger one adds nothing.
+
+With `strength=True` the identification strength of Ratto and Iskrev (2011) is
+computed as well, as Dynare's `identification` computes it at first order, from
+the asymptotic information matrix of the Gaussian likelihood: the sum over the
+sample of `dv' F^-1 dv + tr(F^-1 dF F^-1 dF) / 2`, with `v` and `F` the Kalman
+filter's prediction errors and their variance, differentiated at the steps chosen
+for the moments. The sample is `data`, or, as in Dynare, `periods` observations
+simulated at the point after 100 discarded ones. `priors` (as in
+`EstimationProblem`; `ModFile.identification` passes those of `estimated_params`)
+give the measures relative to the prior standard deviation. On Dynare's own sample
+for `fs2000.mod`, the matrix agrees with Dynare's within 1.2e-8 of the root of its
+diagonal and the strength within 2.7e-7 (`validation/compare_plots.py`).
+
+`IdentificationStrength` (`Identification.strength`): `information`, `data`,
+`uncertainty` (the asymptotic standard deviations, for the parameters in no
+dependent set), `strength` and `strength_prior` (the parameter, or its prior
+standard deviation, over its uncertainty), `sensitivity` and `sensitivity_prior`
+(the root of the information's diagonal times the same), `moments_sensitivity`
+(the norm of the moments' derivatives, each moment over its asymptotic standard
+deviation, times the prior standard deviation; NaN without priors), `identified`,
+and `singular_values` and `patterns` (the information's right singular vectors).
 
 `IdentificationCheck`: `criterion`, `jacobian` (before its rows are normalised),
 `rank`, `required`, `identified`, `condition`, `tolerance`, `sensitive` (whether
@@ -2016,9 +2259,9 @@ draws, and the third column names the command or option that draws each one.
 |---|---|---|
 | `plot_irf(responses, variables=None, *, columns=3, title=None, figsize=None)` | impulse responses, one panel per variable, impact numbered 1. `responses` is what `FirstOrderSolution.irf` returns, or `{label: responses}` to overlay shocks, models or parameter values | `stoch_simul` |
 | `plot_paths(paths, variables=None, *, columns=3, start=1, title=None, figsize=None)` | paths of variables (a simulation, smoothed variables, a transition), one panel each, or `{label: paths}`. A `TransitionPath` is accepted as it is, with `start=0` for its initial condition | `rplot` |
-| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None, groups=None, steady_state=None, detail=False)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line. `groups={label: shocks}` sums shocks, and those in no group join the initial condition as "Others + Initial Values"; `steady_state` labels the axis in levels; `detail` draws each contribution in a panel of its own, on a common scale | `plot_shock_decomposition` (`use_shock_groups`, `steadystate`, `detail_plot`) |
+| `plot_decomposition(decomposition, variable, *, start=1, ax=None, title=None, groups=None, steady_state=None, detail=False, realtime=0, vintage=0, frequency="qoq", quarter=1)` | a shock decomposition as stacked bars, positive contributions up and negative down, the initial condition as one more, and the total as a line. `groups={label: shocks}` sums shocks, and those in no group join the initial condition as "Others + Initial Values"; `steady_state` labels the axis in levels; `detail` draws each contribution in a panel of its own, on a common scale. From `realtime_shock_decomposition`, `realtime` 1, 2 or 3 draws the real-time, one-step conditional or one-step forecast pool, and with a `vintage` the decomposition of that cut, of its conditional forecast or of its forecast; `frequency="yoy"` or `"aoa"` draws it as `annualise_decomposition` changes it | `plot_shock_decomposition` (`use_shock_groups`, `steadystate`, `detail_plot`, `realtime`, `vintage`, `type`) |
 | `plot_forecast(forecast, variables=None, *, history=None, columns=3, title=None, figsize=None)` | a `Forecast` or the dictionary of `posterior_forecast`, mean and band, after `history` when given | `forecast` |
-| `plot_conditional_forecast(forecast, variables=None, *, unconditional=None, conditions=None, columns=3, title=None, figsize=None)` | what `FirstOrderSolution.conditional_forecast` returns, solid, against the paths without conditions, dashed, with the imposed values in red | `plot_conditional_forecast` |
+| `plot_conditional_forecast(forecast, variables=None, *, unconditional=None, conditions=None, columns=3, title=None, figsize=None)` | what `FirstOrderSolution.conditional_forecast` returns, solid, against the paths without conditions, dashed, with the imposed values in red. A `ConditionalForecast` adds its band in grey and the bounds of the unconditional paths, thin and dashed | `plot_conditional_forecast` |
 | `plot_priors(priors, names=None, *, columns=3, title="Priors", figsize=None)` | the prior densities of a mapping or an `EstimationProblem`, in grey | `estimation(plot_priors)` |
 | `plot_posterior(draws, *, names=None, priors=None, problem=None, mode=None, columns=3, title=None, figsize=None)` | for each parameter of an `MCMCResult` (or an array with `names`), the posterior density in black, the prior in grey and the mode dashed, on axes that span both densities and run to 1.1 times the higher peak | "Priors and posteriors" |
 | `trace_plot(draws, names=None, *, chains=None, window=200, posterior=False, title=None, figsize=None)` | the draws of one chain in grey with their centred moving average over `2 window + 1` draws, or several chains over each other; `posterior` adds the log posterior | `trace_plot` (`trace_plot_ma`) |
@@ -2027,10 +2270,13 @@ draws, and the third column names the command or option that draws each one.
 | `plot_mode_check(slices, names=None, *, columns=3, title=None, figsize=None)` | what `mode_check` returns: the log posterior and the log-likelihood kernel through the mode, the mode as a line, red points where the model has no solution | `mode_check` |
 | `plot_smoothed_shocks(smoothed, names=None, *, measurement=False, shock_states=None, start=1, columns=3, title=None, figsize=None)` | the smoothed shocks of a `SmootherResult` against zero, or with `measurement` its measurement errors larger than 1e-6. For a model read from a `.mod`, `shock_states=mf.shock_states` reads the shocks from their `SHK_` states, as Dynare reports them | "Smoothed shocks", "Smoothed observation errors" |
 | `plot_smoothed_observables(smoothed, data=None, names=None, *, start=1, columns=3, title=None, figsize=None)` | the smoothed observables, `d + Z k_t`, in red, against the data, dashed | "Historical and smoothed variables" |
-| `plot_posterior_irf(irf, shock, variables=None, *, threshold=1e-10, columns=3, title=None, figsize=None)` | the responses to one shock from `posterior_irf`: the HPD interval in grey and the posterior mean in black, leaving out responses below `threshold` | `estimation(bayesian_irf)` (`irf_plot_threshold`) |
+| `plot_posterior_irf(irf, shock, variables=None, *, threshold=1e-10, columns=3, title=None, figsize=None)` | the responses to one shock from `posterior_irf`, `BVAR.irf` or `dsge_var_irf`: the HPD interval in grey and the posterior mean in black, leaving out responses below `threshold` | `estimation(bayesian_irf)` (`irf_plot_threshold`) |
 | `plot_occbin(result, variables=None, *, deviations=False, binding=True, columns=3, title=None, figsize=None)` | the piecewise-linear paths of an `OccbinResult` in blue and the linear ones dashed in red, in levels or in deviations, and a panel per constraint with the dates it binds | `occbin_graph` |
 | `plot_occbin_regimes(result, *, title=None, figsize=None)` | for each surprise, the dates at which each regime of the plan made then starts: red stars binding, blue circles slack | `occbin.plot_regimes` |
 | `plot_identification(ident, groups=None, *, title=None, figsize=None)` | for each group size of `Identification.collinearity`, the cosine of the best fit of each parameter's moment derivatives, in the columns of the parameters that give it | `identification(advanced)`, "Collinearity patterns" |
+| `plot_identification_strength(ident, *, prior=True, title=None, figsize=None)` | from `identification(..., strength=True)`, the logarithm of each parameter's strength and of its sensitivity component, sorted by strength, relative to the parameter and to its prior standard deviation; an infinite logarithm is marked at zero | `identification`, "Identification strength" |
+| `plot_identification_sensitivity(ident, *, title=None, figsize=None)` | the logarithm of 100 times the moments' sensitivity to each parameter over its largest finite value | `identification(advanced)`, "Sensitivity bars", its "Moments" bars |
+| `plot_identification_patterns(ident, *, largest=False, count=4, title=None, figsize=None)` | the absolute entries of the right singular vectors of the information matrix for its `count` smallest singular values, or its largest | `identification(advanced)`, "Identification patterns" |
 | `plot_filtering(result, names=None, *, kind="determinate", scatter=True, title=None, figsize=None)` | a `FilteringResult` (or a `StabilityMap` and the `kind` of its filtering), for the parameters with a significant Smirnov test: the cumulative distributions with and without the behaviour on the diagonal and the draws of each pair off it, or with `scatter=False` one panel of distributions per parameter with its p-value | `dynare_sensitivity`: `scatter_mcf`, `stability_mapping_univariate` |
 
 The numbers these figures draw that the package does not compute elsewhere come

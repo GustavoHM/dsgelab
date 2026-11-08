@@ -9,11 +9,12 @@ The forecasts are then set against the observations that followed:
 
 * :meth:`ForecastEvaluation.rmse` and :meth:`~ForecastEvaluation.relative_rmse`,
   the root mean squared error by horizon, alone and as a ratio to the random walk
-  (no change from the last observation), as in the comparisons of Smets and
-  Wouters (2007) and Del Negro and Schorfheide (2013);
+  (no change from the last observation) or to a BVAR, as in the comparisons of
+  Smets and Wouters (2007) and Del Negro and Schorfheide (2013);
 * :meth:`~ForecastEvaluation.diebold_mariano`, the test of equal accuracy of
   Diebold and Mariano (1995) with the small-sample correction of Harvey,
-  Leybourne and Newbold (1997), against the random walk or any other errors;
+  Leybourne and Newbold (1997), against the random walk, the BVAR or any other
+  errors;
 * :meth:`~ForecastEvaluation.pit`, :meth:`~ForecastEvaluation.coverage_rate` and
   :meth:`~ForecastEvaluation.log_score`, the calibration of the predictive
   density: its probability integral transform, which is uniform when the
@@ -26,6 +27,11 @@ at the estimated parameters: mean ``d + Z a_{T+h|T}`` and variance
 the shocks of the horizon. It is conditional on the point estimate and leaves
 out parameter uncertainty, as Dynare's forecast after the posterior mode does
 (:func:`~dsgelab.posterior_forecast` adds it at one origin).
+
+With ``bvar_lags``, a VAR with the Sims–Zha prior (:func:`~dsgelab.bvar`) is
+re-estimated at each origin on the same window as the model, and its forecast at
+the posterior mean of the coefficients, the point forecast of Dynare's
+``bvar_forecast``, is the second benchmark.
 """
 
 from __future__ import annotations
@@ -39,6 +45,7 @@ from typing import Callable, Sequence
 import numpy as np
 from numpy.typing import ArrayLike
 
+from .bvar import bvar
 from .estimation import EstimationProblem, ModeResult, maximum_likelihood, posterior_mode
 from .kalman import kalman_filter
 
@@ -133,7 +140,9 @@ class ForecastEvaluation:
     each origin, in the order of ``names``; when they were estimated by
     ``"mode"`` or ``"ml"``, ``modes`` holds the :class:`~dsgelab.ModeResult` of
     each origin (with the standard deviations) and ``objective`` the posterior
-    kernel (or the likelihood) there.
+    kernel (or the likelihood) there. With a BVAR benchmark, ``bvar_mean`` holds
+    its forecasts, ``(origins, horizon)`` for each observable, and ``bvar_lags``
+    its lags; both are None otherwise.
     """
 
     variables: list
@@ -149,6 +158,8 @@ class ForecastEvaluation:
     objective: np.ndarray
     coverage: float
     modes: list
+    bvar_mean: dict | None = None
+    bvar_lags: int | None = None
 
     @property
     def errors(self) -> dict:
@@ -160,14 +171,38 @@ class ForecastEvaluation:
         """Errors of the random walk, ``actual - last``."""
         return {v: self.actual[v] - self.last[v][:, None] for v in self.variables}
 
-    def rmse(self, *, benchmark: bool = False) -> dict:
-        """Root mean squared error by horizon; of the random walk with ``benchmark``."""
-        e = self.random_walk_errors if benchmark else self.errors
+    @property
+    def bvar_errors(self) -> dict:
+        """Errors of the BVAR, ``actual - bvar_mean``."""
+        if self.bvar_mean is None:
+            raise ValueError("no BVAR benchmark: give bvar_lags= to forecast_evaluation")
+        return {v: self.actual[v] - self.bvar_mean[v] for v in self.variables}
+
+    def _benchmark_errors(self, benchmark: str) -> dict:
+        if benchmark == "random_walk":
+            return self.random_walk_errors
+        if benchmark == "bvar":
+            return self.bvar_errors
+        raise ValueError("benchmark must be 'random_walk' or 'bvar'")
+
+    def rmse(self, *, benchmark: bool | str = False) -> dict:
+        """Root mean squared error by horizon.
+
+        Of the model by default, of the random walk with ``benchmark=True`` or
+        ``"random_walk"``, and of the BVAR with ``"bvar"``.
+        """
+        if benchmark is False:
+            e = self.errors
+        else:
+            e = self._benchmark_errors("random_walk" if benchmark is True else str(benchmark))
         return {v: _rms(e[v]) for v in self.variables}
 
-    def relative_rmse(self) -> dict:
-        """The model's RMSE over the random walk's, by horizon: below 1 is better."""
-        m, r = self.rmse(), self.rmse(benchmark=True)
+    def relative_rmse(self, benchmark: str = "random_walk") -> dict:
+        """The model's RMSE over the benchmark's, by horizon: below 1 is better.
+
+        ``benchmark`` is ``"random_walk"`` or ``"bvar"``.
+        """
+        m, r = self.rmse(), self.rmse(benchmark=benchmark)
         return {v: m[v] / r[v] for v in self.variables}
 
     def diebold_mariano(self, variable: str, horizon: int, *,
@@ -176,16 +211,17 @@ class ForecastEvaluation:
                         varestimator: str = "acf") -> DieboldMariano:
         """Diebold-Mariano test of the ``horizon``-step forecasts of ``variable``.
 
-        ``benchmark`` is ``"random_walk"`` or the errors of another forecast at
-        the same origins, ``(origins,)``. A negative statistic favours the model.
+        ``benchmark`` is ``"random_walk"``, ``"bvar"`` or the errors of another
+        forecast at the same origins, ``(origins,)``. A negative statistic
+        favours the model.
         """
         if not 1 <= horizon <= self.horizon:
             raise ValueError(f"horizon must be between 1 and {self.horizon}")
         e1 = self.errors[variable][:, horizon - 1]
         if isinstance(benchmark, str):
-            if benchmark != "random_walk":
-                raise ValueError("benchmark must be 'random_walk' or an array of errors")
-            e2 = self.random_walk_errors[variable][:, horizon - 1]
+            if benchmark not in ("random_walk", "bvar"):
+                raise ValueError("benchmark must be 'random_walk', 'bvar' or an array of errors")
+            e2 = self._benchmark_errors(benchmark)[variable][:, horizon - 1]
         else:
             e2 = np.asarray(benchmark, float).ravel()
         return diebold_mariano(e1, e2, horizon, power=power, alternative=alternative,
@@ -247,7 +283,8 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
                         estimate: str | Callable = "mode", theta: ArrayLike | None = None,
                         window: int | None = None, coverage: float = 0.9,
                         include_measurement: bool = True,
-                        options: dict | None = None) -> ForecastEvaluation:
+                        options: dict | None = None, bvar_lags: int | None = None,
+                        bvar_options: dict | None = None) -> ForecastEvaluation:
     """Re-estimate at each origin and forecast the observables ``1..horizon`` ahead.
 
     Parameters
@@ -277,6 +314,15 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
         the density of the observation rather than of the model variable.
     options : dict, optional
         Passed to the optimiser for ``"mode"`` and ``"ml"``.
+    bvar_lags : int, optional
+        Add a BVAR with these lags as a benchmark. At each origin
+        :func:`~dsgelab.bvar` is estimated on the model's window, its first
+        ``bvar_lags`` observations starting the VAR (``first_obs = bvar_lags +
+        1``), and its forecast at the posterior mean goes into
+        :attr:`ForecastEvaluation.bvar_mean`.
+    bvar_options : dict, optional
+        Passed to :func:`~dsgelab.bvar`: the prior's hyperparameters, or
+        ``first_obs``, ``presample`` and ``train`` counted within the window.
     """
     if problem.order != 1 or getattr(problem, "is_dsge_var", False):
         raise ValueError("forecast evaluation works on the first-order (Kalman) problem")
@@ -302,6 +348,15 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
         if fixed.shape != (origins.size, k):
             raise ValueError(f"theta must have {k} values, or one row of them per origin")
     x0 = None if theta is None or fixed is not None else np.asarray(theta, float)
+    if bvar_options and bvar_lags is None:
+        raise ValueError("bvar_options needs bvar_lags")
+    bvar_kw: dict = {}
+    p_bvar = 0 if bvar_lags is None else int(bvar_lags)
+    if bvar_lags is not None:
+        bvar_kw = {"first_obs": p_bvar + 1, **(bvar_options or {})}
+        for key in ("observables", "nobs"):
+            if key in bvar_kw:
+                raise ValueError(f"bvar_options cannot set {key}: it follows the problem")
 
     H = horizon
     obs = problem.observables
@@ -311,8 +366,13 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
     thetas = np.zeros((origins.size, k))
     objective = np.full(origins.size, np.nan)
     modes = [None] * origins.size
+    bvar_means = np.zeros((len(origins), H, m)) if bvar_lags is not None else None
     for o, n in enumerate(origins):
         start = 0 if window is None else n - window
+        if bvar_means is not None:
+            b = bvar(Y[start:n], p_bvar, observables=obs, **bvar_kw)
+            point = b.forecast(H, draws=0).point
+            bvar_means[o] = np.column_stack([point[v] for v in obs])
         sub = dataclasses.replace(problem, data=Y[start:n], first_obs=1)
         if fixed is not None:
             th = fixed[o]
@@ -349,4 +409,7 @@ def forecast_evaluation(problem: EstimationProblem, origins: Sequence[int], hori
         actual={v: actual[:, :, i] for i, v in enumerate(obs)},
         last={v: Y[origins - 1, i] for i, v in enumerate(obs)},
         covariance=covs, names=list(problem.names), theta=thetas, objective=objective,
-        coverage=coverage, modes=modes)
+        coverage=coverage, modes=modes,
+        bvar_mean=(None if bvar_means is None
+                   else {v: bvar_means[:, :, i] for i, v in enumerate(obs)}),
+        bvar_lags=None if bvar_lags is None else p_bvar)

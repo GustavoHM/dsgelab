@@ -21,7 +21,7 @@ from typing import Any, Callable, Mapping, Sequence
 import numpy as np
 from scipy.optimize import least_squares
 
-from .model import Model, Params, Point, set_params
+from .model import Model, Params, Point, _resolve_max_iter, set_params
 from .steady import SteadyState, steady_state
 
 __all__ = ["CalibrationResult", "calibrate", "target_jacobian"]
@@ -70,7 +70,7 @@ def calibrate(model: Model, params: Params, *, free: Mapping[str, float],
               ctx: Any = None,
               ctx_update: Callable[[dict[str, float], Any], Any] | None = None,
               positive: Sequence[str] = (), steady_tol: float = 1e-11, tol: float = 1e-10,
-              maxiter: int = 200, warm_start: bool = True,
+              maxiter: int | None = None, max_iter: int | None = None, warm_start: bool = True,
               raise_on_fail: bool = True) -> CalibrationResult:
     """Solve for the ``free`` parameters that make the model hit ``targets``.
 
@@ -96,6 +96,7 @@ def calibrate(model: Model, params: Params, *, free: Mapping[str, float],
         solve in a sweep. The accepted solution is still judged on its own
         residual.
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 200)
     names = list(free)
     x0 = np.array([float(free[k]) for k in names])
     tnames = list(targets)

@@ -3,8 +3,8 @@
 A model here is a set of blocks joined by the names of their inputs and outputs, as in Auclert,
 Bardóczy, Rognlie and Straub (2021). Each block maps paths of aggregate inputs to paths of
 aggregate outputs, and the model is the directed acyclic graph the names define. A
-:class:`HetBlock` holds a continuum of agents on a grid of one asset and the nodes of a Markov
-chain, and a distribution over that grid. A :class:`SimpleBlock` is a set of equations in the
+:class:`HetBlock` holds a continuum of agents on the grids of one or two assets and the nodes of
+a Markov chain, and a distribution over them. A :class:`SimpleBlock` is a set of equations in the
 aggregates, with lags and leads, and a :class:`SolvedBlock` solves a smaller model of blocks for
 some of its inputs. The perturbation's :class:`Model`, with ``vec`` for a finite number of groups,
 is unchanged: a distribution over a grid is a different algorithm, and it lives here.
@@ -21,9 +21,13 @@ grid points goes to each with the probability that keeps the mean of assets. The
 distribution is the null vector of the sparse transition matrix, found by one sparse solve.
 
 The timing is sequence-jacobian's. ``Dbeg_t`` is the distribution over last period's income state
-and the assets carried into ``t``; the income shock turns it into ``D_t = Pi' Dbeg_t``, over
+and the assets carried into ``t``; the income shock turns it into ``D_t = Pi_t' Dbeg_t``, over
 today's income state, and the policy turns ``D_t`` into ``Dbeg_{t+1}``. An aggregate output is the
-mean of an individual outcome under ``D_t``, and its name is the outcome's in capitals.
+mean of an individual outcome under ``D_t``, and its name is the outcome's in capitals. The Markov
+matrix may be an output of the hetinputs and move with the inputs along a path: ``Pi_t`` moves the
+distribution at ``t``, and the expectation the step takes at ``t`` is ``Pi_{t+1}`` times the
+backward variables at ``t + 1``. A transition may start from a distribution ``Dbeg_0`` other than
+the steady state's.
 
 The fake-news algorithm
 -----------------------
@@ -37,6 +41,9 @@ first row and ``curlyE_{t-1}' curlyD_s`` below it, and ``J`` follows from it by 
 ``J[t, s] = F[t, s] + J[t - 1, s - 1]``. Each column costs one backward step, so the whole
 ``T x T`` Jacobian costs ``T`` steps instead of the ``T^2`` of differentiating a path for every
 ``s``. The derivative of one step is a finite difference, two-sided by default, with step ``h``.
+An input that moves the Markov matrix at ``s`` adds three terms, with ``dPi`` the derivative of
+the matrix, as in sequence-jacobian 1.0.0: ``Dbeg' dPi y`` to ``curlyY_0``, the lottery of
+``dPi' Dbeg`` to ``curlyD_0``, and ``dPi V`` to the expectation the step takes a period earlier.
 
 General equilibrium
 -------------------
@@ -68,6 +75,7 @@ __all__ = ["HetBlock", "SimpleBlock", "SolvedBlock", "BlockModel", "BlockSteadyS
 Jacobians = dict[str, dict[str, np.ndarray]]
 
 _COMPLEX_STEP = 1e-20
+_MARKOV = "\0markov"        # the key of the Markov matrix's derivative among a step's outcomes
 _ComplexWarning = getattr(np, "exceptions", np).ComplexWarning
 
 
@@ -160,6 +168,84 @@ class _Lottery:
         return sp.csr_matrix((np.concatenate([w, 1.0 - w]),
                               (np.concatenate([self.flat, self.flat + 1]),
                                np.concatenate([cols, cols]))), shape=(self.size, self.size))
+
+
+class _Lottery2:
+    """Young's lottery of two policies on the grids of two assets, one block per income state.
+
+    Each policy falls between two points of its own grid, with the weights of the one-dimensional
+    lottery, and the agent goes to each of the four corners with the product of the two weights,
+    which keeps the mean of both assets (Auclert et al., 2021, appendix E).
+    """
+
+    def __init__(self, policies: Sequence[np.ndarray], grids: Sequence[np.ndarray]):
+        (p1, p2), (g1, g2) = policies, grids
+        n1, n2 = g1.shape[0], g2.shape[0]
+        self.shape = p1.shape
+        self.size = p1.size
+        self.i1 = np.clip(np.searchsorted(g1, p1, side="left") - 1, 0, n1 - 2)
+        self.i2 = np.clip(np.searchsorted(g2, p2, side="left") - 1, 0, n2 - 2)
+        self.space1 = g1[self.i1 + 1] - g1[self.i1]
+        self.space2 = g2[self.i2 + 1] - g2[self.i2]
+        self.w1 = (g1[self.i1 + 1] - p1) / self.space1      # the weights on the lower points
+        self.w2 = (g2[self.i2 + 1] - p2) / self.space2
+        e = np.arange(p1.shape[0]).reshape(-1, 1, 1)
+        self.flat = ((e * n1 + self.i1) * n2 + self.i2).ravel()
+        # the four corners, lower and upper on each grid, as offsets of the flat index
+        self.offsets = (0, n2, 1, n2 + 1)
+
+    def _weights(self) -> tuple[np.ndarray, ...]:
+        w1, w2 = self.w1, self.w2
+        return w1 * w2, (1.0 - w1) * w2, w1 * (1.0 - w2), (1.0 - w1) * (1.0 - w2)
+
+    def forward(self, D: np.ndarray) -> np.ndarray:
+        """The distribution over the grid after the policies, from ``D`` before them."""
+        out = np.zeros(self.size)
+        for off, w in zip(self.offsets, self._weights()):
+            out += np.bincount(self.flat + off, (D * w).ravel(), self.size)
+        return out.reshape(self.shape)
+
+    def expectation(self, X: np.ndarray) -> np.ndarray:
+        """The value of ``X`` after the policies, at each point before them."""
+        Xf = np.asarray(X).ravel()
+        out = np.zeros(self.size)
+        for off, w in zip(self.offsets, self._weights()):
+            out += w.ravel() * Xf[self.flat + off]
+        return out.reshape(self.shape)
+
+    def shock(self, D: np.ndarray, dpolicy1: np.ndarray, dpolicy2: np.ndarray) -> np.ndarray:
+        """The derivative of ``forward(D)`` in the direction of the two policies, the brackets
+        held fixed."""
+        w1, w2 = self.w1, self.w2
+        d1, d2 = -D * dpolicy1 / self.space1, -D * dpolicy2 / self.space2   # D times dw1, dw2
+        moves = (d1 * w2 + w1 * d2, -d1 * w2 + (1.0 - w1) * d2,
+                 d1 * (1.0 - w2) - w1 * d2, -d1 * (1.0 - w2) - (1.0 - w1) * d2)
+        out = np.zeros(self.size)
+        for off, m in zip(self.offsets, moves):
+            out += np.bincount(self.flat + off, m.ravel(), self.size)
+        return out.reshape(self.shape)
+
+    def matrix(self) -> sp.csr_matrix:
+        """The lottery as a sparse matrix, from the flattened grid before it to after it."""
+        cols = np.arange(self.size)
+        weights = self._weights()
+        return sp.csr_matrix((np.concatenate([w.ravel() for w in weights]),
+                              (np.concatenate([self.flat + off for off in self.offsets]),
+                               np.tile(cols, 4))), shape=(self.size, self.size))
+
+
+def _lottery(policies: Sequence[np.ndarray], grids: Sequence[np.ndarray]):
+    """The lottery of one policy on one grid, or of two policies on two."""
+    if len(policies) == 1:
+        return _Lottery(policies[0], grids[0])
+    return _Lottery2(policies, grids)
+
+
+def _markov(Pi: np.ndarray, X: np.ndarray) -> np.ndarray:
+    """``Pi`` applied to the first axis of ``X``, the income state, whatever the assets' axes."""
+    if X.ndim == 2:
+        return Pi @ X
+    return (Pi @ X.reshape(X.shape[0], -1)).reshape(X.shape)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -445,7 +531,7 @@ def simple(*outputs: str) -> Callable[[Callable], SimpleBlock]:
 # heterogeneous-agent blocks
 
 class HetBlock:
-    """A continuum of agents on a grid of assets and the nodes of a Markov chain.
+    """A continuum of agents on a grid of one or two assets and the nodes of a Markov chain.
 
     Parameters
     ----------
@@ -455,22 +541,25 @@ class HetBlock:
         state, an ``(n_e, n_a)`` array, and every other argument is an aggregate input or an
         output of ``hetinputs``. It returns the backward variables at ``t``, the policy and the
         other individual outcomes, each an ``(n_e, n_a)`` array, in the order of ``outputs`` or
-        as a mapping.
+        as a mapping. With two assets every array is ``(n_e, n_1, n_2)``, with the assets' axes
+        in the order of ``policy``.
     outputs : sequence of str
         The names of what ``step`` returns. Every one that is not a backward variable is
         aggregated, under its name in capitals.
     backward : str or sequence of str
         The backward variables, such as the marginal value of assets.
-    policy : str
-        The asset policy, one of ``outputs``, whose lottery moves the distribution.
+    policy : str or sequence of two str
+        The asset policy, one of ``outputs``, whose lottery moves the distribution, or the
+        policies of two assets, whose two-dimensional lottery moves it.
     init : callable
         The backward variables the steady-state iteration starts from, as a function of the
         inputs and the outputs of ``hetinputs``, returned in the order of ``backward``.
     markov : str
         The name of the income chain's transition matrix, ``(n_e, n_e)`` with rows that sum to
         one, among the inputs or the outputs of ``hetinputs``.
-    grid : str, optional
-        The name of the asset grid, by default ``policy + "_grid"``.
+    grid : str or sequence of two str, optional
+        The name of the asset grid, by default ``policy + "_grid"``, or the names of the two
+        grids, one for each policy.
     hetinputs : sequence of (callable, outputs), optional
         Functions of the aggregate inputs that make the arrays ``step`` needs, such as the grids
         and income by node, run in order before each step. A :class:`SimpleBlock` is accepted
@@ -481,8 +570,8 @@ class HetBlock:
     name : str, optional
         By default the name of ``step``.
     backward_tol, backward_max_iter : float, int
-        The steady-state iteration stops when one step moves the policy by less than
-        ``backward_tol`` at every point.
+        The steady-state iteration stops when one step moves the policy, or both policies, by
+        less than ``backward_tol`` at every point.
     h : float
         The step of the finite differences of ``step`` in the fake-news algorithm.
     twosided : bool
@@ -490,13 +579,18 @@ class HetBlock:
 
     Notes
     -----
-    The block has one endogenous state, the asset, and one Markov chain, whose transition matrix
-    and grid do not depend on the inputs that move along a path. Several chains go into one by
-    their Kronecker product.
+    The block has one or two endogenous states, the assets, and one Markov chain. Several
+    chains go into one by their Kronecker product. With two assets the lottery is the product of
+    the two one-dimensional lotteries, as in sequence-jacobian's two-asset HANK. The transition
+    matrix, and the income at each node, may be outputs of ``hetinputs`` that move with the
+    inputs along a path, as when the risk of unemployment rises in a recession. The asset grids
+    must stay fixed along a path: the lottery at ``t`` puts the policy on the grid of ``t + 1``,
+    which one step does not see.
     """
 
     def __init__(self, step: Callable, outputs: Sequence[str], *, backward: str | Sequence[str],
-                 policy: str, init: Callable, markov: str = "Pi", grid: str | None = None,
+                 policy: str | Sequence[str], init: Callable, markov: str = "Pi",
+                 grid: str | Sequence[str] | None = None,
                  hetinputs: Iterable = (), hetoutputs: Iterable = (), name: str | None = None,
                  backward_tol: float = 1e-10, backward_max_iter: int = 10000, h: float = 1e-4,
                  twosided: bool = True):
@@ -509,11 +603,19 @@ class HetBlock:
                 raise ValueError(f"{label}: the backward variable {v!r} is not among the outputs")
             if v + "_p" not in self.step.inputs:
                 raise ValueError(f"{label}: step must take {v + '_p'!r}, the expectation of {v!r}")
-        if policy not in self.step.outputs or policy in self.backward:
-            raise ValueError(f"{label}: the policy {policy!r} must be an output that is not a "
-                             "backward variable")
+        self.policies = _names(policy)
+        if len(self.policies) > 2:
+            raise ValueError(f"{label}: a block has one or two policies, not {self.policies}")
+        for p in self.policies:
+            if p not in self.step.outputs or p in self.backward:
+                raise ValueError(f"{label}: the policy {p!r} must be an output that is not a "
+                                 "backward variable")
         self.policy, self.markov = policy, markov
-        self.grid = grid or policy + "_grid"
+        self.grids = ([grid] if isinstance(grid, str) else list(grid) if grid
+                      else [p + "_grid" for p in self.policies])
+        if len(self.grids) != len(self.policies):
+            raise ValueError(f"{label}: {len(self.policies)} policies and {len(self.grids)} grids")
+        self.grid = self.grids[0] if len(self.grids) == 1 else self.grids
         self.hetinputs = _pairs(hetinputs, f"{label}: hetinput")
         self.hetoutputs = _pairs(hetoutputs, f"{label}: hetoutput")
         self.init = _Function(init, self.backward, f"{label}: init")
@@ -527,7 +629,7 @@ class HetBlock:
         needed: list[str] = []
         for names in ([n for n in self.step.inputs if n not in expected],
                       *[f.inputs for f in self.hetinputs], *[f.inputs for f in self.hetoutputs],
-                      self.init.inputs, [self.markov, self.grid]):
+                      self.init.inputs, [self.markov, *self.grids]):
             needed += [n for n in names if n not in needed]
         self.inputs = [n for n in needed if n not in produced]
         self.individual = ([o for o in self.step.outputs if o not in self.backward]
@@ -563,17 +665,22 @@ class HetBlock:
                 if changed is not None:
                     changed |= set(f.outputs)
 
-    def _exogenous(self, x: Mapping[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+    def _exogenous(self, x: Mapping[str, Any]) -> tuple[np.ndarray, list[np.ndarray]]:
+        """The Markov matrix and the asset grids, one for each policy."""
         label = f"het block {self.name}"
         Pi = np.asarray(x[self.markov], dtype=float)
-        grid = np.asarray(x[self.grid], dtype=float)
         if Pi.ndim != 2 or Pi.shape[0] != Pi.shape[1]:
             raise ValueError(f"{label}: {self.markov} must be a square matrix")
         if np.any(Pi < 0) or not np.allclose(Pi.sum(axis=1), 1.0, rtol=0.0, atol=1e-10):
             raise ValueError(f"{label}: {self.markov} must be nonnegative, with rows that sum to one")
-        if grid.ndim != 1 or grid.size < 2 or np.any(np.diff(grid) <= 0):
-            raise ValueError(f"{label}: {self.grid} must be an increasing vector of two or more points")
-        return Pi, grid
+        grids = []
+        for name in self.grids:
+            grid = np.asarray(x[name], dtype=float)
+            if grid.ndim != 1 or grid.size < 2 or np.any(np.diff(grid) <= 0):
+                raise ValueError(f"{label}: {name} must be an increasing vector of two or more "
+                                 "points")
+            grids.append(grid)
+        return Pi, grids
 
     def _full(self, x: Mapping[str, Any]) -> dict[str, np.ndarray]:
         """``step`` and the hetoutputs at ``x``."""
@@ -586,7 +693,7 @@ class HetBlock:
                 out.update(new)
         return out
 
-    def _check_shapes(self, out: Mapping[str, Any], shape: tuple[int, int]) -> None:
+    def _check_shapes(self, out: Mapping[str, Any], shape: tuple[int, ...]) -> None:
         for k in self.step.outputs:
             if np.shape(out[k]) != shape:
                 raise ValueError(f"het block {self.name}: step returned {k} with shape "
@@ -602,8 +709,8 @@ class HetBlock:
         """
         x = self._inputs(values)
         self._run_hetinputs(x)
-        Pi, grid = self._exogenous(x)
-        shape = (Pi.shape[0], grid.shape[0])
+        Pi, grids = self._exogenous(x)
+        shape = (Pi.shape[0],) + tuple(g.shape[0] for g in grids)
         prev = (start or {}).get(self.name, {})
         if all(np.shape(prev.get(v)) == shape for v in self.backward):
             V = {v: np.asarray(prev[v], dtype=float) for v in self.backward}
@@ -611,9 +718,9 @@ class HetBlock:
             V = {v: np.broadcast_to(np.asarray(a, dtype=float), shape).copy()
                  for v, a in self.init(x).items()}
         out = self._backward_steady_state(x, Pi, V, shape)
-        lottery = _Lottery(out[self.policy], grid)
+        lottery = _lottery([out[p] for p in self.policies], grids)
         Dbeg = _stationary(Pi, lottery, prev.get("Dbeg"))
-        D = Pi.T @ Dbeg
+        D = _markov(Pi.T, Dbeg)
         if self.hetoutputs:
             both = {**x, **out}
             for f in self.hetoutputs:
@@ -631,11 +738,11 @@ class HetBlock:
         old = None
         for _ in range(self.backward_max_iter):
             for v in self.backward:
-                x[v + "_p"] = Pi @ V[v]
+                x[v + "_p"] = _markov(Pi, V[v])
             out = self.step(x)
             if old is None:
                 self._check_shapes(out, shape)
-            pol = np.asarray(out[self.policy], dtype=float)
+            pol = np.stack([np.asarray(out[p], dtype=float) for p in self.policies])
             if not np.all(np.isfinite(pol)):
                 raise FloatingPointError(f"het block {self.name}: the policy is not finite")
             if old is not None and np.max(np.abs(pol - old)) < self.backward_tol:
@@ -666,21 +773,36 @@ class HetBlock:
         return changed
 
     def _check_fixed(self, x, x0, moved) -> None:
-        """Raises if the Markov matrix or the grid at ``x`` differs from the steady state's."""
-        for k in (self.markov, self.grid):
+        """Raises if an asset grid at ``x`` differs from the steady state's."""
+        for k in self.grids:
             if not np.array_equal(np.asarray(x[k]), np.asarray(x0[k])):
                 raise NotImplementedError(f"het block {self.name}: {sorted(moved)} move {k}, "
                                           "which must stay fixed along a path")
 
-    def path(self, ss: BlockSteadyState, paths: Mapping[str, np.ndarray], T: int):
+    def _initial(self, Dbeg: ArrayLike, shape: tuple[int, ...]) -> np.ndarray:
+        """``Dbeg`` checked as a distribution on the block's grid."""
+        label = f"het block {self.name}"
+        D0 = np.asarray(Dbeg, dtype=float)
+        if D0.shape != shape:
+            raise ValueError(f"{label}: the initial distribution has shape {D0.shape}, not "
+                             f"{shape}, the income states by the grid")
+        if not np.all(np.isfinite(D0)) or np.any(D0 < 0) or abs(D0.sum() - 1.0) > 1e-10:
+            raise ValueError(f"{label}: the initial distribution must be nonnegative and sum to one")
+        return D0
+
+    def path(self, ss: BlockSteadyState, paths: Mapping[str, np.ndarray], T: int, *,
+             Dbeg: ArrayLike | None = None):
         """The aggregates' paths, in levels, given the paths of some inputs in levels.
 
-        The backward iteration runs from ``T - 1``, where next period is the steady state, and the
-        distribution starts from the steady state's ``Dbeg``.
+        The backward iteration runs from ``T - 1``, where next period is the steady state. The
+        distribution starts from ``Dbeg``, over last period's income state and the assets carried
+        into the first period, by default the steady state's. The Markov matrix may move with the
+        inputs, and the asset grid may not.
         """
         x0, internals = self._at_steady_state(ss)
         changed = self._moving_hetinputs(paths)
-        Pi, grid = self._exogenous(x0)
+        Pi, grids = self._exogenous(x0)
+        Pis = [Pi] * T              # the Markov matrix of each period
         V = {v: internals[v] for v in self.backward}
         policies: list[Any] = [None] * T
         outcomes: list[Any] = [None] * T
@@ -691,19 +813,24 @@ class HetBlock:
             if changed - set(paths):
                 self._run_hetinputs(x, set(paths))
                 self._check_fixed(x, x0, paths)
+            # the expectation at t is taken with the transition from t to t + 1
+            Pi_next = Pis[t + 1] if t + 1 < T else Pi
+            if self.markov in changed:
+                Pis[t] = self._exogenous(x)[0]
             for v in self.backward:
-                x[v + "_p"] = Pi @ V[v]
+                x[v + "_p"] = _markov(Pi_next, V[v])
             out = self._full(x)
-            policies[t] = np.asarray(out[self.policy], dtype=float)
+            policies[t] = [np.asarray(out[p], dtype=float) for p in self.policies]
             outcomes[t] = {o: out[o] for o in self.individual}
             V = {v: np.asarray(out[v], dtype=float) for v in self.backward}
         Y = {O: np.empty(T) for O in self.outputs}
-        Dbeg = internals["Dbeg"]
+        D_beg = (internals["Dbeg"] if Dbeg is None
+                 else self._initial(Dbeg, np.shape(internals["Dbeg"])))
         for t in range(T):
-            D = Pi.T @ Dbeg
+            D = _markov(Pis[t].T, D_beg)
             for O, o in self._aggregate.items():
                 Y[O][t] = np.vdot(D, outcomes[t][o])
-            Dbeg = _Lottery(policies[t], grid).forward(D)
+            D_beg = _lottery(policies[t], grids).forward(D)
         return Y
 
     # --- Jacobians ---------------------------------------------------------------------------
@@ -724,23 +851,23 @@ class HetBlock:
         if method != "fake_news":
             raise ValueError(f"method must be 'fake_news' or 'direct', not {method!r}")
         x0, internals = self._at_steady_state(ss)
-        Pi, grid = self._exogenous(x0)
+        Pi, grids = self._exogenous(x0)
         for v in self.backward:
-            x0[v + "_p"] = Pi @ internals[v]
-        D = internals["D"]
-        lottery = _Lottery(internals[self.policy], grid)
+            x0[v + "_p"] = _markov(Pi, internals[v])
+        D, Dbeg = internals["D"], internals["Dbeg"]
+        lottery = _lottery([internals[p] for p in self.policies], grids)
         indiv = {O: self._aggregate[O] for O in outputs}
-        base = None if self.twosided else self._full(x0)
+        base = None if self.twosided else {**self._full(x0), _MARKOV: Pi}
 
         # step 2: the expectation vectors, demeaned (the curlyD sum to zero)
         E = {}
         for O, o in indiv.items():
             e = np.empty((max(T - 1, 0),) + D.shape)
             if T > 1:
-                e[0] = Pi @ np.asarray(internals[o], dtype=float)
+                e[0] = _markov(Pi, np.asarray(internals[o], dtype=float))
                 e[0] -= e[0].mean()
                 for k in range(1, T - 1):
-                    e[k] = Pi @ lottery.expectation(e[k - 1])
+                    e[k] = _markov(Pi, lottery.expectation(e[k - 1]))
                     e[k] -= e[k].mean()
             E[O] = e.reshape(max(T - 1, 0), -1)
 
@@ -753,10 +880,19 @@ class HetBlock:
             dV = None
             for s in range(T):
                 d = self._step_derivative(x0, base, i if s == 0 else None, dV, changed)
-                dV = {v: Pi @ d[v] for v in self.backward}
-                curlyD[s] = lottery.shock(D, d[self.policy]).ravel()
+                dV = {v: _markov(Pi, d[v]) for v in self.backward}
+                curlyD[s] = lottery.shock(D, *[d[p] for p in self.policies]).ravel()
                 for O, o in indiv.items():
                     curlyY[O][s] = np.vdot(D, d[o])
+                if s == 0 and _MARKOV in d:
+                    # the input moves the Markov matrix, which moves the distribution today and
+                    # the expectation of the backward variables a period earlier
+                    dPi = d[_MARKOV]
+                    for v in self.backward:
+                        dV[v] = dV[v] + _markov(dPi, internals[v])
+                    curlyD[0] += lottery.forward(_markov(dPi.T, Dbeg)).ravel()
+                    for O, o in indiv.items():
+                        curlyY[O][0] += np.vdot(Dbeg, _markov(dPi, np.asarray(internals[o], dtype=float)))
             # steps 3 and 4: the fake-news matrix, and the Jacobian by its recursion
             for O in outputs:
                 F = np.empty((T, T))
@@ -769,7 +905,10 @@ class HetBlock:
         return {O: row for O, row in J.items() if row}
 
     def _step_derivative(self, x0, base, i, dV, changed):
-        """The derivative of every outcome of one step, in the direction of an input or of dV."""
+        """The derivative of every outcome of one step, in the direction of an input or of dV.
+
+        When the input moves the Markov matrix, the matrix's derivative is under ``_MARKOV``.
+        """
         h = self.h
 
         def shocked(sign):
@@ -782,7 +921,10 @@ class HetBlock:
             if dV is not None:
                 for v in self.backward:
                     x[v + "_p"] = x0[v + "_p"] + sign * h * dV[v]
-            return self._full(x)
+            out = self._full(x)
+            if i is not None and self.markov in changed:
+                out[_MARKOV] = self._exogenous(x)[0]
+            return out
 
         up = shocked(1.0)
         if self.twosided:
@@ -807,7 +949,8 @@ class HetBlock:
         return J
 
 
-def _stationary(Pi: np.ndarray, lottery: _Lottery, guess: np.ndarray | None = None) -> np.ndarray:
+def _stationary(Pi: np.ndarray, lottery: _Lottery | _Lottery2,
+                guess: np.ndarray | None = None) -> np.ndarray:
     """The stationary ``Dbeg``, the null vector of the transition minus the identity.
 
     The mass at one point ``k`` is set to one and the other equations are solved for the rest by a
@@ -815,8 +958,8 @@ def _stationary(Pi: np.ndarray, lottery: _Lottery, guess: np.ndarray | None = No
     ``k`` is where ``guess`` puts the most mass, or, without one, where 50 steps of the transition
     from a uniform distribution do.
     """
-    n_e, n_a = lottery.shape
-    N = n_e * n_a
+    n_e, N = lottery.shape[0], lottery.size
+    n_a = N // n_e                      # the points of the asset grid, or of both grids
     exog = sp.kron(sp.csr_matrix(Pi.T), sp.identity(n_a), format="csr")
     M = (lottery.matrix() @ exog).tocsc()
     if guess is not None and np.shape(guess) == lottery.shape:
@@ -839,7 +982,7 @@ def _stationary(Pi: np.ndarray, lottery: _Lottery, guess: np.ndarray | None = No
         raise np.linalg.LinAlgError("the stationary distribution was not found: the transition "
                                     "may have more than one recurrent class")
     d = np.maximum(d, 0.0)
-    return (d / d.sum()).reshape(n_e, n_a)
+    return (d / d.sum()).reshape(lottery.shape)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -904,15 +1047,21 @@ class SolvedBlock:
                                       outputs=outputs or self.outputs, T=T)
         return {o: row for o, row in G.items() if o in self.outputs and row}
 
-    def path(self, ss, paths, T):
+    def path(self, ss, paths, T, *, initial=None):
         key = (id(ss), T)
         if self._lu is None or self._lu[0] != key or self._lu[1] is not ss:
             H = self.model._stacked(self.model._total(ss, list(self.unknowns), T),
                                     self.targets, list(self.unknowns), T)
             self._lu = (key, ss, lu_factor(H))
-        dev = self.model.impulse_nonlinear(ss, list(self.unknowns), self.targets,
-                                           {k: np.asarray(p, dtype=float) - ss[k]
-                                            for k, p in paths.items()}, _lu=self._lu[2])
+        shocks = {k: np.asarray(p, dtype=float) - ss[k] for k, p in paths.items()}
+        if not shocks:
+            # only an initial distribution moves the block: a path of zeros sets the horizon
+            shocks = {self.inputs[0]: np.zeros(T)}
+        if initial:
+            inner = self.model._het_names()
+            initial = {k: v for k, v in initial.items() if k in inner}
+        dev = self.model.impulse_nonlinear(ss, list(self.unknowns), self.targets, shocks,
+                                           initial=initial, _lu=self._lu[2])
         return {o: ss[o] + dev[o] for o in self.outputs if o in dev}
 
 
@@ -1149,19 +1298,30 @@ class BlockModel:
     def impulse_nonlinear(self, ss: BlockSteadyState, unknowns: Sequence[str],
                           targets: Sequence[str], shocks: Mapping[str, ArrayLike], *,
                           tol: float = 1e-10, max_iter: int = 50,
-                          jacobian: np.ndarray | None = None, _lu=None) -> dict[str, np.ndarray]:
+                          jacobian: np.ndarray | None = None,
+                          initial: Mapping[str, ArrayLike] | None = None,
+                          _lu=None) -> dict[str, np.ndarray]:
         """The nonlinear perfect-foresight transition after the paths of ``shocks``, in deviations
         from the steady state.
 
         The paths of the unknowns are found by a quasi-Newton iteration with the fixed matrix
         ``H_U``, the targets' Jacobian with respect to the unknowns at the steady state, until
         every target is below ``tol`` in every period. ``jacobian`` may give ``H_U``, stacked with
-        one block of ``T`` rows per target and of ``T`` columns per unknown.
+        one block of ``T`` rows per target and of ``T`` columns per unknown. ``initial`` maps the
+        name of a :class:`HetBlock` to the distribution ``Dbeg`` it starts from, over last period's
+        income state and the assets carried into the first period, in place of the steady state's,
+        such as another steady state's ``internals[name]["Dbeg"]``. With shocks that are zero, the
+        transition is the return from that distribution to the steady state. Lags at the first
+        period keep their steady-state values.
         """
         shocks, T = self._horizon(shocks)
         unknowns, targets = list(unknowns), list(targets)
         if len(unknowns) != len(targets):
             raise ValueError(f"{len(unknowns)} unknowns and {len(targets)} targets")
+        initial = dict(initial or {})
+        bad = sorted(set(initial) - self._het_names())
+        if bad:
+            raise ValueError(f"{self.name}: {bad} in initial are not heterogeneous-agent blocks")
         if _lu is None:
             H = (np.asarray(jacobian, dtype=float) if jacobian is not None
                  else self._stacked(self._total(ss, unknowns, T), targets, unknowns, T))
@@ -1169,7 +1329,7 @@ class BlockModel:
         U = {u: np.zeros(T) for u in unknowns}
         err = np.inf
         for _ in range(max_iter):
-            dev = self._paths(ss, {**shocks, **U}, T)
+            dev = self._paths(ss, {**shocks, **U}, T, initial)
             res = np.concatenate([dev.get(t, np.zeros(T)) for t in targets])
             err = float(np.max(np.abs(res)))
             if not np.isfinite(err):
@@ -1182,14 +1342,32 @@ class BlockModel:
         raise RuntimeError(f"{self.name}: the transition did not converge in {max_iter} "
                            f"iterations; the largest target residual is {err:.2e}")
 
-    def _paths(self, ss, dev_inputs: Mapping[str, np.ndarray], T: int) -> dict[str, np.ndarray]:
-        """Every variable's path, in deviations, given the deviations of some inputs."""
+    def _het_names(self) -> set[str]:
+        """The names of the heterogeneous-agent blocks, inside solved blocks too."""
+        names: set[str] = set()
+        for b in self.blocks:
+            if isinstance(b, HetBlock):
+                names.add(b.name)
+            elif isinstance(b, SolvedBlock):
+                names |= b.model._het_names()
+        return names
+
+    def _paths(self, ss, dev_inputs: Mapping[str, np.ndarray], T: int,
+               initial: Mapping[str, ArrayLike] | None = None) -> dict[str, np.ndarray]:
+        """Every variable's path, in deviations, given the deviations of some inputs and the
+        initial distributions of some heterogeneous-agent blocks."""
         dev = dict(dev_inputs)
         for b in self.blocks:
             ins = [i for i in b.inputs if i in dev]
-            if not ins:
+            paths = {i: ss[i] + dev[i] for i in ins}
+            if isinstance(b, HetBlock) and initial and b.name in initial:
+                levels = b.path(ss, paths, T, Dbeg=initial[b.name])
+            elif isinstance(b, SolvedBlock) and initial and set(initial) & b.model._het_names():
+                levels = b.path(ss, paths, T, initial=initial)
+            elif ins:
+                levels = b.path(ss, paths, T)
+            else:
                 continue
-            levels = b.path(ss, {i: ss[i] + dev[i] for i in ins}, T)
             for o, y in levels.items():
                 dev[o] = y - ss[o]
         return dev

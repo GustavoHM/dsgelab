@@ -657,7 +657,8 @@ that ask for a fourth-order perturbation (`hybrid_order = 4`) are not compared.
 
 ```bash
 bash fetch.sh                # mods/bgp/, from Dynare 7.2's tests/bgp
-bash run_bgp.sh              # evaluates, at five points, the bgpfun that Dynare's bgp.write generates
+bash run_bgp.sh              # evaluates, at five points, the bgpfun that Dynare's bgp.write
+                             # generates, and solves the models with their trends declared
 python compare_bgp.py
 ```
 
@@ -670,6 +671,15 @@ the solution (assertions of Dynare's tests)
   solow   300 starts: K/Y 2.8e-12, g_Y 2.6e-14, g_K 2.3e-14, gE 1.1e-14  OK
   ramsey  growth factors against 1.02: 1.3e-15  OK
   nk      levels and factors against 1: 2.0e-15  OK
+trends declared in from_equations
+  model   against        s.s.     IRFs    paths  variance
+  solow   Dynare      4.0e-15  2.3e-14  1.1e-14   2.3e-14  OK
+  solow   from_mod    4.4e-15  1.2e-14  1.3e-14   2.5e-14  OK
+  ramsey  Dynare      5.7e-16        -        -         -  OK
+  ramsey  from_mod    0.0e+00        -        -         -  OK
+  fs2000  Dynare      3.4e-14  9.7e-14  8.2e-14   7.8e-14  OK
+  fs2000  from_mod    1.4e-15  1.4e-13  1.0e-13   2.1e-14  OK
+  ramsey  closed form of the detrended steady state: 5.4e-15  OK
 ```
 
 Dynare's tests solve the problem with MATLAB's `fsolve` from random points, and the Solow test is
@@ -679,6 +689,23 @@ level of a growing variable is not identified. A model in levels also has trivia
 population or zero capital), which `balanced_growth` discards before restarting from another
 point. The detrending of a `.mod` with `trend_var` and `var(deflator=)` is validated in
 `compare_import.py`, with `fs2000_nonstationary`.
+
+The third part checks the trends declared in `from_equations`. `run_bgp.sh` rewrites Solow and
+Ramsey with their trends declared (`trend_var(growth_factor=EfficiencyGrowth) Efficiency;`,
+`var(deflator=Efficiency*Population) Output PhysicalCapitalStock;`, and
+`trend_var(growth_factor=1.02) x;` with `c` and `k` deflated by `x`), removes the trend equations they replace and saves them as
+`out_bgp/<name>_trend.mod`. Solow gets shocks with standard deviations 0.01 and 0.005, which
+the test file does not set. `fs2000_nonstationary.mod` is read unchanged up to its `steady`
+command. Dynare solves each with `solve_tolf = 1e-14`, and for the two with shocks runs
+`stoch_simul(order=1, irf=40, periods=0)` and simulates 200 periods of the shocks
+`0.01 sin(0.7 t j + j)` with `simult_`. `compare_bgp.py` writes the three models as text equations
+with `trend_vars=` and `deflators=`, starts the steady state from the `initval` block and
+compares it with Dynare and with `from_mod` on the same `.mod`. The IRFs and the paths are
+measured against each variable's largest response, and the variance matrix against its largest
+entry. Equal paths under the same shocks mean equal decision rules, whatever the choice of
+states. In `from_equations` the growth factors are states with the innovation dated `t+1`, so
+the models have different states from `from_mod`'s, and fs2000's `del` is `delta`, because
+`del` is a Python keyword and the parser refuses it.
 
 ## Local identification
 
@@ -952,6 +979,8 @@ come from a run on 30 October 2026, with Dynare 7.2 and Octave 11.3.0.
 bash fetch.sh
 bash run_plots.sh                 # densities: draw_prior_density and posterior_moments
                                   # mcmc: fs2000 with mode_check, Metropolis and bayesian_irf (4 min)
+                                  # identification: fs2000's identification with advanced=1
+                                  # decomposition: real-time decompositions, conditional forecast
 python compare_plots.py
 ```
 
@@ -967,10 +996,14 @@ mode_check, 9 parameters, 21 points each: grid 8.9e-16; log posterior and log-li
   logmst (normal prior, Dynare's grid runs from -10 to 10): 1.9e-02 relative where both solve the model, and 10 of 21 points that only one of them solves
 posterior_irf, 1200 draws, 4 variables, 2 shocks, 20 periods: responses 2.5e-10, mean 2.1e-10, median 2.1e-10, lower 2.3e-10, upper 2.0e-10, deciles 2.3e-10 (relative to the largest response); the statistics of Dynare's own responses 3.6e-17
 posterior densities and modes of 'Priors and posteriors': 1.9e-15; smoothed shocks 2.6e-15 and observables 4.1e-16 at the posterior mean
+identification strength, fs2000 at the prior mean, 9 parameters, on Dynare's 300 simulated observations: information matrix 1.2e-08 (relative to the root of its diagonal), strength 2.7e-07, strength_prior 4.4e-08, sensitivity 5.8e-09, sensitivity_prior 5.8e-09, moments_sensitivity 4.9e-09 (relative); the bars drawn 2.7e-07, the patterns 2.4e-09 and their singular values 5.2e-06 (relative, as Dynare prints them); identified parameters the same
+real-time decompositions of fs2000 at the prior mean, 4 variables, 192 observations, forecast 4: realtime pool 3.4e-15, one-step conditional pool 3.4e-15, one-step forecast pool 3.2e-15; vintages 40, 80, 120 (realtime, forecast and 4-step conditional) 4.6e-15; what plot_shock_decomposition draws with realtime 1, 2 and 3, rolling and at vintage 80, 4.0e-15
+annualised decompositions, type=yoy 1.9e-14 and type=aoa 4.8e-15; initial condition decomposition, 14 of Dynare's 15 columns (the other is an auxiliary variable named otherwise), 5.1e-15
+conditional forecast with bands, gp_obs on a path for 4 periods by e_m, 12 periods, 2000 of Dynare's draws, 14 variables: mean 6.7e-15, bands 4.0e-15, unconditional mean 6.7e-15, unconditional bands 4.4e-15, controlled shock 8.0e-16 (the widest 80% band is 0.25)
 ```
 
 The plots draw what the package computes. What they draw that it did not compute before is
-compared here, in two parts.
+compared here, in four parts.
 
 The densities of `plot_posterior`: the nine priors of `fs2000.mod`, read by `from_mod`, against
 `draw_prior_density`, grid and values; and the kernel estimate that `posterior_moments` returns,
@@ -1000,6 +1033,38 @@ the two log posteriors, of order -2e7, differ by 2%. On the seven parameters wit
 and on `gam` the kernels agree within 6e-11. The responses of the posterior IRFs at each draw agree
 within 3e-10 of the largest response, and their statistics within the same: computed on Dynare's own responses, they agree with Dynare's within 4e-17.
 The numbers come from a run on 3 November 2026, with Dynare 7.2 and Octave 11.3.0.
+
+The figures left out in 0.9 come from two more runs. The first is Dynare's `identification` of
+`fs2000.mod` at the prior mean with `advanced=1`, which draws the identification strength, the
+sensitivity bars, the collinearity patterns and the identification patterns. Dynare computes the
+information matrix behind the strength on a sample of 300 observations that it simulates, so a copy
+of its `dsge_likelihood.m`, put first on the path, keeps the sample it receives for the asymptotic
+Hessian, and `plots/export_identification.m` saves it with Dynare's measures and figures.
+`identification(strength=True)` on that sample gives the information matrix within 1.2e-8 of the
+root of its diagonal, and the strength, the sensitivity component and the moments' sensitivity
+within 2.7e-7, relative. The strength divides by the asymptotic standard deviation, the root of
+the diagonal of the inverse information, whose smallest singular value is 4.6e-5 against a largest
+of 7.6e6, and that ratio amplifies the difference between Dynare's analytic derivatives and the
+differences of dsgelab. The bars of the strength figure agree within the same, the identification
+patterns within 2.4e-9, and the singular values in their titles within the five digits Dynare
+prints. The sensitivity figure is compared through the moments' sensitivity only: its bars divide
+by the largest value, which is infinite for the two shock standard deviations, whose inverse gamma
+priors have an infinite standard deviation, so Dynare's moments bars are all minus infinity.
+`plot_identification_sensitivity` divides by the largest finite value. Its "Model" and "LRE model"
+bars come from derivatives of Dynare's own reduced form and dynamic Jacobian, whose rows differ
+from dsgelab's state space, and are not drawn.
+
+The second run estimates nothing: `fs2000.mod` at the prior mean (`mode_compute=0`), with
+`initial_condition_decomposition`, `shock_decomposition`, `realtime_shock_decomposition` with
+`forecast=4` and `save_realtime=[40 80 120]`, and a `conditional_forecast` of 12 periods on 2,000
+draws in which `gp_obs` follows a path for 4 periods and `e_m` is the controlled shock.
+`plots/export_decomposition.m` saves the pools and vintages, what `plot_shock_decomposition`
+returns (its `get_decomp_only`) with `type=yoy`, `type=aoa` and `realtime` 1, 2 and 3, rolling and
+at vintage 80, and the conditional forecast with the normal draws behind it, drawn again in Octave
+from the state of `randn` recorded just before the command. Everything agrees within 2e-14. The
+initial condition decomposition is compared on 14 of Dynare's 15 columns: the fifteenth is
+Dynare's auxiliary variable for `c(+1)`, which dsgelab calls `LEAD1_c`, and contributes only to
+itself at the first date. These numbers come from a run on 6 November 2026, with the same versions.
 
 ## Out-of-sample forecast evaluation
 
@@ -1038,14 +1103,14 @@ The 48 cases cross horizons 1 to 4, losses `|e|` and `e^2`, both variance estima
 three alternatives. None of them has a negative variance at the requested horizon, so the
 fallback to horizon 1 that both programs make is checked only in the test suite. The numbers
 come from a run on 30 October 2026, with
-Dynare 7.2 and Octave 11.3.0.
+Dynare 7.2 and Octave 11.3.0. The BVAR benchmark (`bvar_lags=`) is checked in the next section.
 
 ## BVAR and DSGE-VAR
 
 ```bash
 bash fetch.sh                     # Dynare 7.2's tests/bvar_a_la_sims and tests/dsge-var, by SHA-256
 bash run_bvar.sh                  # about a minute
-python compare_bvar.py            # about a minute and a half, most of it the four posterior modes
+python compare_bvar.py            # about two minutes, most of it the four posterior modes
 ```
 
 ```
@@ -1054,33 +1119,38 @@ bvar_standalone: bvar_density 2, first_obs=20, train=10, flat=True
   log marginal density: 6198.9907 6207.4897   deviation 1.8e-12
   bvar_forecast 2, nobs=200, 2 periods, 1001 draws: RMSE over 782 observations 8.7e-18
   paths, draw by draw: with shocks 4.9e-17, without 2.8e-17 (largest value 0.05); mean with shocks 8.7e-18; explosive draws 0.000
+  bvar_irf, SquareRoot: 1000 draws of 40 periods, responses draw by draw 1.9e-15, oo_.bvar.irf 1.1e-15 (relative to 0.0127)
+  bvar_irf, Cholesky, as the upper factor L': 1000 draws of 40 periods, responses draw by draw 9.5e-16, oo_.bvar.irf 5.4e-16 (relative to 0.0127)
+  bvar_irf, Cholesky, the columns of L: 1000 draws of 40 periods, responses draw by draw 2.3e-01, oo_.bvar.irf 7.1e-02 (relative to 0.0127)
 bvar_and_dsge: bvar_density 8, first_obs=20, train=10, flat=False
   prior and posterior, lags 1 to 8: df 0e+00, S 5.6e-17, XXi 1.8e-14, PhiHat 1.4e-14 (relative)
   log marginal density: 6199.5260 6207.7011 6206.4335 6206.3822 6202.7006 6199.4387 6194.0685 6190.8352   deviation 0.0e+00
   bvar_forecast 8, nobs=200, 10 periods, 2001 draws: RMSE over 782 observations 1.6e-17
   paths, draw by draw: with shocks 2.1e-16, without 1.8e-16 (largest value 0.06); mean with shocks 7.8e-17; explosive draws 0.000
+  forecast_evaluation's BVAR(2) benchmark, origins [100, 130, 160, 190], expanding and 60-observation windows, 1 to 4 steps: errors 1.6e-16 (largest error 0.0221)
 
 dsgevar_forward_calibrated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
   log posterior kernel at 4 points: 2.5e-12;  log prior 8.9e-16;  -inf at the same 0 point(s): True
   kernel at Dynare's mode -9.1e-13 from Dynare's; dsgelab's mode: kernel +3.05e-09 over Dynare's, parameters within 5.2e-05 posterior sd
   Laplace with Dynare's inverse Hessian 9.7e-13; with dsgelab's Hessian -1.6e-04
   with dsgelab's T: mode moves by up to 0.18 posterior sd
+  bayesian_irf of the DSGE-VAR: 1000 parameter draws, 40 periods, responses draw by draw 4.9e-14, oo_.PosteriorIRF.bvardsge 3.8e-14 (relative to 2.021); VAR draws redrawn as explosive 0.0000
 
 dsgevar_forward_estimated_lambda: 4 observables, 4 lags, T = 90 rows (Dynare's T 94)
   log posterior kernel at 7 points: 4.9e-12;  log prior 8.9e-16;  -inf at the same 1 point(s): True
   kernel at Dynare's mode -1.6e-12 from Dynare's; dsgelab's mode: kernel +2.20e-10 over Dynare's, parameters within 9.3e-06 posterior sd
   Laplace with Dynare's inverse Hessian 1.6e-12; with dsgelab's Hessian -7.3e-06
   with dsgelab's T: mode moves by up to 0.39 posterior sd, lambda 0.568 against 0.533 (lambda T = 51.1 against 50.1)
+  bayesian_irf of the DSGE-VAR: 1000 parameter draws, 40 periods, responses draw by draw 1.1e-13, oo_.PosteriorIRF.bvardsge 5.7e-14 (relative to 2.031); VAR draws redrawn as explosive 0.0010
 
 OK
 ```
 
 The BVAR files are Dynare's `tests/bvar_a_la_sims/bvar_standalone.mod` and `bvar_and_dsge.mod`,
 with their data (`bvar_sample.m`, 1001 observations of two series), options and hyperparameters.
-`run_bvar.sh` removes their `bvar_irf` lines and runs the estimation of `bvar_and_dsge.mod`
-without Metropolis, since neither is compared, and adds a `verbatim` block before
-`bvar_forecast` that resets Octave's generator and saves the normal draws `bvar.forecast` is about
-to take. `bvar` rebuilds, for every lag length of `bvar_density`, the prior and the posterior that
+`run_bvar.sh` runs the estimation of `bvar_and_dsge.mod` without Metropolis, since it is not
+compared, and adds a `verbatim` block before `bvar_forecast` and before each `bvar_irf` that
+resets Octave's generator and saves the normal draws the command is about to take. `bvar` rebuilds, for every lag length of `bvar_density`, the prior and the posterior that
 Dynare's `bvar.toolbox` returns, and the log marginal density. `BVAR.forecast` takes the saved
 draws through an object with the `standard_normal` method of a numpy `Generator`, and its paths
 with and without shocks are Dynare's, draw by draw: Dynare's loop makes `bvar_replic + 1` draws,
@@ -1088,12 +1158,36 @@ so 1001 and 2001 here. The RMSE is that of the forecast at the posterior mean ov
 observations after `nobs=200`. Without the saved draws, the forecast means agree only up to Monte
 Carlo error.
 
+`bvar_standalone.mod` ends with `bvar_irf(2,'Cholesky')` and `bvar_irf(2,'SquareRoot')`, 1000
+draws of 40 periods each. A second `verbatim` block after each saves `oo_.bvar.irf` and the
+sampled responses, and `BVAR.irf` takes the saved normal draws. Dynare 7.2's `bvar.irf` builds
+the responses with the impact matrix `B` on the left of the lag matrices, so that its impulses are
+the rows of `B`, and stores the response of variable `i` to impulse `j` under
+`oo_.bvar.irf.Mean.(j).(i)`, where its code names the first field the variable and the second
+the shock. With `SquareRoot`, `B`
+is symmetric, the rows are the columns, and Dynare's numbers are those of `BVAR.irf` with the
+fields read shock first. With `Cholesky`, the rows of the lower factor `L` are impulses with
+covariance `L'L` rather than `Sigma`: the first variable's impulse moves only the first variable
+on impact. `BVAR.irf` takes the columns of `L` by default, and with the upper factor `L'` as its
+identification it gives Dynare's numbers. The responses to the columns differ from Dynare's by up
+to 23% of the largest response in single draws, and the statistics by up to 7.1%.
+
+The benchmark of `forecast_evaluation` is checked on `bvar_and_dsge.mod`, whose estimation sets
+`first_obs=20` and whose model, two AR(1) processes for `dx` and `dy`, `from_mod` reads (with the
+prior shapes put in lower case, as `NORMAL_PDF` is written there). `forecast_evaluation` runs with
+the parameters fixed at their prior means and `bvar_lags=2`, at origins 100, 130, 160 and 190,
+on an expanding window and on a rolling window of 60 observations. On each of the eight windows,
+Octave sets `first_obs` and `nobs` to the same observations, calls `bvar.toolbox(2)` with Dynare's
+default hyperparameters and no training sample, and runs the recursion that `bvar.forecast` uses
+for its RMSE, the VAR at `PhiHat` from the last two observations, for four steps. The errors are
+compared with `ForecastEvaluation.bvar_errors`.
+
 The DSGE-VAR files are Dynare's `tests/dsge-var/dsgevar_forward_calibrated_lambda.mod`
 (`dsge_var=0.8`) and `dsgevar_forward_estimated_lambda.mod` (`dsge_prior_weight` with a uniform
 prior on [0, 1.9]), on the data their `simul_hybrid.mod` simulates in Octave: 500 periods of a
 model with a hybrid Phillips curve, of which the tests use 90 from `first_obs=50`, with 4 lags and
-a constant. `run_bvar.sh` keeps their models, priors, samples and optimiser (`mode_compute=4`) and
-removes Metropolis and `bayesian_irf`. After the mode, it evaluates Dynare's
+a constant. `run_bvar.sh` keeps their models, priors, samples, optimiser (`mode_compute=4`) and
+Metropolis (2000 draws) and removes `bayesian_irf`. After the mode, it evaluates Dynare's
 `dsge_var_likelihood` at the prior mean, at the mode and at points perturbed from both by 5 and 10
 per cent, and in the second file at the mode with `lambda` set to 0.3, 0.5, 1.5 and 0.2. Below
 `(k + n) / T = 21 / 94 = 0.223` the prior is improper, and both programs give `-inf` at 0.2.
@@ -1108,8 +1202,21 @@ one observation at a time, and its limit as `lambda` grows is the Gaussian likel
 the model implies. Under Dynare's count, neither holds. `compare_bvar.py` therefore compares the
 two programs with `T` set to Dynare's, through a subclass of `EstimationProblem`, and then reports
 how far `dsgelab`'s own `T` moves the mode. At the prior mean of the first file the two counts
-give log posteriors of -373.37 (Dynare's) and -366.43. The numbers come from a run on 3 November
-2026, with Dynare 7.2 and Octave 11.3.0.
+give log posteriors of -373.37 (Dynare's) and -366.43.
+
+For the DSGE-VAR's impulse responses, `run_bvar.sh` calls `PosteriorIRF` after the estimation,
+as `bayesian_irf` would. It saves the parameter draws `get_posterior_subsample` takes (1000 of the
+1000 Metropolis draws after the burn-in, with Octave's uniform generator restored afterwards) and
+the normal draws, which the inverse-Wishart and matrix-normal draws of each VAR consume. At each
+parameter draw, `dsge_var_irf` draws `(Phi, Sigma)` from the posterior of
+`EstimationProblem.dsge_var_posterior`, redraws while the VAR is explosive, and rotates the
+Cholesky factor of `Sigma` by the `Q` of the QR decomposition of the model's impact matrix, as
+`PosteriorIRF_core1.m` does. Dynare draws `Sigma` with `floor((1 + lambda) T) - k` degrees of
+freedom, where `dsgelab` takes the posterior's `(1 + lambda) T - k`, and the comparison uses
+Dynare's through a subclass, with Dynare's `T`. The responses agree draw by draw, and so do the
+mean, median, variance, 90% HPD interval and deciles of `oo_.PosteriorIRF.bvardsge`. In the second
+file one VAR draw in a thousand was explosive and drawn again, in both programs. The numbers come
+from a run on 6 November 2026, with Dynare 7.2 and Octave 11.3.0.
 
 ## Process discretisation: Tauchen and Rouwenhorst
 
@@ -1245,6 +1352,100 @@ product of two Markov chains, and the cubic interpolant against SciPy's natural 
 numbers come from a run on 30 October 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on
 Python 3.12.
 
+## Improved time iteration and expectations iteration against dolo and the closed form
+
+```bash
+bash dolo/setup.sh                                 # as for time iteration
+dolo/.venv/bin/python dolo/run_dolo_iti.py         # about 90 seconds
+python compare_improved_time_iteration.py          # about 90 seconds
+```
+
+```
+1. dolo 0.4.9.20's improved_time_iteration, tolerance 1e-11
+ rbc (linear): dsgelab 0 + 9 Newton steps (0.90 s), time iteration 352; dolo 0 + 8 Newton steps, time iteration 352
+  ok   rbc, linear: against dolo at the grid points                3.37e-10  (limit 1e-08)
+  ok   rbc, linear: against dolo between them                      3.30e-10  (limit 1e-08)
+  ok   rbc, linear: against time iteration                         4.37e-11  (limit 1e-09)
+ rbc (cubic): dsgelab 0 + 9 Newton steps (2.85 s), time iteration 361; dolo 0 + 8 Newton steps, time iteration 361
+  ok   rbc, cubic: against dolo at the grid points                 3.72e-10  (limit 1e-08)
+  ok   rbc, cubic: against dolo between them                       3.68e-10  (limit 1e-08)
+  ok   rbc, cubic: against time iteration                          2.67e-11  (limit 1e-09)
+ consumption_savings (linear): dsgelab 40 + 4 Newton steps (0.07 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, linear: against dolo at the grid points  3.46e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against dolo between them      3.30e-12  (limit 1e-08)
+  ok   consumption_savings, linear: against time iteration         2.82e-12  (limit 1e-09)
+ consumption_savings (cubic): dsgelab 40 + 4 Newton steps (0.19 s), time iteration 114; dolo 40 + 4 Newton steps, time iteration 114
+  ok   consumption_savings, cubic: against dolo at the grid points  3.32e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against dolo between them       3.17e-12  (limit 1e-08)
+  ok   consumption_savings, cubic: against time iteration          2.85e-12  (limit 1e-09)
+ rbc_mc (linear): dsgelab 0 + 10 Newton steps (0.21 s), time iteration 351; dolo 0 + 11 Newton steps, time iteration 351
+  ok   rbc_mc, linear: against dolo at the grid points             1.96e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against dolo between them                   1.92e-10  (limit 1e-08)
+  ok   rbc_mc, linear: against time iteration                      3.56e-11  (limit 1e-09)
+ rbc_mc (cubic): dsgelab 0 + 10 Newton steps (0.87 s), time iteration 343; dolo 0 + 11 Newton steps, time iteration 343
+  ok   rbc_mc, cubic: against dolo at the grid points              1.70e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against dolo between them                    1.67e-10  (limit 1e-08)
+  ok   rbc_mc, cubic: against time iteration                       3.37e-11  (limit 1e-09)
+2. improved time iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, improved and time iteration: 4 and 17, 4 and 16, 4 and 17, 4 and 17; 1.02 s and 4.43 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              4.93e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, improved and time iteration: 4 and 17, 4 and 17, 4 and 17, 4 and 17; 1.40 s and 4.38 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               2.15e-12  (limit 1e-09)
+3. expectations iteration on stochastic growth, against the closed form
+  linear: largest relative error of c with 10, 20, 40, 80 capital points: 1.37e-03, 3.35e-04, 8.35e-05, 2.08e-05
+  linear: iterations, expectations and time iteration: 28 and 19, 29 and 19, 29 and 19, 29 and 19; 2.24 s and 6.46 s in all
+  ok   linear, 80 points: largest relative error of c              2.08e-05  (limit 3e-05)
+  ok   linear: error ratio when the spacing halves, distance from 4  9.26e-02  (limit 5e-01)
+  ok   linear: largest difference from time iteration              3.68e-12  (limit 1e-09)
+  cubic: largest relative error of c with 10, 20, 40, 80 capital points: 4.97e-04, 1.14e-04, 2.74e-05, 6.72e-06
+  cubic: iterations, expectations and time iteration: 26 and 19, 26 and 19, 26 and 19, 26 and 19; 2.43 s and 7.48 s in all
+  ok   cubic, 80 points: largest relative error of c               6.72e-06  (limit 1e-05)
+  ok   cubic: error ratio when the spacing halves, distance from 4  3.57e-01  (limit 5e-01)
+  ok   cubic: largest difference from time iteration               4.69e-12  (limit 1e-09)
+  without damping, the first steps move the policy by 6.3e-01, 8.9e-01, 1.5e+00, 2.0e+00, 3.7e+00
+
+all checks passed
+```
+
+`run_dolo_iti.py` solves the three models of the time-iteration comparison, on the same grids, with
+dolo 0.4.9.20's `improved_time_iteration`, and with its `time_iteration` from the same start for
+the iteration counts, and writes `out_time_iteration/dolo_iti.json`. `compare_improved_time_iteration.py`
+solves them with `dsgelab`'s `improved_time_iteration` from the same start. Both apply Newton's
+method to the conditions of every grid point at once, with the derivative through next period's
+policy. dolo solves each Newton step by a Neumann series in that derivative and `dsgelab` by
+GMRES, both preconditioned by the blocks of the derivative with next period's policy held fixed.
+dolo stops when the largest residual is below 1e-11, and `dsgelab` when a step moves no control by
+more than 1e-11, so the policies agree within 3.7e-10 relative to the largest control, and
+`dsgelab`'s agrees with its own time iteration run to 1e-12 within 4.4e-11. The Newton steps
+number 4 to 10, where time iteration takes 114 to 361 iterations from the same start.
+
+On `rbc` and `rbc_mc` both routines start from the controls of dolo's calibration, a constant
+policy. On `consumption_savings`, as published, dolo's routine does not converge from the
+calibration within its 1000 steps, and from `c = min(w, 1)` it takes 899 steps with linear
+interpolation and does not converge with cubic. `run_dolo_iti.py` therefore starts it from its
+own time iteration stopped at a tolerance of 1e-3, 40 iterations from `min(w, 1)`, and
+`dsgelab` starts in the same way. dolo is not edited, and the starting policies are passed as
+`dr0`. From `min(w, 1)` directly, `dsgelab`'s routine takes 9 steps on this grid.
+
+The second part repeats the closed-form check of the time-iteration comparison with improved time
+iteration, which takes 4 Newton steps on every grid where time iteration takes 16 or 17. The third
+solves the same model with the expectation in the Euler equation declared as the jump `z`, by
+`expectations_iteration`. dolo's documentation describes this iteration, as parameterized
+expectations for its `fgh` models, and dolo 0.4.9.20 has no code for it, so the references are
+the closed form and time iteration on the same grid. Both methods reproduce time iteration's
+policy within 1e-11 and the closed form's errors to the digits printed. Expectations iteration
+takes 26 to 29 iterations where time iteration takes 19, and a third of the time, because no
+integral is evaluated inside the solve for the controls. Without damping it diverges, as its
+docstring explains: a change in consumption moves the next update by about
+`-(1 - alpha beta) / (alpha beta)`, -1.8, times as much. The numbers come from a run on
+6 November 2026, with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.13.
+
 ## Value function iteration against QuantEcon and dolo
 
 ```bash
@@ -1276,6 +1477,15 @@ python compare_value_iteration.py             # about 25 seconds; needs quanteco
   cubic: largest error of V at the grid points with 10, 20, 40, 80 capital points: 1.55e-04, 1.12e-06, 6.11e-08, 3.19e-09
   ok   cubic, 80 points: largest error of V                        3.19e-09  (limit 1e-08)
   ok   cubic: smallest error ratio when the spacing halves            18.32  (at least 3)
+4. three capital stocks on Smolyak grids, against the closed form
+  level  nodes  iterations   V at nodes   V off the grid   policy    seconds
+      1      7          11     1.58e-02         1.78e-02  5.29e-03       0.7
+      2     25          11     2.70e-04         3.02e-04  1.50e-04       6.2
+      3     69          11     6.41e-08         7.32e-08  8.89e-08      14.9
+  ok   level 3: largest error of V at the nodes                    6.41e-08  (limit 2e-07)
+  ok   level 3: largest error of V at 600 random points            7.32e-08  (limit 2e-07)
+  ok   level 3: largest error of the saving shares                 8.89e-08  (limit 2e-07)
+  ok   smallest error ratio of V from one level to the next           58.31  (at least 30)
 
 all checks passed
 ```
@@ -1321,6 +1531,14 @@ with a shock integrated by Gauss–Hermite on a two-dimensional grid, a closed f
 two controls, which exercises the projected Newton method, and the discrete-choice problem against
 an exact policy iteration written in the test. The numbers come from a run on 31 October 2026,
 with dolo 0.4.9.20 on Python 3.11 and `dsgelab` on Python 3.12.
+
+The fourth part puts the closed form on a `SmolyakGrid`. With three capital stocks,
+`c + k_1' + k_2' + k_3' = z k_1^a_1 k_2^a_2 k_3^a_3`, and the shares of output saved in each stock as
+the controls, the policy is `s_j = beta a_j` and the value is `sum_j b_j log k_j + h(z)`, with
+`b_j = a_j / (1 - beta sum a)`. The three controls go through the projected Newton method. The
+value is a polynomial of the capital stocks on the grid and a sum of logarithms in the closed
+form, so its error falls with the level as the Chebyshev approximation of a logarithm does: by 58
+from level 1 to 2 and by 4200 from level 2 to 3. Section 4 ran on 5 November 2026, on Python 3.13.
 
 ## The endogenous grid method against dolo, time iteration and the closed form
 
@@ -1549,8 +1767,8 @@ and 31 by time iteration, and the anisotropic one 13 and 30.
 
 ```bash
 bash sequence_jacobian/setup.sh                                  # if not run already
-sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 45 seconds
-python compare_heterogeneous.py                                  # about 40 seconds
+sequence_jacobian/.venv/bin/python sequence_jacobian/run_ssj.py  # about 2 minutes
+python compare_heterogeneous.py                                  # about 2 minutes
 ```
 
 ```
@@ -1567,7 +1785,7 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
   ok   linear impulse responses to Z (largest: A)                    4.13e-11  (limit 1e-07)
   ok   nonlinear transition after Z (largest: K)                     1.84e-10  (limit 1e-08)
   ok   household Jacobians, central differences (largest: A/r)       2.24e-10  (limit 1e-07)
-       seconds, dsgelab / sequence-jacobian: steady state 20.1 / 2.8, household Jacobians 1.7 / 1.5, G 1.2 / 2.6, nonlinear 3.4 / 5.8
+       seconds, dsgelab / sequence-jacobian: steady state 2.8 / 2.8, household Jacobians 0.3 / 2.0, G 0.4 / 2.6, nonlinear 1.3 / 7.8
 2. One-asset HANK (hank.ipynb), 7 income states by 500 asset points
   ok   grids and income chain (largest: e_grid)                      4.30e-10  (limit 1e-09)
   ok   steady state: unknowns (largest: vphi)                        1.84e-10  (limit 1e-09)
@@ -1580,24 +1798,63 @@ sequence-jacobian 1.0.0 (numpy 1.26.4, numba 0.68.1), T = 300
   ok   linear impulse responses to rstar (largest: w)                9.73e-11  (limit 1e-07)
   ok   nonlinear transition after rstar (largest: w)                 1.37e-10  (limit 1e-08)
   ok   household Jacobians, central differences (largest: A/r)       2.45e-10  (limit 1e-07)
-       seconds, dsgelab / sequence-jacobian: steady state 25.1 / 5.8, household Jacobians 4.7 / 6.0, G 6.0 / 8.9, nonlinear 18.4 / 12.4
-3. dsgelab against itself
+       seconds, dsgelab / sequence-jacobian: steady state 5.5 / 6.6, household Jacobians 1.4 / 4.0, G 1.5 / 6.6, nonlinear 3.3 / 14.3
+3. Labor search (labor_search.ipynb), 2 employment states by 5 productivity states by 100 asset points, with the Markov matrix moved by f and s
+  ok   grids, income and the employment chain (largest: y)           1.78e-10  (limit 1e-09)
+  ok   Markov matrix: Kronecker product of sequence-jacobian's two   0.00e+00  (limit 1e-09)
+  ok   steady state: policies (largest: Va)                          3.61e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    8.06e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: B)                         4.14e-10  (limit 1e-09)
+  ok   household Jacobians, forward differences (largest: A/r)       2.87e-10  (limit 1e-07)
+  ok   household's linear response to s, the notebook's (largest: A)  2.19e-10  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: r/s)                8.23e-11  (limit 1e-07)
+  ok   linear impulse responses to s (largest: C)                    4.37e-11  (limit 1e-07)
+  ok   nonlinear transition after s (largest: C)                     6.75e-11  (limit 1e-08)
+  ok   household Jacobians, central differences (largest: A/r)       2.89e-10  (limit 1e-07)
+  ok   distribution of the steady state with s = 0.12, relative to its largest mass  5.83e-10  (limit 1e-07)
+  ok   transition from the distribution with s = 0.12 (largest: r)   5.99e-10  (limit 1e-08)
+       seconds, dsgelab / sequence-jacobian: steady state 0.2 / 0.4, household Jacobians 0.8 / 2.1, G 0.9 / 3.0, nonlinear 2.0 / 7.0
+4. Two-asset HANK (two_asset.ipynb), 3 income states by 50 liquid by 70 illiquid points
+  ok   grids and income chain (largest: Psi1)                        3.50e-10  (limit 1e-09)
+  ok   steady state: unknowns (largest: chi1)                        3.50e-10  (limit 1e-09)
+  ok   steady state: policies (largest: chi)                         2.07e-10  (limit 1e-09)
+  ok   steady state: distribution D, relative to its largest mass    9.90e-10  (limit 1e-07)
+  ok   steady state: aggregates (largest: CHI)                       1.71e-10  (limit 1e-09)
+       marginal values Va and Vb, where each package's backward iteration stopped: 3.7e-10 (Vb)
+       goods market (Walras), at asset market clearing: dsgelab -7.2e-14, sequence-jacobian -3.3e-11
+  ok   household Jacobians, forward differences (largest: A/N)       1.23e-09  (limit 1e-07)
+  ok   general-equilibrium Jacobians G (largest: K/Z)                1.31e-02  (limit 2e-02)
+  ok   G K/Z, first eight entries against direct sequence-jacobian   1.35e-03  (limit 2e-03)
+  ok   linear impulse responses to rstar (largest: K)                1.44e-04  (limit 2e-04)
+  ok   nonlinear transition after rstar (largest: A)                 1.94e-08  (limit 2e-08)
+  ok   household Jacobians, central differences (largest: A/ra)      5.13e-04  (limit 1e-03)
+  ok   household A/ra at (299, 299) against direct sequence-jacobian  7.61e-05  (limit 1e-04)
+       seconds, dsgelab / sequence-jacobian: steady state 23.1 / 10.2, household Jacobians 6.2 / 2.4, G 6.4 / 12.6, nonlinear 15.9 / 8.7
+5. dsgelab against itself
        Krusell-Smith household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.4e-07, 2.7e-09, 3.2e-08
   ok   Krusell-Smith household: fake news against direct, step 1e-07  3.25e-08  (limit 1e-07)
        HANK household: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.5e-06, 6.7e-07, 4.1e-08
   ok   HANK household: fake news against direct, step 1e-07          4.08e-08  (limit 1e-07)
        Krusell-Smith, largest gap between the nonlinear and the linear response, for shocks of 1, 0.1, 0.01 per cent: 4.41e-05, 4.51e-07, 3.97e-09
   ok   Krusell-Smith: smallest ratio of the gaps, shock / 10            97.90  (at least 90)
+       labor-search household (moving Markov): fake news against direct, 10 columns, steps 1e-03, 1e-04, 1e-05: 1.5e-05, 2.3e-09, 1.6e-09
+  ok   labor-search household (moving Markov): fake news against direct, step 1e-05  1.64e-09  (limit 1e-07)
+       labor search, largest gap between the nonlinear and the linear response, for shocks to s of 1, 0.1, 0.01 points: 1.01e-04, 1.02e-06, 1.02e-08
+  ok   labor search: smallest ratio of the gaps, shock / 10             99.38  (at least 90)
+  ok   labor search: path from an initial distribution against forward simulation  3.07e-13  (limit 1e-12)
+       two-asset household, 3 by 15 by 20: fake news against direct, 10 columns, steps 1e-05, 1e-06, 1e-07: 1.3e-08, 3.7e-08, 4.3e-07
+  ok   two-asset household, 3 by 15 by 20: fake news against direct, step 1e-05  1.27e-08  (limit 1e-07)
 
 all checks passed
 ```
 
-The two models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb` and
-`notebooks/hank.ipynb` at its v1.0.0 tag, which `setup.sh` downloads and checks against their
-sha256 sums. `run_ssj.py` copies the model code from the notebooks and checks that each piece
-appears in them verbatim before running it. The household of the HANK model is
-`hetblocks.hh_labor.hh`, part of the package. `compare_heterogeneous.py` writes the same models
-for `dsgelab`, with the same calibration, unknowns and targets, the household's endogenous grid
+The four models are sequence-jacobian's own, from `notebooks/krusell_smith.ipynb`,
+`notebooks/hank.ipynb`, `notebooks/labor_search.ipynb` and `notebooks/two_asset.ipynb` at its
+v1.0.0 tag, which `setup.sh` downloads and checks against their sha256 sums. `run_ssj.py` copies
+the model code from the notebooks and checks that each piece appears in them verbatim before
+running it. The households of the HANK models are `hetblocks.hh_labor.hh` and
+`hetblocks.hh_twoasset.hh`, part of the package. `compare_heterogeneous.py` writes the same models
+for `dsgelab`, with the same calibration, unknowns and targets, the households' endogenous grid
 method again in numpy, and the constrained households' labour supply solved by the same Newton
 iteration on `log u'(c)`. Three settings differ from the notebooks. In both packages the
 household's backward iteration stops when the policy moves by less than 1e-12, where
@@ -1609,7 +1866,7 @@ states would differ by the tolerance, some 1e-7 in the policies, and hide the co
 The grids differ by 4.3e-10. sequence-jacobian computes the income chain's stationary distribution
 by iterating to 1e-11, and `dsgelab` by GTH elimination, which is exact to rounding. The
 normalisation of income to a mean of one carries that difference to every node. Everything else
-agrees within 7.6e-10, relative to the largest value compared. The goods market, which neither
+agrees within 9.9e-10, relative to the largest value compared. The goods market, which neither
 model targets, clears to 1.9e-13 and 1.2e-14 in `dsgelab`, against 7.6e-11 and 1.1e-11 in
 sequence-jacobian, whose distribution stops at its tolerance.
 
@@ -1622,21 +1879,53 @@ in general equilibrium, such as assets in the HANK model, where the asset market
 supply of bonds. The differences in each group are therefore taken relative to the largest value
 in the group.
 
-Section 3 checks the fake-news algorithm against brute force, the nonlinear path differentiated
+Section 3 is the model whose Markov matrix moves along a path. `labor_search.ipynb` is
+sequence-jacobian's tutorial on that feature: the household's employment status follows a
+two-state chain whose matrix is a hetinput of the job-finding rate `f` and the separation rate
+`s`, beside a productivity chain of 5 nodes, on 100 asset points. sequence-jacobian keeps the two
+chains on two axes, and `dsgelab` on one chain of 10 nodes whose matrix is their Kronecker product,
+which agrees exactly with the product of sequence-jacobian's two. The notebook stops at the
+household, with its linear response to `s`. `run_ssj.py` adds the smallest general equilibrium,
+which is not in the notebook and is written identically in both packages: a fixed supply of bonds
+equal to the household's assets at the notebook's steady state, the interest rate as the unknown
+and the bond market as the target, and a shock to `s` of 0.02 0.8^t. The closure has no lags, so
+that a transition from another steady state's distribution, sequence-jacobian's `ss_initial` and
+`dsgelab`'s `initial`, moves only the household. The steady state agrees within 8.1e-10, the
+household Jacobians with respect to `f`, `s`, `r` and `w` within 2.9e-10, `G` within 8.3e-11, the
+linear and nonlinear responses within 2.2e-10, and the return to the steady state from the
+distribution with `s = 0.12` within 6.0e-10.
+
+Section 4 is the two-asset HANK of Auclert, Bardóczy, Rognlie and Straub (2021), with a liquid
+and an illiquid asset and a convex adjustment cost, on 3 income states by 50 liquid by 70
+illiquid points. The two-dimensional lottery is the product of the two one-dimensional lotteries.
+The policies, distribution and aggregates agree within 9.9e-10, the forward household Jacobians
+within 1.23e-9 and the nonlinear transition within 1.94e-8. The packages' full linear
+approximations of `G` differ by 1.31e-2, and the linear responses by 1.44e-4. Selected entries
+therefore also use derivatives through sequence-jacobian's nonlinear transition: the first eight
+`K/Z` entries agree within 1.35e-3, and `A/ra` at `(299, 299)` within 7.61e-5. Those direct
+checks distinguish the difference between the linear approximations from an error in the
+nonlinear model, whose paths agree.
+
+Section 5 checks the fake-news algorithm against brute force, the nonlinear path differentiated
 for a shock at each of ten dates, both by central differences with the same step. The two are
 different finite differences of the same derivative, and the policy has kinks where the borrowing
 limit starts to bind and at every grid point. Their gap falls with the step, to 3e-8 and 4e-8 at
-1e-7, below which rounding takes over. In Krusell–Smith, the gap between the nonlinear transition
-and the linear response falls by 98 and by 114 each time the shock falls by ten, as the square of
-the shock. The test suite checks the same on a grid of 3 by 40 points, together with Walras's law
-along the path, the stationarity of the distribution, the simple blocks' exact Jacobians and a
-solved block against the closed form of a forward-looking equation.
+1e-7, below which rounding takes over. For the labor-search household, with respect to `f` and
+`s`, the gap is 1.6e-9 at 1e-5 and rises to 1.7e-8 and 1.6e-7 at 1e-6 and 1e-7, where rounding
+takes over sooner. The two-asset check uses 3 by 15 by 20 points and agrees within 1.27e-8 at
+1e-5; a coarser grid makes consumption invalid at some points during the backward iteration. In
+Krusell–Smith and in labor search, the gap between the nonlinear transition and the linear
+response falls by at least 98 each time the shock falls by ten, as the square of the shock. The
+household's path from the distribution with `s = 0.12`, at the steady state's prices, agrees
+within 3.1e-13 with the steady state's transition matrix applied for 300 periods. The test suite
+checks the same on a grid of 3 by 40 points, the two-asset distribution and fake-news Jacobian on
+2 by 3 by 3 points, Walras's law along the path, the stationarity of the distribution, the simple
+blocks' exact Jacobians and a solved block against the closed form of a forward-looking equation.
 
-`dsgelab` has no numba, and its times depend on the load of the machine. These come from a run
-with other jobs on it. On an idle machine the steady states took 1.8 and 4.4 seconds, the
-household Jacobians 0.3 and 1.5, `G` 0.3 and 1.4, and the nonlinear transitions 1.0 and 3.4. The
-numbers come from a run on 5 November 2026, with sequence-jacobian 1.0.0 on Python 3.11 and
-`dsgelab` on Python 3.13.
+`dsgelab` has no numba, and its times depend on the load of the machine. The numbers of sections
+1 to 3 come from a run on 6 November 2026, and those of sections 4 and 5 from 8 November, with
+sequence-jacobian 1.0.0 on Python 3.11 and `dsgelab` on Python 3.13. The differences of sections
+1 and 2 are those of the first run, on 5 November.
 
 ## Markov regime switching: published solutions, statsmodels and the exact likelihood
 
@@ -1692,6 +1981,7 @@ python compare_switching.py                   # about 20 seconds
 3. Foerster et al. (2016), section 5: phi(s) pi_t + sigma(s) eps_t = E_t pi_{t+1}
   pi_t = -0.080000 eps_t in regime 1, -0.625000 in regime 2 (printed -0.08 and -0.625)
   ok   solution minus -sigma/phi                                       1.39e-17  (limit 1e-14)
+  ok   second-order terms (Proposition 3: zero)                        0.00e+00  (limit 1e-10)
   with the lag of inflation as a state, coefficients on it: (0.0000, 0.0000) radius 0.000; (-0.0000, 1.1294) radius 1.084; (1.2681, 0.9056) radius 1.539; (1.3158, -0.0000) radius 1.645
   ok   solutions found minus four                                      0.00e+00  (limit 0e+00)
   ok   stable solutions found minus one                                0.00e+00  (limit 0e+00)
@@ -1703,6 +1993,50 @@ python compare_switching.py                   # about 20 seconds
 5. Identical regimes: the Klein solution of the constant-parameter model
   ok   rbc: F, P, Q minus Klein's, and constants                       1.78e-15  (limit 1e-13)
   ok   nk3: F, P, Q minus Klein's, and constants                       4.44e-16  (limit 1e-13)
+
+6. Foerster et al. (2016), Markov-switching RBC: printed second-order coefficients
+  residual of the second-order conditions 4.9e-17
+  ok   law of motion of k, second order: next regime 1 minus next regime 2  0.00e+00  (limit 1e-15)
+  regime 1, rows (k,k) (k,z) (k,eps) (k,1) (z,z) (z,eps) (z,1) (eps,eps) (eps,1) (1,1), columns c, k, z:
+     -0.000921  -0.000335   0.000000
+      0.002195  -0.095672   0.000000
+      0.000159  -0.006937   0.000000
+     -0.000417  -0.016844   0.000000
+     -0.117336   2.336394  -0.089369
+      0.000599   0.015284   0.000720
+      0.000777   0.037355   0.001833
+      0.000043   0.001108   0.000052
+      0.000056   0.002708   0.000133
+     -0.049467   0.055734   0.000338
+  regime 2, rows (k,k) (k,z) (k,eps) (k,1) (z,z) (z,eps) (z,1) (eps,eps) (eps,1) (1,1), columns c, k, z:
+     -0.000921  -0.000335   0.000000
+      0.000000   0.000000   0.000000
+      0.000465  -0.020799   0.000000
+     -0.002138   0.040474   0.000000
+      0.000000   0.000000   0.000000
+      0.000000   0.000000   0.000000
+     -0.000000  -0.000000  -0.000000
+      0.000373   0.009964   0.000470
+     -0.001176  -0.019310  -0.000886
+     -0.046740   0.086896   0.001671
+       96 printed entries, largest |computed - printed| 0.48 of a unit of the fourth decimal
+  ok   96 coefficients rounded to four decimals minus printed          0.00e+00  (limit 1e-12)
+
+7. Identical regimes at second order: solve_second_order, validated against Dynare
+  ok   rbc: g_kk, h_kk, h_ku, h_uu, g_ss, h_ss minus solve_second_order's  7.88e-15  (limit 1e-13)
+  ok   rbc: terms in (k, chi) and (eps, chi)                           0.00e+00  (limit 1e-13)
+  ok   rbc: ergodic mean minus solve_second_order's                    1.67e-13  (limit 1e-12)
+  ok   nk3: g_kk, h_kk, h_ku, h_uu, g_ss, h_ss minus solve_second_order's  0.00e+00  (limit 1e-13)
+  ok   nk3: terms in (k, chi) and (eps, chi)                           0.00e+00  (limit 1e-13)
+  ok   nk3: ergodic mean minus solve_second_order's                    0.00e+00  (limit 1e-12)
+
+8. Log utility and full depreciation: k' = alpha beta y and c = (1 - alpha beta) y
+  perturbed ['A']; in proportional deviations, with d = A(s)/Abar - 1,
+  1 + y = (1 + chi d)(1 + z)(1 + k)^alpha and 1 + z' = (1 + z)^rho(s') exp(sigma(s') eps)
+       c in regime 1: g_kk [[-0.2211, 0.33], [0.33, -0.0]], g_ks [0.01082, 0.032787] (alpha = 0.33)
+  ok   every second-order coefficient minus the closed form            1.27e-10  (limit 1e-09)
+       mean of c given each regime: closed form [ 0.043492 -0.083583], 100000 simulated periods [0.043291, -0.084135]
+  ok   conditional mean of c, simulated minus closed form, in s.d. of c  7.50e-03  (limit 5e-02)
 
 all checks passed
 ```
@@ -1726,6 +2060,15 @@ substitutes the law of motion of `z_t` into the solution. The printed values are
 decimals (0.018459 is printed as 0.0184, 0.12648 as 0.1264), and 23 of the 24 then agree exactly.
 The constant of consumption in regime 1, printed to six decimals as 0.000049, is 0.0000459 here.
 Complex Newton finds the four solutions the paper reports, one stable.
+
+The second-order comparison makes the same change of coordinates and uses the paper's convention
+`1/2 H [w kron w]`. All 96 printed coefficients agree once rounded to four decimals; the largest
+difference before rounding is 0.48 of a unit of the fourth decimal, and the residual of the
+second-order conditions is 4.9e-17. With identical regimes, all second-order blocks agree with
+`solve_second_order` within 7.88e-15. Stochastic growth with log utility and full depreciation
+adds a closed form with switching productivity, persistence and volatility: every coefficient
+agrees within 1.27e-10, and the regime-conditional means from 100,000 simulated periods agree
+with the closed-form means within 0.0075 standard deviations of consumption.
 
 ```bash
 python compare_kim.py --prepare               # simulates the series, writes out_kim/input.json

@@ -194,6 +194,7 @@ Completed in version 0.4.0, on 11 October 2026.
   `var(log_deflator=)` are detrended as Dynare does, with the balanced-growth check.
   `balanced_growth` solves the `+bgp` problem, with residuals equal to Dynare's to 2.2e-16.
   *Declaring trends in `from_equations` is still missing, and for now the route is the `.mod`.*
+  (Added in 0.10.)
 - [x] **Model diagnostics** (`diagnose`), Dynare's `model_diagnostics`, with the same report.
 
 ### 0.5 — public release (released on 18 October 2026)
@@ -308,19 +309,19 @@ warning that lasts at least one minor version. The public API is what is in `__a
   and a joint HAC covariance; on simulated AR(1) data it recovers the model's IRFs in population
   (Plagborg-Møller and Wolf, 2021). Bayesian IRF matching and MATLAB transformation files are
   left out; Python transformations are accepted explicitly.
-- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window,
-  RMSE against a random walk, the Diebold–Mariano test, and the probability integral transform
-  and coverage of the predictive density. The references are the forecast comparisons of Smets
-  and Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR waits
-  on the BVAR of 0.9. `forecast_evaluation` re-estimates at each origin over an expanding or a
-  rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random walk's,
-  `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and the
-  log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
-  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands
-  within `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as
-  Dynare's and lies within `0.003` posterior standard deviations of it. The test agrees with R's
-  `forecast::dm.test` within `3.1e-15` in 48 cases. The predictive density is conditional on the
-  point estimate, as Dynare's after the mode; parameter uncertainty at every origin is left out.
+- [x] **Out-of-sample forecast evaluation**: recursive estimation over an expanding window, RMSE
+  against a random walk, the Diebold–Mariano test, and the probability integral transform and
+  coverage of the predictive density. The references are the forecast comparisons of Smets and
+  Wouters (2007) and of Del Negro and Schorfheide (2013). The comparison with a BVAR, which waited
+  on the BVAR of 0.9, came in 0.10. `forecast_evaluation` re-estimates at each origin over an
+  expanding or a rolling window, and `ForecastEvaluation` gives the RMSE, its ratio to the random
+  walk's, `diebold_mariano` with the Harvey–Leybourne–Newbold correction, the PIT, the coverage and
+  the log score. Validated against Dynare 7.2's recursive estimation of `fs2000` over nine samples
+  (30 October 2026): at Dynare's modes the forecasts agree within `2.6e-15` and the 90% bands within
+  `6.3e-9`. Re-estimated by `dsgelab`, every mode has a kernel at least as high as Dynare's and lies
+  within `0.003` posterior standard deviations of it. The test agrees with R's `forecast::dm.test`
+  within `3.1e-15` in 48 cases. The predictive density is conditional on the point estimate, as
+  Dynare's after the mode; parameter uncertainty at every origin is left out.
 - [x] **Calibration restrictions on IRFs and moments** (`irf_calibration`, `moment_calibration`),
   with `check_restrictions` at one point and `sample_restrictions` over draws from the prior, and
   the `.mod` blocks read by `from_mod`. Validated against Dynare 7.2 on its
@@ -545,7 +546,8 @@ MacroModelling.jl.
   autocorrelations within 3e-15, the `mode_check` kernels within 6e-11 where the prior is bounded,
   and the posterior IRFs on Dynare's 1,200 parameter draws within 3e-10 of the largest response.
   The identification-strength bars, which need the information matrix, the annualised and vintage
-  shock decompositions and the bands of conditional forecasts are left out.
+  shock decompositions and the bands of conditional forecasts were left out, and came in 0.10
+  (below).
 - [x] **BVAR and DSGE-VAR**, checked against Dynare's `+bvar` and `dsge_var`. `bvar` and
   `bvar_density` build the VAR with the Sims–Zha (1998) dummy-observation prior as Dynare's
   `bvar_density` does, with its hyperparameters and training sample, and `BVAR.forecast` draws
@@ -562,13 +564,101 @@ MacroModelling.jl.
   plus its 4 initial observations. `dsgelab`'s `T` is the number of rows, the one under which
   the likelihood equals the product of the VAR's one-step predictive densities, a check in the
   suite. With it the mode moves by up to 0.39 posterior standard deviations, and the estimated
-  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) are
-  left out.
+  `lambda` from 0.533 to 0.568. The IRFs of `bvar_irf` and of the DSGE-VAR (`bayesian_irf`) were
+  left out, and came in 0.10.
+
+### 0.10 — the gaps 0.9 left, and the audit before the freeze
+
+Planned on 5 November 2026, after 0.9.0. Each item comes from a limitation that the documentation
+of 0.9.0 records, and each keeps the six conditions above.
+
+- [x] **`value_iteration` on a `SmolyakGrid`**, as `solve_projection` and `time_iteration` already
+  take one, with the value and the policy interpolated by the grid's polynomial. On stochastic
+  growth with three capital stocks, log utility and full depreciation, with the saving shares as
+  three controls, the value agrees with the closed form within 6.4e-8 at the 69 nodes of level 3
+  and 7.3e-8 at 600 random points of the box, and its error falls by at least 58 from one level to
+  the next (5 November 2026).
+- [x] **The BVAR in forecast evaluation, and the IRFs of the BVAR and of the DSGE-VAR.**
+  `forecast_evaluation(bvar_lags=...)` re-estimates a BVAR at each origin on the model's window,
+  which closes the note in the 0.6 item, and `rmse`, `relative_rmse` and `diebold_mariano` take
+  `benchmark="bvar"`. On Dynare 7.2's `bvar_and_dsge.mod`, at four origins on an expanding and a
+  rolling window, its errors 1 to 4 steps ahead agree within 1.6e-16 with those of Dynare's
+  `bvar.toolbox` on the same windows. `BVAR.irf` is `bvar_irf` and `dsge_var_irf` is
+  `bayesian_irf` with `dsge_var`, both with the statistics of `posterior_irf`. With the normal
+  draws Octave took, `bvar_irf`'s 1000 sampled responses agree within 1.9e-15 of the largest
+  response with `SquareRoot` and within 9.5e-16 with `Cholesky`, and the DSGE-VAR's, on the 1000
+  parameter draws of `tests/dsge-var`, within 1.1e-13 (6 November 2026). Dynare 7.2 takes the rows
+  of the Cholesky factor `L` as the impulses, whose covariance is `L'L` rather than `Sigma`.
+  `BVAR.irf` takes its columns, and matches Dynare with the upper factor as its identification.
+- [x] **Expectations iteration and improved time iteration**, the global methods dolo has and
+  `dsgelab` did not. `improved_time_iteration` applies Newton's method to the conditions of every
+  grid point at once, on the declaration and grids of `time_iteration`. Against dolo 0.4.9.20's
+  `improved_time_iteration` on its RBC, its Markov RBC and its consumption–savings model, with
+  linear and cubic interpolation, the policies agree within 3.7e-10, in 4 to 10 Newton steps
+  where time iteration takes 114 to 361 iterations, and within 4.4e-11 of time iteration's fixed
+  point. On the consumption–savings model both start from time iteration stopped at 1e-3, because
+  dolo's does not converge from its calibration. `expectations_iteration` iterates on the
+  expectations of the Euler equations, declared as jumps. dolo documents it, as parameterized
+  expectations, and does not implement it. On stochastic growth with log utility and full
+  depreciation it agrees with time iteration within 5e-12 and has the closed form's errors, in a
+  third of time iteration's time, with a damping of 0.5, without which it diverges (6 November
+  2026).
+- [x] **The figures left out in 0.9**: identification strength and sensitivity, from the
+  information matrix, the annualised and vintage shock decompositions, and bands for conditional
+  forecasts. Reference: Dynare's `identification`, `shock_decomposition` and
+  `conditional_forecast`. On `fs2000.mod` at the prior mean, on the 300 observations Dynare
+  simulates for its information matrix, the matrix agrees with Dynare's within 1.2e-8 of the root
+  of its diagonal and the strength and sensitivity measures within 2.7e-7. The real-time pools,
+  the forecast and conditional vintages, the `yoy` and `aoa` decompositions and the initial
+  condition decomposition agree within 2e-14, and the conditional forecast with its 80% bands,
+  on Dynare's 2,000 draws, within 7e-15. Dynare's `q2a` annualisation and the sensitivity bars of
+  its reduced form and dynamic model are left out (6 November 2026).
+- [x] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
+  `deflator`. Reference: Dynare, as for the balanced growth path of 0.4. `from_equations` takes
+  `trend_vars`, `log_trend_vars`, `deflators` and `log_deflators`, with Dynare's detrending and
+  balanced-growth check. On Solow and Ramsey from `tests/bgp`, with their trends declared, and on
+  `tests/trend_var/fs2000_nonstationary.mod`, the steady state agrees with Dynare's within
+  3.4e-14, the IRFs within 9.7e-14 of each variable's largest response, the paths under the same
+  200 shocks within 8.2e-14 and the variance matrix within 7.8e-14 of its largest entry. Against
+  `from_mod` on the same `.mod` the largest difference is 1.4e-13 (6 November 2026).
+- [x] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
+  Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
+  in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
+  along a transition path.
+  - [x] *Regime switching at second order* (8 November 2026), by
+    `solve_second_order_switching` and `solve_markov_switching(..., order=2)`. The validation
+    reproduces all 96 second-order coefficients that Foerster et al. (2016) print for their RBC
+    once rounded to four decimals, with the largest difference 0.48 of a unit of the fourth
+    decimal. Identical regimes agree with `solve_second_order` within 7.9e-15, and stochastic
+    growth with log utility, full depreciation and switching productivity, persistence and
+    volatility agrees with the closed form within 1.3e-10. Simulation is pruned by default.
+  - [x] *Two assets in heterogeneous agents* (8 November 2026), with `policy` and `grid` taking
+    two names and the distribution moved by the product of the two lotteries. On
+    sequence-jacobian 1.0.0's `two_asset.ipynb`, on 3 by 50 by 70 points, the steady state agrees
+    within 9.9e-10, the forward household Jacobians within 1.3e-9 and the nonlinear transition
+    within 1.9e-8. Selected `G` entries agree with its direct nonlinear transition within 1.4e-3,
+    and fake news agrees with direct differentiation on a smaller grid within 1.3e-8.
+  - [x] *The Markov matrix that moves along a path* (6 November 2026), with transitions from a
+    given distribution (`initial`). On the household of sequence-jacobian 1.0.0's
+    `labor_search.ipynb`, whose employment chain moves with the job-finding and separation rates,
+    closed by a bond market, the steady state agrees within 8.1e-10, the Jacobians within 2.9e-10,
+    `G` within 8.3e-11, the linear and nonlinear responses within 2.2e-10 and the return from
+    another steady state's distribution within 6.0e-10. The fake-news Jacobians agree with the
+    brute-force ones within 1.6e-9. The asset grid stays fixed along a path.
+- [x] **API audit before the freeze.** The 237 top-level exports in `__all__` are unique and
+  defined, and the names, argument orders and defaults are consistent across modules. Every change
+  comes with a deprecation warning that lasts at least one minor version, as the version policy of
+  0.5 requires, so the audit is published before 1.0.
+  - [x] *Iteration limits use `max_iter`* (8 November 2026), in `calibrate`, `perfect_foresight`,
+    `extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`. The
+    older `maxiter` remains accepted as a deprecated alias with the same defaults, and passing
+    both names raises `ValueError`.
 
 ### 1.0
 
-Everything in the list above is covered, the API is frozen, and from then on versioning is strictly
-semantic.
+Everything in the list above is covered. The `1.0.0rc1` release candidate is prepared, and the API
+is frozen for the release-candidate process. The final 1.0 release has not been published;
+versioning is strictly semantic from 1.0 on.
 
 ## Integration with `cgelab`
 

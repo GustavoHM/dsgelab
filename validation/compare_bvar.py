@@ -8,6 +8,19 @@
         without shocks, draw by draw. dsgelab takes the same normal draws as Dynare, which
         run_bvar.sh saves from Octave's generator, so the paths can agree to rounding. The share
         of explosive draws and the 60% bands follow from the paths.
+     c. bvar_irf(2, 'Cholesky') and bvar_irf(2, 'SquareRoot') in bvar_standalone.mod, 1000 draws
+        of 40 periods with the normal draws Octave took: the sampled responses draw by draw, and
+        the Mean, Median, Var, Upper_bound and Lower_bound of oo_.bvar.irf. Dynare 7.2 takes the
+        rows of the impact matrix as the impulses and names the fields of oo_.bvar.irf shock
+        first. With SquareRoot the matrix is symmetric, and BVAR.irf is compared as it is. With
+        Cholesky, Dynare's impulses are the rows of the lower factor L, whose covariance is L'L
+        rather than Sigma, and BVAR.irf reproduces them with the upper factor L' as its
+        identification. The script reports how far the responses to the columns of L, which
+        BVAR.irf takes by default, lie from Dynare's.
+     d. The BVAR benchmark of forecast_evaluation, in bvar_and_dsge.mod: a BVAR(2) re-estimated at
+        origins 100, 130, 160 and 190 (counted from first_obs = 20) on an expanding and on a
+        60-observation rolling window, against bvar.toolbox on the same windows and the
+        recursion of bvar.forecast at PhiHat, 1 to 4 steps ahead.
   2. DSGE-VAR, on Dynare's tests/dsge-var (dsgevar_forward_calibrated_lambda.mod, lambda = 0.8,
      and dsgevar_forward_estimated_lambda.mod, lambda estimated), read by from_mod.
      a. The log posterior kernel and the log prior at the prior mean, at the mode and at perturbed
@@ -16,6 +29,11 @@
      b. The posterior mode found by dsgelab from Dynare's starting point: the kernel has to be at
         least Dynare's, and the parameters within 5% of a posterior standard deviation. The
         Laplace approximation at Dynare's mode with Dynare's inverse Hessian.
+     c. The DSGE-VAR's posterior IRFs (bayesian_irf), on the 1000 parameter draws PosteriorIRF
+        took from the 2000 of Metropolis and with the normal draws Octave took: the sampled
+        responses draw by draw, and the Mean, Median, Var, HPDinf, HPDsup and deciles of
+        oo_.PosteriorIRF.bvardsge. Dynare draws Sigma with floor((1 + lambda) T) - k degrees of
+        freedom, and the comparison takes the same.
      Dynare 7.2 counts the dsge_varlag initial observations in the T of the likelihood (94 for
      the 90 rows the VAR is fitted on), while Del Negro and Schorfheide's (2004) T, and
      dsgelab's, is the number of rows. The comparison sets dsgelab's T to Dynare's, and then
@@ -27,13 +45,14 @@ Prerequisites:
 """
 from __future__ import annotations
 
+import math
 import re
 import sys
 from pathlib import Path
 
 import numpy as np
 
-from dsgelab import EstimationProblem, bvar, posterior_mode
+from dsgelab import EstimationProblem, bvar, dsge_var_irf, forecast_evaluation, posterior_mode
 from dsgelab.dynare import from_mod
 
 HERE = Path(__file__).resolve().parent
@@ -113,8 +132,64 @@ def check_bvar(name: str) -> bool:
           f" RMSE over {len(b.realized)} observations {d_rmse:.1e}")
     print(f"  paths, draw by draw: with shocks {d_with:.1e}, without {d_none:.1e} (largest value"
           f" {scale:.2f}); mean with shocks {d_mean:.1e}; explosive draws {out.explosive:.3f}")
-    return (d_df == 0 and max(d_S, d_X, d_P) < 1e-10 and d_ld < 1e-7 and d_rmse < 1e-14
-            and max(d_with, d_none, d_mean) < 1e-12)
+    ok = (d_df == 0 and max(d_S, d_X, d_P) < 1e-10 and d_ld < 1e-7 and d_rmse < 1e-14
+          and max(d_with, d_none, d_mean) < 1e-12)
+    if hasattr(ex, "irf_cholesky"):
+        ok = check_bvar_irf(ex, b, varobs) and ok
+    if hasattr(ex, "bench"):
+        ok = check_benchmark(ex, data, varobs) and ok
+    return ok
+
+
+def check_bvar_irf(ex, b, varobs) -> bool:
+    """bvar_irf with both identifications, draw by draw and in oo_.bvar.irf."""
+    fields = (("Mean", "mean"), ("Median", "median"), ("Var", "variance"),
+              ("Upper_bound", "upper_bound"), ("Lower_bound", "lower_bound"))
+    ok = True
+    upper = (lambda S: np.linalg.cholesky(S).T)
+    for tag, ident, label in (("squareroot", "SquareRoot", "SquareRoot"),
+                              ("cholesky", upper, "Cholesky, as the upper factor L'"),
+                              ("cholesky", "Cholesky", "Cholesky, the columns of L")):
+        D = np.asarray(getattr(ex, f"irf_sims_{tag}"))          # (shock, variable, period, draw)
+        r = b.irf(int(ex.irf_periods), D.shape[-1], identification=ident,
+                  seed=Stream(getattr(ex, f"irf_normals_{tag}")), coverage=float(ex.conf_sig))
+        ours = np.array([[r["responses"][e][v].T for v in varobs] for e in varobs])
+        scale = float(np.max(np.abs(D)))
+        d_sims = float(np.max(np.abs(ours - D))) / scale
+        oo = getattr(ex, f"irf_{tag}")
+        d_oo = max(float(np.max(np.abs(np.ravel(getattr(getattr(getattr(oo, key), e), v))
+                                       - r[f][e][v])))
+                   for key, f in fields for e in varobs for v in varobs) / scale
+        print(f"  bvar_irf, {label}: {D.shape[-1]} draws of {D.shape[2]} periods, responses draw by"
+              f" draw {d_sims:.1e}, oo_.bvar.irf {d_oo:.1e} (relative to {scale:.4f})")
+        if ident == "Cholesky":
+            ok = ok and d_sims > 1e-3          # Dynare's are not the responses to L's columns
+        else:
+            ok = ok and max(d_sims, d_oo) < 1e-12
+    return ok
+
+
+def check_benchmark(ex, data, varobs) -> bool:
+    """forecast_evaluation's BVAR benchmark against bvar.toolbox on the same windows."""
+    bn = ex.bench
+    text = (HERE / "mods" / "bvar" / "bvar_and_dsge.mod").read_text()
+    # dsgelab's reader takes the prior shapes in lower case, which Dynare also accepts
+    mf = from_mod(re.sub(r"\b[A-Z0-9_]+_PDF\b", lambda m: m.group(0).lower(), text))
+    pb = mf.estimation_problem({v: data[v] for v in varobs})
+    if pb.first_obs != int(bn.first_obs):
+        raise RuntimeError("first_obs differs from the estimation's")
+    E = np.asarray(bn.errors)                   # (origin, horizon, variable, window)
+    origins = [int(o) for o in np.atleast_1d(bn.origins)]
+    worst, scale = 0.0, float(np.max(np.abs(E)))
+    for w, window in enumerate((None, int(bn.window))):
+        fe = forecast_evaluation(pb, origins, int(bn.horizon), estimate="fixed", theta=pb.start(),
+                                 window=window, bvar_lags=int(bn.lags))
+        ours = np.stack([fe.bvar_errors[v] for v in pb.observables], axis=-1)
+        worst = max(worst, float(np.max(np.abs(ours - E[:, :, :, w]))))
+    print(f"  forecast_evaluation's BVAR({int(bn.lags)}) benchmark, origins {origins}, expanding"
+          f" and {int(bn.window)}-observation windows, 1 to {int(bn.horizon)} steps:"
+          f" errors {worst:.1e} (largest error {scale:.4f})")
+    return worst < 1e-12
 
 
 class DynareT(EstimationProblem):
@@ -174,8 +249,41 @@ def check_dsge_var(name: str) -> bool:
         line += (f", lambda {mine.x[i]:.3f} against {mode.x[i]:.3f} (lambda T = "
                  f"{mine.x[i] * len(own.Y):.1f} against {mode.x[i] * pb._dsge_var_nobs():.1f})")
     print(line)
-    return (same_inf and d_post < 1e-8 and d_prior < 1e-10 and gain >= -1e-6 and worst < 0.05
-            and abs(laplace - float(ex.laplace)) < 1e-8)
+    ok = (same_inf and d_post < 1e-8 and d_prior < 1e-10 and gain >= -1e-6 and worst < 0.05
+          and abs(laplace - float(ex.laplace)) < 1e-8)
+    return check_dsge_var_irf(ex, pb, order, varobs) and ok
+
+
+class DynareIRF(DynareT):
+    """Dynare 7.2's draws of Sigma in PosteriorIRF: floor((1 + lambda) T) - k degrees of freedom."""
+
+    def dsge_var_posterior(self, theta):
+        post = super().dsge_var_posterior(theta)
+        post.df = float(math.floor(post.df + 1e-9))
+        return post
+
+
+def check_dsge_var_irf(ex, pb, order, varobs) -> bool:
+    """bayesian_irf of the DSGE-VAR, draw by draw and in oo_.PosteriorIRF.bvardsge."""
+    pb.__class__ = DynareIRF
+    X = np.atleast_2d(np.asarray(ex.irf_draws))[:, order]
+    r = dsge_var_irf(pb, X, periods=int(ex.irf_periods), n_draws=None,
+                     mass=float(ex.mh_conf_sig), seed=Stream(ex.irf_normals))
+    exo = [str(e) for e in np.atleast_1d(ex.exo_names)]
+    D = np.asarray(ex.irf_sims)                                 # (period, variable, shock, draw)
+    ours = np.array([[r["responses"][e][v].T for e in exo] for v in varobs])
+    ours = np.moveaxis(ours, 2, 0)
+    scale = float(np.max(np.abs(D)))
+    d_sims = float(np.max(np.abs(ours - D))) / scale
+    fields = (("Mean", "mean"), ("Median", "median"), ("Var", "variance"), ("HPDinf", "lower"),
+              ("HPDsup", "upper"), ("deciles", "deciles"))
+    d_oo = max(float(np.max(np.abs(np.asarray(getattr(getattr(ex.bvardsge, key), f"{v}_{e}"))
+                                   - r[f][e][v])))
+               for key, f in fields for v in varobs for e in exo) / scale
+    print(f"  bayesian_irf of the DSGE-VAR: {r['draws']} parameter draws, {D.shape[0]} periods,"
+          f" responses draw by draw {d_sims:.1e}, oo_.PosteriorIRF.bvardsge {d_oo:.1e} (relative"
+          f" to {scale:.3f}); VAR draws redrawn as explosive {r['explosive']:.4f}")
+    return max(d_sims, d_oo) < 1e-12
 
 
 if __name__ == "__main__":

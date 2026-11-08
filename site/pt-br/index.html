@@ -609,19 +609,35 @@ initval; c = 0.8; k = 10; y = 1; end;
 """)
 ss_t = tendencia.steady_state()                  # o modelo já sai destendenciado
 
+mesmo = dsg.from_equations(                      # as mesmas declarações, em equações de texto
+    ["1/c = beta/c(+1)*(alpha*y(+1)/k + 1 - delta)", "c + k = y + (1-delta)*k(-1)",
+     "y = k(-1)**alpha*A**(1-alpha)"],
+    states=[], jumps=["c", "k", "y"], shocks=[], parameters=["alpha", "beta", "delta", "g"],
+    trend_vars={"A": "g"}, deflators={"c": "A", "k": "A", "y": "A"})
+ss_e = dsg.steady_state(mesmo, dict(c=0.8, k=10, y=1), tendencia.params)
+round(ss_e.values["k"] / ss_e.values["y"], 4)
+max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12
+
 solow = dsg.from_equations(
     ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
     states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
-<pre class="output" data-label="Saída"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+<pre class="output" data-label="Saída"><code><span class="out-expr">round(ss_e.values["k"] / ss_e.values["y"], 4)</span>
+8.26
+<span class="out-expr">max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
 True
 <span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
 True</code></pre>
   <p>Num <code>.mod</code> escrito em níveis, as variáveis declaradas com <code>trend_var</code> e
   <code>var(deflator=)</code> são destendenciadas como no Dynare, e uma equação que continue
-  dependendo do nível da tendência é recusada. <code>balanced_growth</code> calcula os fatores de
+  dependendo do nível da tendência é recusada. Em <code>from_equations</code> as mesmas declarações
+  são <code>trend_vars=</code> e <code>deflators=</code>, com a mesma destendenciação e a mesma
+  verificação, e o estado estacionário acima é o do <code>.mod</code>. A razão k/y é
+  αg/(g/β − 1 + δ). <code>balanced_growth</code> calcula os fatores de
   crescimento e as razões entre variáveis que compartilham a tendência, o mesmo problema que o
   <code>bgp.write</code> do Dynare resolve.</p>
 
@@ -967,6 +983,53 @@ irf_post["draws"], irf_post["lower"]["e"]["y"][0] &lt; irf_post["mean"]["e"]["y"
   também têm as suas figuras. As estatísticas que elas desenham são calculadas como o Dynare as
   calcula e não precisam do matplotlib, e a validação as compara com os números das próprias
   figuras do Dynare.</p>
+<pre><code>strong = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"], observables=["y"],
+                            cov={"e": 0.1}, guess=dict(a=0, y=1), strength=True,
+                            data={"y": serie}, priors=pb.priors)
+rt = dsg.realtime_shock_decomposition(pb.solve(moda.x)[1], pb.Y, forecast=4, vintages=[200])
+cf = dsg.conditional_forecast_bands(s_nk3, {"i": [0.01] * 4}, controlled=["eps_v"], periods=12,
+                                    cov=cov_nk3, replic=1000)                 # example 24
+last = {
+    "strength.png": dsg.plot_identification_strength(strong),
+    "patterns.png": dsg.plot_identification_patterns(strong, count=2),
+    "forecast_vintage.png": dsg.plot_decomposition(rt, "y", realtime=3, vintage=200),
+    "yoy.png": dsg.plot_decomposition(dsg.shock_decomposition(pb.smoother(moda.x)), "y",
+                                      frequency="yoy"),
+    "conditional.png": dsg.plot_conditional_forecast(cf, ["i", "pi", "x"],
+                                                     conditions={"i": [0.01] * 4}),
+}
+for name, fig in last.items():
+    fig.savefig(name, dpi=80)
+strong.strength.identified
+len(rt["forecast_vintages"][200]["total"]["y"])
+np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)
+bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">strong.strength.identified</span>
+['rho', 'stderr e']
+<span class="out-expr">len(rt["forecast_vintages"][200]["total"]["y"])</span>
+5
+<span class="out-expr">np.allclose(cf.lower["i"][1:5], 0.01), np.allclose(cf.upper["i"][1:5], 0.01)</span>
+(True, True)
+<span class="out-expr">bool(np.all(cf.upper["pi"][5:] &gt; cf.lower["pi"][5:]))</span>
+True</code></pre>
+  <p>Seguem as figuras que a 0.9 deixou de fora. Com <code>strength=True</code>, o
+  <code>identification</code> calcula a força de identificação de Ratto e Iskrev (2011) a partir da
+  matriz de informação assintótica da verossimilhança, nos dados ou numa amostra simulada do modelo,
+  como faz o <code>identification</code> do Dynare. A força de um parâmetro é o seu valor, ou o seu
+  desvio-padrão a priori, dividido pelo seu desvio-padrão assintótico, e
+  <code>plot_identification_strength</code> desenha as duas em escala logarítmica, com a componente
+  de sensibilidade abaixo. <code>plot_identification_patterns</code> desenha os vetores singulares
+  da matriz de informação para os seus menores valores singulares. Com <code>forecast</code> e
+  <code>vintages</code>, o <code>realtime_shock_decomposition</code> devolve também as decomposições
+  de previsão e condicional de cada corte do Dynare, aqui a previsão de 4 trimestres feita com as
+  200 primeiras observações, que o <code>plot_decomposition</code> desenha com o
+  <code>realtime</code> e o <code>vintage</code> do Dynare. O seu <code>frequency</code> desenha as
+  decomposições interanuais e anuais. <code>conditional_forecast_bands</code> sorteia os choques
+  deixados livres, o choque de tecnologia enquanto o choque monetário mantém a taxa de juros na sua
+  trajetória por quatro trimestres, e as suas bandas, como as do <code>conditional_forecast</code>
+  do Dynare, se fecham nas datas condicionadas e se abrem depois delas. No <code>fs2000.mod</code>,
+  na amostra e nos sorteios do Dynare, a força coincide com a do Dynare a menos de 3e-7, e as
+  decomposições e as bandas a menos de 2e-14.</p>
   <h3>29. Um processo como cadeia de Markov</h3>
 <pre><code>rho, sigma = 0.99, 0.007                     # log da produtividade, trimestral
 var = sigma ** 2 / (1 - rho ** 2)
@@ -1040,6 +1103,48 @@ f"{erros.mean():.1e}, {np.median(erros):.1e}"</code></pre>
   maiores na célula onde o limite passa a se impor. A validação resolve três dos modelos de exemplo
   do repositório do dolo, entre eles o de consumo e poupança com esse limite, e concorda com o
   <code>time_iteration</code> do dolo a 1e-9 ou menos.</p>
+<pre><code>newton = dsg.improved_time_iteration(poupanca, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                     grid={"w": (0.2, 12.0, 80)}, markov={"y": renda},
+                                     bounds={"c": (0.0, lambda s, p: s.w)},
+                                     initial={"c": lambda s, p: 0.5 * s.w})
+newton.converged, newton.iterations
+bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)
+
+def poupador_z(nxt, cur, eps, p):        # a esperança da equação de Euler como o salto z
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,
+        cur.c - cur.z ** (-1 / p["gamma"]),                         # c dado z, par de c &lt;= w
+        cur.z - p["beta"] * p["R"] * nxt.c ** -p["gamma"],          # z = beta R E[c'^-gamma]
+    ]
+
+poupanca_z = dsg.Model(states=["w", "y"], jumps=["c", "z"], shocks=["e"], equations=poupador_z)
+ei = dsg.expectations_iteration(poupanca_z, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                expectations=["z"], grid={"w": (0.2, 12.0, 80)},
+                                markov={"y": renda}, bounds={"c": (0.0, lambda s, p: s.w)},
+                                initial={"c": lambda s, p: 0.5 * s.w,
+                                         "z": lambda s, p: (0.5 * s.w) ** -2.0})
+ei.converged
+bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">newton.converged, newton.iterations</span>
+(True, 9)
+<span class="out-expr">bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)</span>
+True
+<span class="out-expr">ei.converged</span>
+True
+<span class="out-expr">bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p><code>improved_time_iteration</code> resolve as mesmas equações pelo método de Newton em todos
+  os pontos da grade de uma vez, com a derivada através da política do período seguinte, como faz a
+  rotina de mesmo nome do dolo. Do mesmo ponto de partida, leva 9 passos onde a iteração temporal
+  leva 179, e as duas políticas concordam dentro da tolerância da iteração temporal, que para
+  quando a política se move menos de 1e-8 e por isso fica a cerca de 1e-7 do ponto fixo.
+  <code>expectations_iteration</code> pede a esperança da equação de Euler declarada como um salto.
+  Cada iteração a integra com a política corrente e depois obtém dela o consumo, em cada ponto da
+  grade, sem integral, e o resultado é de novo a política da iteração temporal. O dolo documenta
+  essa iteração, como expectativas parametrizadas, e não a implementa. A validação compara
+  <code>improved_time_iteration</code> com a do dolo nos três modelos da validação da iteração
+  temporal, a 4e-10, e os dois métodos com a forma fechada do crescimento estocástico.</p>
   <h3>31. Crescimento estocástico, por iteração da função valor</h3>
 <pre><code>alpha, beta = 0.36, 0.95
 log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log da produtividade
@@ -1083,6 +1188,33 @@ f"{np.abs(vi.policy[..., 0] / c - 1).max():.0e}", bool(np.abs(cubica.policy[...,
   <code>value_iteration</code> com o <code>DiscreteDP</code> do QuantEcon na versão discretizada
   deste modelo e com o <code>value_iteration</code> do dolo no RBC markoviano dele, que tem dois
   controles.</p>
+<pre><code>fracoes = alpha * np.array([0.6, 0.4])                 # dois estoques de capital
+
+def produto2(s):
+    return np.exp(s.z) * s.k1 ** fracoes[0] * s.k2 ** fracoes[1]
+
+dois = dsg.DynamicProgram(
+    states=["k1", "k2", "z"], controls=["s1", "s2"],   # as frações do produto poupadas
+    reward=lambda s, x, p: np.log((1 - x.s1 - x.s2) * produto2(s)),
+    transition=lambda s, x, e, p: {"k1": x.s1 * produto2(s), "k2": x.s2 * produto2(s)},
+    discount=beta, bounds={"s1": (0.01, 0.45), "s2": (0.01, 0.45)})
+k2ee = beta * fracoes * np.exp(np.sum(fracoes * np.log(beta * fracoes)) / (1 - alpha))
+esparsa = dsg.SmolyakGrid({"k1": (0.7 * k2ee[0], 1.3 * k2ee[0]),
+                           "k2": (0.7 * k2ee[1], 1.3 * k2ee[1])}, 3)
+vi2 = dsg.value_iteration(dois, {}, grid=esparsa, markov={"z": log_z}, howard=50)
+esparsa.n, vi2.converged
+bool(np.abs(vi2.policy - beta * fracoes).max() &lt; 1e-6)  # a forma fechada poupa beta alpha_j</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">esparsa.n, vi2.converged</span>
+(29, True)
+<span class="out-expr">bool(np.abs(vi2.policy - beta * fracoes).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p>Numa <code>SmolyakGrid</code>, o valor é o polinômio da grade, que comporta mais estados
+  contínuos do que uma grade cartesiana. Aqui o produto vem de dois estoques de capital, e os
+  controles são as frações do produto poupadas em cada um, encontradas pelo método de Newton
+  projetado. Na forma fechada, cada fração é <code>beta</code> vezes o expoente do estoque. No
+  nível 3 a grade tem 29 nós, e a política fica a menos de 1e-6 da forma fechada. A validação
+  resolve a mesma economia com três estoques de capital, em que o valor concorda com a forma
+  fechada até 1e-7.</p>
   <h3>32. Poupança com limite de endividamento, pelo método da grade endógena</h3>
 <pre><code>poupanca_egm = dsg.EGMProgram(
     states=["w", "y"], controls=["c"], poststate="a", expectations=["m"],
@@ -1186,13 +1318,23 @@ var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)
 prev = var.forecast(4, 1000, seed=0)                  # 1000 sorteios da posteriori
 prev.point["y"].round(3), prev.mean()["y"].round(3)
 round(var.rmse()["y"], 3)
+irf = var.irf(8, 1000, seed=0)                        # o bvar_irf do Dynare, 1000 sorteios
+irf["mean"]["y"]["y"][:4].round(3)                    # a resposta de y ao próprio impulso
+irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)   # HPD de 90%, 4 períodos depois
+ev_b = dsg.forecast_evaluation(pb, range(320, 400, 10), 4, estimate="fixed", theta=ev.theta,
+                               bvar_lags=1)           # as modas do exemplo 25, e um BVAR(1)
+ev_b.relative_rmse("bvar")["y"].round(2)              # o RMSE do modelo sobre o do BVAR
 
 comum = dict(model=ar, data=dados, params=dict(rho=0.5), observables=["y"], priors=pb.priors,
              guess=dict(a=0, y=1), first_obs=5, dsge_varlag=4)
 {w: round(dsg.EstimationProblem(**comum, dsge_var=w).log_likelihood(moda.x), 1)
  for w in (0.05, 0.5, 2.0, float("inf"))}
 dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
-{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</code></pre>
+moda_dv = dsg.posterior_mode(dv)
+{k: round(v, 3) for k, v in moda_dv.values.items()}
+irf_dv = dsg.dsge_var_irf(dv, np.tile(moda_dv.x, (500, 1)), periods=8, n_draws=None, seed=0)
+irf_dv["mean"]["e"]["y"][:4].round(3)                 # os sorteios do VAR na moda do modelo
+(moda_dv.values["stderr e"] * moda_dv.values["rho"] ** np.arange(4)).round(3)   # as do modelo</code></pre>
 <pre class="output" data-label="Saída"><code><span class="out-expr">{p: round(v, 1) for p, v in dens.items()}</span>
 {1: 365.1, 2: 367.5, 3: 368.5, 4: 368.2}
 <span class="out-expr">var.lag_matrices[0, 0, 0].round(3), var.intercept.round(3)</span>
@@ -1201,11 +1343,21 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
 ([1.13 1.108 1.09 1.074], [1.127 1.103 1.085 1.072])
 <span class="out-expr">round(var.rmse()["y"], 3)</span>
 0.09
+<span class="out-expr">irf["mean"]["y"]["y"][:4].round(3)</span>
+[0.095 0.08 0.068 0.057]
+<span class="out-expr">irf["lower"]["y"]["y"][4].round(3), irf["upper"]["y"]["y"][4].round(3)</span>
+(0.038, 0.058)
+<span class="out-expr">ev_b.relative_rmse("bvar")["y"].round(2)</span>
+[1.08 1.17 1.04 0.98]
 <span class="out-expr">{w: round(dsg.EstimationProblem(**comum, dsge_var=w).log_likelihood(moda.x), 1)</span>
  for w in (0.05, 0.5, 2.0, float("inf"))}
 {0.05: 372.7, 0.5: 378.1, 2.0: 379.2, inf: 379.4}
-<span class="out-expr">{k: round(v, 3) for k, v in dsg.posterior_mode(dv).values.items()}</span>
-{'rho': 0.738, 'stderr e': 0.091}</code></pre>
+<span class="out-expr">{k: round(v, 3) for k, v in moda_dv.values.items()}</span>
+{'rho': 0.738, 'stderr e': 0.091}
+<span class="out-expr">irf_dv["mean"]["e"]["y"][:4].round(3)</span>
+[0.092 0.064 0.048 0.04]
+<span class="out-expr">(moda_dv.values["stderr e"] * moda_dv.values["rho"] ** np.arange(4)).round(3)</span>
+[0.091 0.067 0.049 0.037]</code></pre>
   <p><code>bvar</code> faz o que fazem o <code>bvar_density</code> e o <code>bvar_forecast</code> do
   Dynare: um VAR cuja priori são as observações artificiais de Sims e Zha (1998), com os
   hiperparâmetros do Dynare por padrão (<code>tau=3</code>, <code>decay=0.5</code>,
@@ -1220,10 +1372,25 @@ dv = dsg.EstimationProblem(**comum, dsge_var=0.5)
   <code>lambda T</code> observações artificiais do modelo, com os coeficientes integrados fora da
   verossimilhança. Em dados simulados do próprio modelo, a verossimilhança cresce com o peso, de
   372,7 em <code>lambda = 0.05</code> a 379,4 em <code>lambda = inf</code>, onde o VAR é o do
-  modelo. Uma priori para <code>"dsge_prior_weight"</code> estima o peso. A validação reproduz os
+  modelo. Uma priori para <code>"dsge_prior_weight"</code> estima o peso.</p>
+  <p><code>irf</code> é o <code>bvar_irf</code> do Dynare: as respostas sobre sorteios da
+  posteriori, a impulsos identificados pelo fator de Cholesky ou pela raiz quadrada simétrica de
+  cada sorteio da covariância, com a média, a mediana, a variância, o intervalo HPD de 90% e as
+  bandas do Dynare. Com uma variável as duas identificações coincidem, e a resposta média cai de
+  0,095 no impacto à razão de mais ou menos o coeficiente da defasagem por período. Com
+  <code>bvar_lags=1</code>, o <code>forecast_evaluation</code> reestima um BVAR(1) em cada origem do
+  exemplo 25, na mesma janela do modelo. Nessas oito origens, o RMSE do modelo fica de 4% a 17%
+  acima do RMSE do BVAR nos horizontes 1 a 3, e 2% abaixo no horizonte 4. O
+  <code>dsge_var_irf</code> dá as respostas do DSGE-VAR, com o fator de Cholesky do VAR girado de
+  modo a reproduzir a matriz de impacto do modelo (Del Negro e Schorfheide, 2004). Na moda do
+  modelo, onde só o VAR é sorteado, a resposta média começa em 0,092, contra 0,091 no modelo, e
+  fica a menos de 0,003 da resposta do modelo nos quatro primeiros períodos. O
+  <code>plot_posterior_irf</code> desenha os dois resultados. A validação reproduz os
   <code>tests/bvar_a_la_sims</code> e <code>tests/dsge-var</code> do Dynare, inclusive as previsões
-  simuladas, com os mesmos sorteios. O Dynare conta as observações iniciais do VAR em
-  <code>T</code>, e o dsgelab não.</p>
+  simuladas e as respostas a impulso, com os mesmos sorteios. O Dynare conta as observações
+  iniciais do VAR em <code>T</code>, e o dsgelab não. O <code>bvar_irf</code> do Dynare 7.2 toma as
+  linhas do fator de Cholesky como impulsos, e o dsgelab toma as colunas, cuja covariância é a do
+  VAR.</p>
   <h3>35. Krusell–Smith, pelo jacobiano no espaço das sequências</h3>
 <pre><code>def household(Va_p, a_grid, e_grid, r, w, beta):
     c_next = 1 / (beta * Va_p)                         # utilidade log: u'(c) = 1 / c
@@ -1267,13 +1434,43 @@ f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():
 hh.h = 1e-6
 J = hh.jacobian(ss, ["r"], 30)["A"]["r"]               # pelo algoritmo das notícias falsas
 direct = hh.jacobian(ss, ["r"], 30, method="direct")["A"]["r"]
-f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
+f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"
+
+def mixed(rho_e, sd_e, n_e, n_a, q):     # com probabilidade q, a renda é sorteada de novo
+    e, Pi, a = grids(rho_e, sd_e, n_e, n_a)
+    return e, (1 - q) * Pi + q / e.size, a             # uma matriz de Markov que muda com q
+
+hh_q = dsg.HetBlock(household, ["Va", "a", "c"], backward="Va", policy="a", init=start,
+                    hetinputs=[(mixed, ["e_grid", "Pi", "a_grid"])], h=1e-6)
+ks_q = dsg.BlockModel([hh_q, firm, markets])
+ss_q = ks_q.steady_state({**ss, "q": 0.05}, unknowns={"K": ss["K"]}, targets=["asset_mkt"])
+f"{100 * ss_q['r']:.3f} por cento"
+Jq = hh_q.jacobian(ss_q, ["q"], 30)["C"]["q"]
+bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()
+     &lt; 1e-7 * np.abs(Jq).max())
+dq = 0.05 * 0.8 ** np.arange(T)                        # mais risco de renda por um tempo
+linear = ks_q.impulse_linear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+nonlinear = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": dq})
+f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"
+D0 = ss.internals["household"]["Dbeg"]                 # a distribuição sem o risco adicional
+back = ks_q.impulse_nonlinear(ss_q, ["K"], ["asset_mkt"], {"q": np.zeros(T)},
+                              initial={"household": D0})
+f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</code></pre>
 <pre class="output" data-label="Saída"><code><span class="out-expr">f"{ss['beta']:.5f}", f"{ss['goods_mkt']:.0e}"</span>
 ('0.98191', '-3e-11')
 <span class="out-expr">f"{1e4 * linear['r'][0]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
 ('3.97 bp', '6e-07')
 <span class="out-expr">f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</span>
-'1e-10'</code></pre>
+'1e-10'
+<span class="out-expr">f"{100 * ss_q['r']:.3f} por cento"</span>
+'0.317 por cento'
+<span class="out-expr">bool(np.abs(Jq - hh_q.jacobian(ss_q, ["q"], 30, method="direct")["C"]["q"]).max()</span>
+     &lt; 1e-7 * np.abs(Jq).max())
+True
+<span class="out-expr">f"{1e4 * linear['r'][1]:.2f} bp", f"{np.abs(nonlinear['r'] - linear['r']).max():.0e}"</span>
+('-0.99 bp', '4e-05')
+<span class="out-expr">f"{back['K'][0]:.3f}", f"{back['K'][50]:.3f}"</span>
+('-0.838', '-0.027')</code></pre>
   <p>Um <code>HetBlock</code> contém um contínuo de famílias em 100 pontos de ativos por 7 estados
   de renda, e <code>household</code> é um passo da iteração para trás delas pelo método da grade
   endógena, que <code>interpolate_rows</code> faz linha a linha. A firma e os mercados são blocos
@@ -1290,6 +1487,60 @@ f"{np.abs(J - direct).max() / np.abs(J).max():.0e}"</code></pre>
   passos para trás, e derivar a trajetória inteira para um choque em cada data, a um custo 30
   vezes maior, dá a mesma matriz. A validação resolve os modelos de Krusell–Smith e HANK de um
   ativo do próprio sequence-jacobian em 7 por 500 pontos e concorda com ele até 2e-10.</p>
+  <p>Em <code>mixed</code> a matriz de Markov é função de um agregado, <code>q</code>, a
+  probabilidade de a renda ser sorteada de novo, com todos os nós igualmente prováveis, o que
+  espalha a renda mais do que a distribuição estacionária da própria cadeia. Com
+  <code>q = 0.05</code> as famílias poupam mais, e os juros que equilibram o mercado de ativos caem
+  de 1 para 0,317 por cento. O jacobiano das notícias falsas em relação a <code>q</code> leva em
+  conta que a matriz move a distribuição no período do choque e a expectativa um período antes
+  dele, e concorda com o direto dentro de 1e-7 da sua maior entrada. Uma alta temporária de
+  <code>q</code> reduz os juros em 0,99 ponto-base um período depois. <code>initial</code> começa a
+  transição da distribuição do primeiro estado estacionário, que tem menos capital, e a economia
+  volta ao novo estado estacionário com os choques em zero. A validação compara os mesmos recursos
+  com o sequence-jacobian na família do <code>labor_search.ipynb</code> dele, cuja cadeia de
+  emprego muda com as taxas de obtenção e de perda de emprego, dentro de 6e-10.</p>
+<pre><code>def grades_dois():
+    b_grid = np.array([0.0, 0.5, 1.0])
+    a_grid = np.array([0.0, 0.5, 1.0])
+    e_grid = np.array([0.8, 1.2])
+    Pi = np.array([[0.9, 0.1], [0.2, 0.8]])
+    return b_grid, a_grid, e_grid, Pi
+
+def inicio_dois(b_grid, a_grid, e_grid):
+    forma = (e_grid.size, b_grid.size, a_grid.size)
+    return np.zeros(forma), np.zeros(forma)
+
+def passo_dois(Vb_p, Va_p, b_grid, a_grid, e_grid, beta, rb, ra):
+    forma = (e_grid.size, b_grid.size, a_grid.size)
+    b = np.broadcast_to(0.2 + 0.1 * b_grid[:, None] + 0.05 * a_grid + 0.01 * rb, forma)
+    a = np.broadcast_to(0.3 + 0.05 * b_grid[:, None] + 0.1 * a_grid + 0.01 * ra, forma)
+    c = e_grid[:, None, None] + rb * b_grid[:, None] + ra * a_grid - b - a
+    return c + beta * Vb_p, 2 * c + beta * Va_p, b, a, c
+
+dois = dsg.HetBlock(passo_dois, ["Vb", "Va", "b", "a", "c"], backward=["Vb", "Va"],
+                    policy=["b", "a"], init=inicio_dois,
+                    hetinputs=[(grades_dois, ["b_grid", "a_grid", "e_grid", "Pi"])],
+                    backward_tol=1e-12, h=1e-6, name="hh")
+dois_ss = dsg.BlockModel([dois]).steady_state({"beta": 0.95, "rb": 0.01, "ra": 0.02})
+D = dois_ss.internals["hh"]["D"]
+D.shape, float(D.sum()), dois_ss["B"], dois_ss["A"]
+J = dois.jacobian(dois_ss, ["rb"], 8)["B"]["rb"]
+Jd = dois.jacobian(dois_ss, ["rb"], 8, method="direct")["B"]["rb"]
+float(np.abs(J - Jd).max())</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">D.shape, float(D.sum()), dois_ss["B"], dois_ss["A"]</span>
+((2, 3, 3), 1, 0.2416, 0.347)
+<span class="out-expr">float(np.abs(J - Jd).max())</span>
+2.847e-11</code></pre>
+  <p>Com <code>policy=["b", "a"]</code> o bloco tem dois estados endógenos, e cada política,
+  variável defasada e distribuição tem um eixo de renda e dois de ativos. A loteria bidimensional
+  é o produto das loterias unidimensionais, preservando a massa e as médias dos dois ativos. O
+  último número compara o jacobiano do fake news com a diferenciação direta de toda a trajetória.
+  A validação resolve o HANK de dois ativos do sequence-jacobian em 3 por 50 por 70 pontos: o
+  estado estacionário concorda em 9,9e-10, os jacobianos domésticos para a frente em 1,3e-9 e a
+  transição não linear em 1,9e-8. Numa grade menor, o fake news concorda com a diferenciação
+  direta em 1,3e-8. As aproximações lineares completas de <code>G</code> nos dois pacotes diferem
+  em 1,3e-2, enquanto entradas selecionadas de <code>K/Z</code>, conferidas contra a transição
+  não linear direta do sequence-jacobian, concordam em 1,4e-3.</p>
   <h3>36. Uma regra de Taylor que muda de regime, resolvida e filtrada</h3>
 <pre><code>fisher = dsg.Model(
     states=["r"], jumps=["pi"], shocks=["e"],
@@ -1333,6 +1584,48 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   dos filtros de Kalman das 4096 trajetórias de regime, pelo último número. A validação reproduz as
   nove soluções que Foerster et al. (2013) imprimem para um modelo novo-keynesiano e compara o
   filtro de Kim com o filtro de Hamilton do statsmodels.</p>
+<pre><code>crescimento = dsg.Model(
+    states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.k - (cur.y - cur.c),                                       # depreciação total
+        nxt.z - np.exp(p["rho"] * np.log(cur.z) + p["sigma"] * eps.e),
+        1 / cur.c - p["beta"] * p["alpha"] * nxt.y / (nxt.k * nxt.c),  # utilidade logarítmica
+        cur.y - p["A"] * cur.z * cur.k ** p["alpha"]])
+A = np.array([1.05, 0.95])
+ms2 = dsg.solve_markov_switching(
+    crescimento, {"alpha": 0.33, "beta": 0.96, "A": 1.0, "rho": 0.9, "sigma": 0.01},
+    {"A": A, "rho": (0.9, 0.5), "sigma": (0.01, 0.03)}, T, next_regime=("rho", "sigma"),
+    guess={"k": 0.2, "z": 1.0, "c": 0.4, "y": 0.6}, order=2)
+ms2.first.perturbed, f"{ms2.residual:.0e}"
+d = A / (ms2.first.ergodic @ A) - 1
+np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)     # y sobre k e chi: alpha d(s)
+np.round(ms2.h_uu[0, :, 1, 0, 0], 6)                       # z' sobre eps^2: sigma(s')^2
+subida, descida = (ms2.irf("e", size=s, regime=1)["y"][:3] for s in (1.0, -1.0))
+np.round(subida + descida, 4)
+primeira = ms2.first.moments()["conditional_mean"][:, 3]
+ms2.to_levels({"y": primeira})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</code></pre>
+<pre class="output" data-label="Saída"><code><span class="out-expr">ms2.first.perturbed, f"{ms2.residual:.0e}"</span>
+(['A'], '4e-16')
+<span class="out-expr">np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)</span>
+([0.01082 -0.02164], [0.01082 -0.02164])
+<span class="out-expr">np.round(ms2.h_uu[0, :, 1, 0, 0], 6)</span>
+[0.0001 0.0009]
+<span class="out-expr">np.round(subida + descida, 4)</span>
+[0.09 0.062 0.0247]
+<span class="out-expr">ms2.to_levels({"y": primeira})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</span>
+([0.6084 0.5288], [0.6089 0.5301])</code></pre>
+  <p>Em segunda ordem (<code>order=2</code>), a perturbação de partição obtém as derivadas
+  segundas das regras de decisão resolvendo sistemas lineares, com um bloco por regime (Foerster
+  et al., 2016). O crescimento estocástico com utilidade logarítmica e depreciação total tem a
+  forma fechada <code>k' = alpha beta y</code>, seja qual for o processo da produtividade, de modo
+  que todos os coeficientes de segunda ordem são conhecidos: o nível da produtividade muda de
+  regime e é perturbado, e a persistência e a volatilidade de <code>z</code> mudam em
+  <code>t+1</code> sem serem perturbadas. O coeficiente do produto sobre capital e
+  <code>chi</code> é <code>alpha d(s)</code>, com <code>d(s)</code> a produtividade do regime em
+  relação à sua média ergódica, e o de <code>z'</code> sobre a inovação ao quadrado é a variância
+  do próximo regime. Uma inovação positiva e uma negativa não produzem mais respostas espelhadas,
+  e as médias do produto em cada regime se afastam das de primeira ordem. A validação reproduz os
+  96 coeficientes de segunda ordem que Foerster et al. (2016) imprimem para o seu RBC.</p>
 </div></section>
 
 <section id="caixa"><div class="wrap">
@@ -1365,8 +1658,8 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
     <div class="card"><h4>Restrições ocasionalmente ativas</h4><p>OccBin com qualquer número de
     restrições, regras que variam no tempo e choques não antecipados, como o <code>+occbin</code> do Dynare.</p></div>
     <div class="card"><h4>Mudança de regime</h4><p>Parâmetros que mudam com uma cadeia de Markov,
-    em primeira ordem, com todas as soluções encontradas e a estabilidade em média quadrática, e o
-    filtro de Kim para a estimação.</p></div>
+    em primeira e segunda ordem, com todas as soluções encontradas e a estabilidade em média
+    quadrática, e o filtro de Kim para a estimação.</p></div>
     <div class="card"><h4>Trajetória estendida</h4><p>Determinística e estocástica, em árvore esparsa
     ou cheia, com a correção de risco híbrida.</p></div>
     <div class="card"><h4>Modelos em níveis</h4><p>Tendências declaradas, verificação do crescimento
@@ -1597,6 +1890,9 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
       <tr><td>3002 trajetórias de previsão simuladas, sorteio a sorteio, com os sorteios normais do Octave</td><td class="num">2e-16</td><td class="ok">OK</td></tr>
       <tr><td>posteriori em log do DSGE-VAR em 11 pontos, com o <code>T</code> do Dynare</td><td class="num">5e-12</td><td class="ok">OK</td></tr>
       <tr><td>modas posteriores do DSGE-VAR, em desvios-padrão posteriores (núcleo pelo menos o do Dynare)</td><td class="num">5e-5</td><td class="ok">OK</td></tr>
+      <tr><td><code>bvar_irf</code>, 2000 respostas sorteadas (<code>SquareRoot</code>, e <code>Cholesky</code> com os impulsos do Dynare), sorteio a sorteio, relativo</td><td class="num">2e-15</td><td class="ok">OK</td></tr>
+      <tr><td><code>bayesian_irf</code> do DSGE-VAR, 2000 respostas sorteadas nos sorteios de parâmetros do Dynare, relativo</td><td class="num">1e-13</td><td class="ok">OK</td></tr>
+      <tr><td>BVAR de referência do <code>forecast_evaluation</code>, erros em 8 janelas contra o <code>bvar.toolbox</code></td><td class="num">2e-16</td><td class="ok">OK</td></tr>
     </tbody>
   </table>
   <p style="font-size:.9rem;color:var(--muted)">O Dynare 7.2 conta as 4 observações iniciais do VAR
@@ -1721,7 +2017,11 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   <h3>Agentes heterogêneos comparados com o sequence-jacobian</h3>
   <p>Os modelos de Krusell–Smith e HANK de um ativo do próprio sequence-jacobian 1.0.0, dos
   cadernos na tag v1.0.0, em 7 estados de renda por 500 pontos de ativos, com a mesma calibração,
-  as mesmas incógnitas e os mesmos alvos. As diferenças são relativas ao maior valor comparado.</p>
+  as mesmas incógnitas e os mesmos alvos. A família do <code>labor_search.ipynb</code>, cuja cadeia
+  de emprego muda com as taxas de obtenção e de perda de emprego, em 10 estados por 100 pontos,
+  fechada por um mercado de títulos que os dois pacotes escrevem do mesmo modo. O
+  <code>two_asset.ipynb</code>, em 3 estados de renda por 50 pontos de ativos líquidos por 70 de
+  iliquidos. As diferenças são relativas ao maior valor comparado.</p>
   <table>
     <thead><tr><th>O que se compara</th><th>Desvio</th><th></th></tr></thead>
     <tbody>
@@ -1730,6 +2030,13 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
       <tr><td>jacobianos de equilíbrio geral G</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>respostas a impulso lineares e não lineares</td><td class="num">2e-10</td><td class="ok">OK</td></tr>
       <tr><td>notícias falsas contra força bruta (o dsgelab contra ele mesmo)</td><td class="num">4e-8</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho, matriz de Markov movida por f e s: estado estacionário</td><td class="num">8e-10</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho: jacobianos, G, respostas lineares e não lineares</td><td class="num">3e-10</td><td class="ok">OK</td></tr>
+      <tr><td>busca no mercado de trabalho: retorno a partir da distribuição de outro estado estacionário</td><td class="num">6e-10</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: estado estacionário e jacobianos domésticos para a frente</td><td class="num">9,9e-10; 1,3e-9</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: G e resposta lineares, contra a outra aproximação linear</td><td class="num">1,3e-2; 1,4e-4</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: entradas de G contra diferenciação não linear direta</td><td class="num">1,4e-3</td><td class="ok">OK</td></tr>
+      <tr><td>HANK de dois ativos: resposta não linear e fake news contra diferenciação direta</td><td class="num">1,9e-8; 1,3e-8</td><td class="ok">OK</td></tr>
   <h3>Mudança de regime markoviana comparada com soluções publicadas e com o statsmodels</h3>
   <p>O RISE, o toolbox de mudança de regime, é distribuído como P-code do MATLAB, que o GNU Octave
   não executa. A solução é comparada, no lugar dele, com as soluções que Foerster, Rubio-Ramírez,
@@ -1833,14 +2140,15 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   pacote indicado é o <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> Ele
   deriva as condições de primeira ordem de blocos declarados, aceita um
   estado estacionário analítico declarado, faz estimação bayesiana (pelo PyMC) e exporta para o
-  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Para métodos globais além da
-  colocação de Chebyshev (em grades tensoriais ou de Smolyak), da iteração temporal, da iteração da
-  função valor e do método da grade endógena, como a iteração das expectativas, o
-  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta mais recursos. Para agentes
-  heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ativo,
-  validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>,
-  que também resolve modelos com dois ativos, assim como o
-  <a href="https://github.com/gboehl/econpizza">econpizza</a>.</p></div>
+  Dynare, como o dsgelab, mas não tem solução de segunda ordem. Entre os métodos globais, o
+  dsgelab tem a colocação de Chebyshev (em grades tensoriais ou de Smolyak), a iteração temporal,
+  melhorada ou sobre as esperanças, a iteração da função valor e o método da grade endógena, e o
+  <a href="https://github.com/EconForge/dolo.py">dolo</a> documenta também a iteração temporal
+  com horizonte finito. Para agentes
+  heterogêneos, o dsgelab tem o método do jacobiano no espaço das sequências com um ou dois ativos,
+  validado contra o <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>;
+  o <a href="https://github.com/gboehl/econpizza">econpizza</a> também resolve modelos com dois
+  ativos.</p></div>
   <p>No <code>dsgelab</code>, um problema declarado vai das condições de primeira ordem derivadas a
   uma solução e a uma exportação para o Dynare ou o MacroModelling.jl, com a convenção temporal
   traduzida automaticamente. A mesma função de resíduos serve à perturbação e à transição
@@ -1865,9 +2173,8 @@ f"{dsg.kim_filter(espaco, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(esp
   author  = {Moreira, Gustavo Hoffmann},
   title   = {{dsgelab}: a general toolkit for solving DSGE models in Python},
   year    = {2026},
-  version = {0.9.0},
+  version = {1.0.0rc1},
   license = {MIT},
-  doi     = {10.5281/zenodo.23992839},
   url     = {https://github.com/GustavoHM/dsgelab},
   note    = {Pacote em Python}
 }</code></pre>

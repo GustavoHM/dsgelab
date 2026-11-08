@@ -159,3 +159,14 @@ def test_from_mod_reads_the_policy_commands():
     ds = discretionary_policy(mf, params=mf.params)
     # the .mod objective is a loss; read with the sign flipped, x moves against u
     assert ds.irf("e", periods=2)["x"][0] < 0
+
+
+def test_max_iter_alias_in_discretionary_policy():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new = discretionary_policy(NK, params=NK_PARAMS, max_iter=3000, **NK_KW)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old = discretionary_policy(NK, params=NK_PARAMS, maxiter=3000, **NK_KW)
+    np.testing.assert_allclose(new.G, old.G)

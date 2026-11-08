@@ -75,6 +75,66 @@ bayesian_irf, irf=20) gp_obs gy_obs y c;"
       printf('saved out_plots/mcmc.mat\n');
     " > ../out_plots/mcmc.log 2>&1 ) || { echo "FAILED, see out_plots/mcmc.log"; tail -20 out_plots/mcmc.log; exit 1; }
     grep '^saved' out_plots/mcmc.log
+  elif [ "$part" = identification ]; then
+    # identification of fs2000 at the prior mean with advanced=1, which draws the strength,
+    # sensitivity, collinearity and pattern figures, recorded by plots/dyn_saveas.m. Dynare
+    # computes the information matrix on a sample it simulates: a copy of its dsge_likelihood.m,
+    # first on the path, keeps that sample when it is called for the asymptotic Hessian, and
+    # export_identification.m saves it. riccati_tol as for mcmc.
+    python3 identification/working_copy.py mods/examples/fs2000.mod work_plots/fs2000.mod \
+      "advanced=1,max_dim_cova_group=2"
+    mkdir -p work_plots/capture
+    python3 - "$DYNARE_MATLAB/estimation/dsge_likelihood.m" work_plots/capture/dsge_likelihood.m <<'PY'
+import sys
+lines = open(sys.argv[1]).read().split("\n")
+keep = ("global IDENT_SAMPLE; if isfield(options_, 'analytic_Hessian') && "
+        "strcmp(options_.analytic_Hessian, 'asymptotic'), IDENT_SAMPLE = dataset_.data; end")
+open(sys.argv[2], "w").write("\n".join(lines[:1] + [keep] + lines[1:]))
+PY
+    python3 - work_plots/fs2000.mod "$here/plots" "$here/work_plots/capture" <<'PY'
+import sys
+path, plots, capture = sys.argv[1:4]
+text = open(path).read()
+pre = (f"options_.riccati_tol = 1e-16;\noptions_.nodisplay = true;\naddpath('{plots}');\n"
+       f"addpath('{capture}');\n")
+open(path, "w").write(text.replace("\nidentification(", "\n" + pre + "identification(", 1))
+PY
+    ( cd work_plots && "$OCTAVE" --no-gui --eval "
+      pkg load statistics datatypes; addpath '$DYNARE_MATLAB';
+      global PLOT_CAPTURE; PLOT_CAPTURE = {};
+      dynare fs2000 noclearall;
+      export_identification('fs2000', '../out_plots/identification.mat');
+      printf('saved out_plots/identification.mat\n');
+    " > ../out_plots/identification.log 2>&1 ) || { echo "FAILED, see out_plots/identification.log"; tail -20 out_plots/identification.log; exit 1; }
+    grep '^saved' out_plots/identification.log
+  elif [ "$part" = decomposition ]; then
+    # fs2000 at the prior mean (mode_compute=0, the initial point), with the initial condition
+    # decomposition, the shock decomposition, the real-time decompositions with a forecast of 4
+    # periods, and a conditional forecast of 12 periods on 2,000 draws in which gp_obs follows a
+    # path for 4 periods and e_m is the controlled shock, so that e_a is drawn. The state of randn
+    # just before conditional_forecast is kept for export_decomposition.m.
+    estimation_line work_plots/fs2000.mod "estimation(order=1, datafile=fs2000_data, loglinear, \
+logdata, nograph, nodisplay, plot_priors=0, mode_compute=0, mh_replic=0, smoother) gp_obs gy_obs c y;
+options_.parameter_set = 'calibration';
+initial_condition_decomposition(nodisplay) gp_obs gy_obs c y;
+shock_decomposition(parameter_set=calibration, nograph) gp_obs gy_obs c y;
+realtime_shock_decomposition(parameter_set=calibration, forecast=4, save_realtime=[40 80 120]) \
+gp_obs gy_obs c y;
+conditional_forecast_paths;
+var gp_obs;
+periods 1:4;
+values 0.02;
+end;
+global CF_RNG;
+CF_RNG = randn('state');
+conditional_forecast(parameter_set=prior_mean, controlled_varexo=(e_m), replic=2000, periods=12);"
+    ( cd work_plots && "$OCTAVE" --no-gui --eval "
+      pkg load statistics datatypes; addpath '$DYNARE_MATLAB'; addpath '$here/plots';
+      dynare fs2000 noclearall nograph;
+      export_decomposition('../out_plots/decomposition.mat', {'gp_obs'; 'gy_obs'; 'c'; 'y'}, 2000, 12);
+      printf('saved out_plots/decomposition.mat\n');
+    " > ../out_plots/decomposition.log 2>&1 ) || { echo "FAILED, see out_plots/decomposition.log"; tail -20 out_plots/decomposition.log; exit 1; }
+    grep '^saved' out_plots/decomposition.log
   else
     echo "unknown part $part"; exit 1
   fi

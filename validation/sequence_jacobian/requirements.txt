@@ -1,4 +1,4 @@
-# The environment in which sequence-jacobian 1.0.0 runs the two models of
+# The environment in which sequence-jacobian 1.0.0 runs the four models of
 # compare_heterogeneous.py. The package declares no dependencies; these are the ones it imports,
 # at the versions resolved on 3 November 2026, frozen so that the reference does not move.
 sequence-jacobian==1.0.0

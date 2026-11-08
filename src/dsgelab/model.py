@@ -24,6 +24,7 @@ at second order.
 from __future__ import annotations
 
 import inspect
+import warnings
 from dataclasses import dataclass, fields, is_dataclass, replace
 from typing import Any, Callable, Iterable, Mapping, Sequence, TypeAlias
 
@@ -42,6 +43,16 @@ Point: TypeAlias = Mapping[str, float] | ArrayLike
 #: A shock covariance: standard deviations by shock name, a vector of them, a
 #: matrix, or ``None`` for the identity (see :func:`dsgelab.shock_covariance`).
 Covariance: TypeAlias = Mapping[str, float] | ArrayLike | None
+
+
+def _resolve_max_iter(maxiter: int | None, max_iter: int | None, default: int) -> int:
+    if maxiter is not None:
+        if max_iter is not None:
+            raise ValueError("pass only one of maxiter and max_iter")
+        warnings.warn("maxiter is deprecated; use max_iter instead", DeprecationWarning,
+                      stacklevel=2)
+        return maxiter
+    return default if max_iter is None else max_iter
 
 
 class VarView:
