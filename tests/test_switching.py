@@ -324,3 +324,31 @@ def test_second_order_irf_is_asymmetric_and_depends_on_the_regime():
     assert np.max(np.abs(up["c"] - other["c"])) > 1e-3
     # z' = z^rho exp(sigma eps): its response at impact is exact at second order up to eps^3.
     assert up["z"][0] / 100 == pytest.approx(0.01 + 0.5 * 0.01 ** 2, rel=1e-6)
+
+
+def test_max_iter_alias_in_solve_markov_switching():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new = dsg.solve_markov_switching(fisher_model(), dict(alpha=1.0, rho=0.7),
+                                         {"alpha": (1.8, 1.1)}, T2, guess=dict(r=0.0, pi=0.0),
+                                         max_iter=100)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old = dsg.solve_markov_switching(fisher_model(), dict(alpha=1.0, rho=0.7),
+                                         {"alpha": (1.8, 1.1)}, T2, guess=dict(r=0.0, pi=0.0),
+                                         maxiter=100)
+    np.testing.assert_allclose(new.F, old.F)
+
+
+def test_max_iter_alias_in_msv_solutions():
+    import warnings
+
+    system, _, _ = dsg.switching_system(fisher_model(), dict(alpha=1.0, rho=0.7),
+                                        {"alpha": (1.8, 1.1)}, T2, guess=dict(r=0.0, pi=0.0))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new, _, _ = dsg.msv_solutions(system, max_iter=100)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old, _, _ = dsg.msv_solutions(system, maxiter=100)
+    np.testing.assert_allclose(new[0].F, old[0].F)

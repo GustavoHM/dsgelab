@@ -89,3 +89,16 @@ def test_quadrature_nodes_integrate_the_first_two_moments():
     assert np.allclose(w @ nodes[:, 0] ** 4, 3 * 0.04 ** 2, atol=1e-14)   # exact to degree 9
     with pytest.raises(ValueError):
         quadrature_nodes(cov, 4)
+
+
+def test_max_iter_alias_in_extended_path():
+    import warnings
+
+    ss = dsg.steady_state(BURNSIDE, SS_B, PB)
+    E = np.zeros((2, 1))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new = extended_path(BURNSIDE, ss, PB, E, horizon=5, max_iter=50)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old = extended_path(BURNSIDE, ss, PB, E, horizon=5, maxiter=50)
+    np.testing.assert_allclose(new.levels, old.levels)

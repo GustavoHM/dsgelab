@@ -23,7 +23,7 @@ from numpy.typing import ArrayLike
 from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
 
-from .model import Model, Params
+from .model import Model, Params, _resolve_max_iter
 from .steady import SteadyState
 
 __all__ = ["TransitionPath", "perfect_foresight", "path_of", "News",
@@ -106,7 +106,8 @@ def path_of(value: Any, periods: int) -> list:
 def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *,
                       params: Params | Sequence[Params] | Callable[[int], Params], T: int = 120,
                       ctx: Any = None, initial_states: ArrayLike | None = None,
-                      shocks: ArrayLike | None = None, maxiter: int = 50, tol: float = 1e-10,
+                      shocks: ArrayLike | None = None, maxiter: int | None = None,
+                      max_iter: int | None = None, tol: float = 1e-10,
                       damping: float = 1.0, jacobian: str = "auto", h: float = 1e-7,
                       guess: np.ndarray | None = None,
                       raise_on_fail: bool = True) -> TransitionPath:
@@ -137,6 +138,7 @@ def perfect_foresight(model: Model, start: SteadyState, terminal: SteadyState, *
         or ``(T+1, n_shocks)``; entry ``t`` is ``eps`` in the residual that links
         date ``t`` to date ``t+1``. Absent, every innovation is zero.
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 50)
     n = model.n_vars
     nk = model.n_states
     nu = model.n_jumps

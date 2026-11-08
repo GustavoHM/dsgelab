@@ -88,3 +88,18 @@ def test_a_failing_residual_is_located_on_the_path():
     assert "residuals raised in the equations linking date 7 to date 8" in note
     assert "Newton iteration 0" in note
     assert f"k={ss['k']:.6g}" in note and "c=" in note
+
+
+def test_max_iter_alias_in_perfect_foresight():
+    import warnings
+
+    model, p, guess = rbc.build()
+    ss = dsg.steady_state(model, guess, p)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new = dsg.perfect_foresight(model, ss, ss, params=p, T=5, max_iter=50)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old = dsg.perfect_foresight(model, ss, ss, params=p, T=5, maxiter=50)
+    np.testing.assert_allclose(new.levels, old.levels)
+    with pytest.raises(ValueError, match="only one of maxiter and max_iter"):
+        dsg.perfect_foresight(model, ss, ss, params=p, T=1, maxiter=50, max_iter=50)

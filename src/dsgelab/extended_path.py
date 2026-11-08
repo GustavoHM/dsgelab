@@ -39,7 +39,7 @@ from scipy.sparse import coo_matrix, csr_matrix
 from scipy.sparse.linalg import spsolve
 
 from .foresight import _expost_states, perfect_foresight
-from .model import Model, Params
+from .model import Model, Params, _resolve_max_iter
 from .steady import SteadyState
 
 if TYPE_CHECKING:
@@ -268,7 +268,7 @@ def extended_path(model: Model, steady: SteadyState, params: Params,
                   horizon: int = 200, order: int = 0, nodes: int = 3, tree: str = "sparse",
                   hybrid: SecondOrderSolution | bool | None = None,
                   initial_states: ArrayLike | None = None, ctx: Any = None, tol: float = 1e-12,
-                  maxiter: int = 50) -> ExtendedPath:
+                  maxiter: int | None = None, max_iter: int | None = None) -> ExtendedPath:
     """Simulate by extended path.
 
     Parameters
@@ -294,6 +294,7 @@ def extended_path(model: Model, steady: SteadyState, params: Params,
     initial point, row ``t`` the outcome of the ``t``-th shock (Dynare's column
     ``t + 1``).
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 50)
     n, nk = model.n_vars, model.n_states
     if shocks is None:
         if periods is None or cov is None:
@@ -325,7 +326,7 @@ def extended_path(model: Model, steady: SteadyState, params: Params,
         levels[0, :nk] = np.asarray(initial_states, dtype=float)
         if order == 0:
             p0 = perfect_foresight(model, steady, steady, params=params, T=horizon, ctx=ctx,
-                                   initial_states=levels[0, :nk], tol=tol, maxiter=maxiter)
+                                   initial_states=levels[0, :nk], tol=tol, max_iter=maxiter)
             levels[0] = p0.levels[0]
     if order > 0:
         nodes_q, weights = quadrature_nodes(cov, nodes)
@@ -342,7 +343,7 @@ def extended_path(model: Model, steady: SteadyState, params: Params,
             if guess is not None:
                 g = np.vstack([guess[1:], steady.x[None, :]])
             plan = perfect_foresight(model, steady, steady, params=params, T=horizon, ctx=ctx,
-                                     initial_states=k, guess=g, tol=tol, maxiter=maxiter)
+                                     initial_states=k, guess=g, tol=tol, max_iter=maxiter)
             guess = plan.levels
             levels[t] = plan.levels[0]
             iterations.append(plan.iterations)

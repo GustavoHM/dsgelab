@@ -58,7 +58,7 @@ from numpy.typing import ArrayLike
 from .klein import BlanchardKahnError, klein
 from .linearize import Coordinates, first_order_system, second_derivatives
 from .markov import MarkovChain
-from .model import Covariance, Model, Params, Point, get_param, set_params
+from .model import Covariance, Model, Params, Point, _resolve_max_iter, get_param, set_params
 from .solution import _psd_factor, shock_covariance
 from .steady import SteadyState, steady_state
 
@@ -456,7 +456,7 @@ def _klein_start(system, A, B):
 
 def msv_solutions(system: SwitchingSystem, *, starts: int = 0, seed: int | None = 0,
                   initial: Sequence[ArrayLike] = (), complex: bool = False,
-                  tol: float = 1e-11, maxiter: int = 100) -> tuple[list[MSVSolution], int, int]:
+                  tol: float = 1e-11, maxiter: int | None = None, max_iter: int | None = None) -> tuple[list[MSVSolution], int, int]:
     """Solve the quadratic system of ``system`` by Newton's method from several points.
 
     The starting points are the ``initial`` arrays given, of shape
@@ -471,6 +471,7 @@ def msv_solutions(system: SwitchingSystem, *, starts: int = 0, seed: int | None 
     order they were found, the number of starting points and how many of them
     converged.
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 100)
     h, nu, nk = system.h, system.n_u, system.n_k
     T = system.transition
     blocks = system._blocks()
@@ -794,7 +795,7 @@ def solve_markov_switching(model: Model, params: Params,
                            starts: int = 0, seed: int | None = 0,
                            initial: Sequence[ArrayLike] = (), ctx: Any = None,
                            positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
-                           maxiter: int = 100, order: Literal[1] = 1, cov: Covariance = None
+                           maxiter: int | None = None, max_iter: int | None = None, order: Literal[1] = 1, cov: Covariance = None
                            ) -> MarkovSwitchingSolution: ...
 
 
@@ -807,7 +808,7 @@ def solve_markov_switching(model: Model, params: Params,
                            starts: int = 0, seed: int | None = 0,
                            initial: Sequence[ArrayLike] = (), ctx: Any = None,
                            positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
-                           maxiter: int = 100, order: Literal[2], cov: Covariance = None
+                           maxiter: int | None = None, max_iter: int | None = None, order: Literal[2], cov: Covariance = None
                            ) -> SecondOrderSwitchingSolution: ...
 
 
@@ -820,7 +821,7 @@ def solve_markov_switching(model: Model, params: Params,
                            starts: int = 0, seed: int | None = 0,
                            initial: Sequence[ArrayLike] = (), ctx: Any = None,
                            positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
-                           maxiter: int = 100, order: int = 1, cov: Covariance = None
+                           maxiter: int | None = None, max_iter: int | None = None, order: int = 1, cov: Covariance = None
                            ) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution: ...
 
 
@@ -832,7 +833,7 @@ def solve_markov_switching(model: Model, params: Params,
                            starts: int = 0, seed: int | None = 0,
                            initial: Sequence[ArrayLike] = (), ctx: Any = None,
                            positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
-                           maxiter: int = 100, order: int = 1, cov: Covariance = None
+                           maxiter: int | None = None, max_iter: int | None = None, order: int = 1, cov: Covariance = None
                            ) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution:
     """Solve a Markov-switching model to first or second order.
 
@@ -872,13 +873,14 @@ def solve_markov_switching(model: Model, params: Params,
         the solutions it finds is mean-square stable. ``solutions`` on the
         exception holds what was found.
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 100)
     if order not in (1, 2):
         raise ValueError(f"order must be 1 or 2, not {order!r}")
     system, steady, perturbed = switching_system(
         model, params, switching, transition, steady=steady, guess=guess,
         next_regime=next_regime, perturbed=perturbed, ctx=ctx, positive=positive, h=h)
     found, tried, converged = msv_solutions(system, starts=starts, seed=seed, initial=initial,
-                                            tol=tol, maxiter=maxiter)
+                                            tol=tol, max_iter=maxiter)
     if not found:
         raise MarkovSwitchingError(
             f"Newton's method converged from none of {tried} starting points; pass more "

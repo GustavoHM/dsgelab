@@ -129,6 +129,10 @@ features, without changing the API of an earlier release. The rest of the milest
 - `value_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a
   `CartesianGrid`, so that a `SmolyakGrid` can refuse a value. Calls that worked before give the
   same results.
+- `max_iter` is the preferred iteration-limit keyword in `calibrate`, `perfect_foresight`,
+  `extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`. `maxiter`
+  remains accepted as a deprecated alias, with its previous default, and passing both names raises
+  `ValueError`.
 - In `from_equations`, the lead `x(+k)`, `k >= 2`, of a state starts from a new jump
   `LEAD0_x = x`, with `LEAD1_x = LEAD0_x(+1)`. Before, `LEAD1_x = x(+1)` had no jump at `t+1`, and
   with an exogenous state the solver refused the model as inconsistent. A model with the lead of

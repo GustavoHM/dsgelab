@@ -12,6 +12,13 @@ of `FirstOrderSolution`, and methods and fields are listed under their class.
 Entries marked "Requires sympy" need the `symbolic` extra
 (`pip install "dsgelab[symbolic]"`).
 
+Iteration-limit keywords are named `max_iter`. In `calibrate`, `perfect_foresight`,
+`extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`, the older
+`maxiter` remains accepted as a deprecated alias, with its previous default. Passing both names
+raises `ValueError`. `T` stays in the sequence-jacobian-compatible heterogeneous-agent API, whose
+other solvers use `periods`; `maxit` and `max_nfev` retain Dynare's and SciPy's names where those
+interfaces call for them.
+
 ---
 
 ## Declaring
@@ -847,7 +854,7 @@ sequence-jacobian's `agrid`.
 
 ## Markov regime switching
 
-### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100, order=1, cov=None) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution`
+### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=None, max_iter=None, order=1, cov=None) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution`
 
 The first-order solution of a model some of whose parameters switch with a Markov chain. The model
 is an ordinary `Model`; it holds in expectation over the next regime and the next innovation,
@@ -955,7 +962,7 @@ one block per pair of regimes, in `A[i,j] E y' = B[i,j] y + C[i,j] eps' + c[i,j]
 scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion), `expected` (the
 other rows) and `row_scale` (the divisor of each row).
 
-### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=100) -> (solutions, tried, converged)`
+### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=None, max_iter=None) -> (solutions, tried, converged)`
 
 Newton's method from the starting points above, returning the distinct `MSVSolution`s in the order
 found. With `complex=True` the random points are complex and the iteration runs in complex
@@ -1015,7 +1022,7 @@ measurement sds, switching, transition)` and `start()`.
 
 ## Transitions
 
-### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=50, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
+### `perfect_foresight(model, start, terminal, *, params, T=120, ctx=None, initial_states=None, shocks=None, maxiter=None, max_iter=None, tol=1e-10, damping=1.0, jacobian="auto", h=1e-7, guess=None, raise_on_fail=True) -> TransitionPath`
 
 | Argument | Meaning |
 |---|---|
@@ -1061,7 +1068,7 @@ Normalises a constant, a sequence or a callable into a list of length `periods`.
 `perfect_foresight` applies it to `params` and `ctx` with `periods = T+1`. A
 sequence of another length raises `ValueError`.
 
-### `extended_path(model, steady, params, shocks=None, *, periods=None, cov=None, seed=None, horizon=200, order=0, nodes=3, tree="sparse", hybrid=None, initial_states=None, ctx=None, tol=1e-12, maxiter=50) -> ExtendedPath`
+### `extended_path(model, steady, params, shocks=None, *, periods=None, cov=None, seed=None, horizon=200, order=0, nodes=3, tree="sparse", hybrid=None, initial_states=None, ctx=None, tol=1e-12, maxiter=None, max_iter=None) -> ExtendedPath`
 
 A stochastic simulation in which a nonlinear plan is solved every period (Fair
 and Taylor, 1983). At each date the shock arrives, the states it leads to are
@@ -1299,7 +1306,7 @@ ss = dsg.ramsey_steady_state(m, dict(u=0, x=0, pi=0, i=0), params)
 irf = dsg.solve(m, params, steady=ss).irf("e", size=1.0)
 ```
 
-### `discretionary_policy(equations, *, params, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, steady=None, cov=None, tol=1e-12, maxiter=3000, qz_criterium=1+1e-6) -> DiscretionSolution`
+### `discretionary_policy(equations, *, params, states=None, jumps=None, shocks=None, parameters=None, instruments=None, objective=None, discount=None, steady=None, cov=None, tol=1e-12, maxiter=None, max_iter=None, qz_criterium=1+1e-6) -> DiscretionSolution`
 
 Optimal policy without commitment, in the linear-quadratic class, by Dennis's
 (2007) algorithm as Dynare's `discretionary_policy` implements it. The private
@@ -1943,7 +1950,7 @@ print(irf["mean"]["x"]["z"][:4])                    # the response of z to the i
 
 ## Calibration
 
-### `calibrate(model, params, *, free, targets, guess, observables=None, bounds=None, ctx=None, ctx_update=None, positive=(), steady_tol=1e-11, tol=1e-10, maxiter=200, warm_start=True, raise_on_fail=True) -> CalibrationResult`
+### `calibrate(model, params, *, free, targets, guess, observables=None, bounds=None, ctx=None, ctx_update=None, positive=(), steady_tol=1e-11, tol=1e-10, maxiter=None, max_iter=None, warm_start=True, raise_on_fail=True) -> CalibrationResult`
 
 `free` maps parameter names to starting values, and `targets` maps target names
 to wanted values. `observables(ss, params) -> mapping` supplies targets that are

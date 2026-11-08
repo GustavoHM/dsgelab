@@ -674,10 +674,14 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
     jacobianos em 2,9e-10, `G` em 8,3e-11, as respostas linear e não linear em 2,2e-10 e o retorno
     a partir da distribuição de outro estado estacionário em 6,0e-10. Os jacobianos do fake news
     concordam com os de força bruta em 1,6e-9. A grade de ativos fica fixa ao longo da trajetória.
-- [ ] **Auditoria da API antes do congelamento.** Um inventário do `__all__`, com nomes, ordem dos
-  argumentos e valores padrão coerentes entre os módulos. Cada mudança vem com um aviso de
-  descontinuação que dura pelo menos uma versão menor, como exige a política de versões da 0.5, e
-  por isso a auditoria sai antes da 1.0.
+- [x] **Auditoria da API antes do congelamento.** Os 237 exports de nível superior em `__all__`
+  são únicos e estão definidos, e os nomes, ordens dos argumentos e valores padrão são coerentes
+  entre os módulos. Cada mudança vem com um aviso de descontinuação que dura pelo menos uma versão
+  menor, como exige a política de versões da 0.5, e por isso a auditoria sai antes da 1.0.
+  - [x] *Limites de iteração com `max_iter`* (8 de novembro de 2026), em `calibrate`,
+    `perfect_foresight`, `extended_path`, `discretionary_policy`, `solve_markov_switching` e
+    `msv_solutions`. O antigo `maxiter` continua aceito como alias descontinuado, com os mesmos
+    valores padrão, e passar os dois nomes gera `ValueError`.
 
 ### 1.0
 

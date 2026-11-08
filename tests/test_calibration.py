@@ -64,3 +64,18 @@ def test_calibration_failure_raises_rather_than_returning_a_wrong_number():
         # No beta in (0.5, 0.999) delivers a capital stock of 50.
         dsg.calibrate(model, p, free={"beta": 0.95}, targets={"k": 50.0},
                      guess=guess, bounds={"beta": (0.5, 0.999)})
+
+
+def test_max_iter_alias_in_calibrate():
+    import warnings
+
+    model, p, guess = rbc.build()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        new = dsg.calibrate(model, p, free={"beta": 0.95}, targets={"k": 0.22}, guess=guess,
+                            max_iter=200)
+    with pytest.warns(DeprecationWarning, match="maxiter is deprecated"):
+        old = dsg.calibrate(model, p, free={"beta": 0.95}, targets={"k": 0.22}, guess=guess,
+                            maxiter=200)
+    assert new.values["beta"] == pytest.approx(old.values["beta"], rel=1e-14)
+    assert new.steady["k"] == pytest.approx(0.22, rel=1e-9)

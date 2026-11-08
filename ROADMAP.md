@@ -645,10 +645,14 @@ of 0.9.0 records, and each keeps the six conditions above.
     `G` within 8.3e-11, the linear and nonlinear responses within 2.2e-10 and the return from
     another steady state's distribution within 6.0e-10. The fake-news Jacobians agree with the
     brute-force ones within 1.6e-9. The asset grid stays fixed along a path.
-- [ ] **API audit before the freeze.** An inventory of `__all__`, with the names, argument orders
-  and defaults made consistent across modules. Every change comes with a deprecation warning that
-  lasts at least one minor version, as the version policy of 0.5 requires, so the audit is
-  published before 1.0.
+- [x] **API audit before the freeze.** The 237 top-level exports in `__all__` are unique and
+  defined, and the names, argument orders and defaults are consistent across modules. Every change
+  comes with a deprecation warning that lasts at least one minor version, as the version policy of
+  0.5 requires, so the audit is published before 1.0.
+  - [x] *Iteration limits use `max_iter`* (8 November 2026), in `calibrate`, `perfect_foresight`,
+    `extended_path`, `discretionary_policy`, `solve_markov_switching` and `msv_solutions`. The
+    older `maxiter` remains accepted as a deprecated alias with the same defaults, and passing
+    both names raises `ValueError`.
 
 ### 1.0
 

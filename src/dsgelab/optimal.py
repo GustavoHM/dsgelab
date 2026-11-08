@@ -70,7 +70,7 @@ from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 import numpy as np
 from numpy.typing import ArrayLike
 
-from .model import Covariance, Model, Params, Point
+from .model import Covariance, Model, Params, Point, _resolve_max_iter
 from .steady import SteadyState, steady_state
 
 if TYPE_CHECKING:
@@ -615,7 +615,8 @@ def discretionary_policy(equations: Sequence[str] | ModFile | PrivateBlock, *,
                          objective: str | sympy.Expr | None = None,
                          discount: str | float | sympy.Expr | None = None,
                          steady: Mapping[str, float] | None = None,
-                         cov: Covariance = None, tol: float = 1e-12, maxiter: int = 3000,
+                         cov: Covariance = None, tol: float = 1e-12, maxiter: int | None = None,
+                         max_iter: int | None = None,
                          qz_criterium: float = 1 + 1e-6) -> DiscretionSolution:
     """Optimal policy under discretion, in the linear-quadratic class.
 
@@ -639,6 +640,7 @@ def discretionary_policy(equations: Sequence[str] | ModFile | PrivateBlock, *,
     next-period terms are states (and shocks), holds at ``t+1``; a condition
     with no next-period term at all holds at ``t``.
     """
+    maxiter = _resolve_max_iter(maxiter, max_iter, 3000)
     from .symbolic import _require_sympy
 
     sympy = _require_sympy()
