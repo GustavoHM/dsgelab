@@ -223,7 +223,7 @@ def household(Va_p, a_grid, y, r, beta, eis):
     c_nextgrid = (beta * Va_p) ** (-eis)
     coh = (1 + r) * a_grid + y[..., np.newaxis]
     a = interpolate_y(c_nextgrid + a_grid, coh, a_grid)  # (x, xq, y)
-    a = np.maximum(a, a_grid[0]) 
+    a = np.maximum(a, a_grid[0])
     c = coh - a
     uc = c ** (-1 / eis)
     Va = (1 + r) * uc
