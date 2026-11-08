@@ -205,7 +205,7 @@ Concluído na versão 0.4.0, em 11 de outubro de 2026.
   `var(log_deflator=)` são destendenciados como o Dynare faz, com a verificação do crescimento
   balanceado. O `balanced_growth` resolve o problema do `+bgp`, com resíduos que coincidem com
   os do Dynare até 2,2e-16. *Falta declarar tendências em `from_equations`, e por ora o caminho
-  é o `.mod`.*
+  é o `.mod`.* (Incluído na 0.10.)
 - [x] **Diagnóstico do modelo** (`diagnose`), o `model_diagnostics` do Dynare, com o mesmo
   relatório.
 
@@ -639,12 +639,27 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
   condições iniciais concordam até 2e-14, e a previsão condicional com as suas bandas de 80%, nos
   2.000 sorteios do Dynare, até 7e-15. Ficam de fora a anualização `q2a` do Dynare e as barras de
   sensibilidade da sua forma reduzida e do seu modelo dinâmico (6 de novembro de 2026).
-- [ ] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
-  `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4.
+- [x] **Tendências declaradas no `from_equations`**, como um `.mod` as declara com `trend_var` e
+  `deflator`. Referência: o Dynare, como na trajetória de crescimento equilibrado da 0.4. O
+  `from_equations` aceita `trend_vars`, `log_trend_vars`, `deflators` e `log_deflators`, com a
+  destendenciação e a verificação de crescimento equilibrado do Dynare. No Solow e no Ramsey de
+  `tests/bgp`, com as tendências declaradas, e no `tests/trend_var/fs2000_nonstationary.mod`, o
+  estado estacionário concorda com o do Dynare até 3,4e-14, as IRFs até 9,7e-14 da maior resposta
+  de cada variável, as trajetórias sob os mesmos 200 choques até 8,2e-14 e a matriz de variâncias
+  até 7,8e-14 da sua maior entrada. Contra o `from_mod` no mesmo `.mod`, a maior diferença é
+  1,4e-13 (6 de novembro de 2026).
 - [x] **As extensões que os itens da 0.9 deixaram de fora**: mudança de regime em segunda ordem
   (Foerster, Rubio-Ramírez, Waggoner e Zha, 2016, que imprimem os coeficientes de segunda ordem),
   dois ativos em agentes heterogêneos (o HANK de dois ativos do sequence-jacobian), e uma matriz de
   Markov que muda ao longo de uma trajetória de transição.
+  - [x] *Mudança de regime em segunda ordem* (8 de novembro de 2026), por
+    `solve_second_order_switching` e `solve_markov_switching(..., order=2)`. A validação reproduz
+    os 96 coeficientes de segunda ordem que Foerster et al. (2016) imprimem para o seu RBC após o
+    arredondamento a quatro casas decimais, com a maior diferença de 0,48 unidade da quarta casa
+    decimal. Regimes idênticos concordam com `solve_second_order` em 7,9e-15, e o crescimento
+    estocástico com utilidade logarítmica, depreciação total e produtividade, persistência e
+    volatilidade com mudança de regime concorda com a forma fechada em 1,3e-10. A simulação é
+    podada por padrão.
   - [x] *Dois ativos em agentes heterogêneos* (8 de novembro de 2026), com `policy` e `grid`
     aceitando dois nomes e a distribuição movida pelo produto das duas loterias. No
     `two_asset.ipynb` do sequence-jacobian 1.0.0, em 3 por 50 por 70 pontos, o estado

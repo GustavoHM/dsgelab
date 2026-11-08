@@ -194,6 +194,7 @@ Completed in version 0.4.0, on 11 October 2026.
   `var(log_deflator=)` are detrended as Dynare does, with the balanced-growth check.
   `balanced_growth` solves the `+bgp` problem, with residuals equal to Dynare's to 2.2e-16.
   *Declaring trends in `from_equations` is still missing, and for now the route is the `.mod`.*
+  (Added in 0.10.)
 - [x] **Model diagnostics** (`diagnose`), Dynare's `model_diagnostics`, with the same report.
 
 ### 0.5 — public release (released on 18 October 2026)
@@ -612,12 +613,25 @@ of 0.9.0 records, and each keeps the six conditions above.
   condition decomposition agree within 2e-14, and the conditional forecast with its 80% bands,
   on Dynare's 2,000 draws, within 7e-15. Dynare's `q2a` annualisation and the sensitivity bars of
   its reduced form and dynamic model are left out (6 November 2026).
-- [ ] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
-  `deflator`. Reference: Dynare, as for the balanced growth path of 0.4.
+- [x] **Trends declared in `from_equations`**, as a `.mod` file declares them with `trend_var` and
+  `deflator`. Reference: Dynare, as for the balanced growth path of 0.4. `from_equations` takes
+  `trend_vars`, `log_trend_vars`, `deflators` and `log_deflators`, with Dynare's detrending and
+  balanced-growth check. On Solow and Ramsey from `tests/bgp`, with their trends declared, and on
+  `tests/trend_var/fs2000_nonstationary.mod`, the steady state agrees with Dynare's within
+  3.4e-14, the IRFs within 9.7e-14 of each variable's largest response, the paths under the same
+  200 shocks within 8.2e-14 and the variance matrix within 7.8e-14 of its largest entry. Against
+  `from_mod` on the same `.mod` the largest difference is 1.4e-13 (6 November 2026).
 - [x] **The extensions the 0.9 items left out**: regime switching at second order (Foerster,
   Rubio-Ramírez, Waggoner and Zha, 2016, whose second-order coefficients are printed), two assets
   in heterogeneous agents (sequence-jacobian's two-asset HANK), and a Markov matrix that moves
   along a transition path.
+  - [x] *Regime switching at second order* (8 November 2026), by
+    `solve_second_order_switching` and `solve_markov_switching(..., order=2)`. The validation
+    reproduces all 96 second-order coefficients that Foerster et al. (2016) print for their RBC
+    once rounded to four decimals, with the largest difference 0.48 of a unit of the fourth
+    decimal. Identical regimes agree with `solve_second_order` within 7.9e-15, and stochastic
+    growth with log utility, full depreciation and switching productivity, persistence and
+    volatility agrees with the closed form within 1.3e-10. Simulation is pruned by default.
   - [x] *Two assets in heterogeneous agents* (8 November 2026), with `policy` and `grid` taking
     two names and the distribution moved by the product of the two lotteries. On
     sequence-jacobian 1.0.0's `two_asset.ipynb`, on 3 by 50 by 70 points, the steady state agrees

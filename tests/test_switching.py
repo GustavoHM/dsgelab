@@ -197,3 +197,130 @@ def test_simulation_follows_a_given_regime_path():
     np.testing.assert_array_equal(sim["regime"], path[10:])
     np.testing.assert_allclose(sim["y"] - sim["z"], np.where(path[10:] == 0, 2.0, -1.0),
                                rtol=1e-9)
+
+
+# ------------------------------------------------------------------------------ second order
+def brock_mirman():
+    """Log utility and full depreciation: k' = alpha beta y and c = (1 - alpha beta) y exactly."""
+    return dsg.Model(states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+                     equations=lambda nxt, cur, eps, p: [
+                         nxt.k - (cur.y - cur.c),
+                         nxt.z - np.exp(p["rho"] * np.log(cur.z) + p["sigma"] * eps.e),
+                         1 / cur.c - p["beta"] * p["alpha"] * nxt.y / (nxt.k * nxt.c),
+                         cur.y - p["A"] * cur.z * cur.k ** p["alpha"]])
+
+
+def solve_brock_mirman(order=2):
+    a, beta = 0.33, 0.96
+    A, rho, sigma = np.array([1.05, 0.95]), np.array([0.9, 0.5]), np.array([0.01, 0.03])
+    Abar = float(np.array([T2[1, 0], T2[0, 1]]) @ A / (T2[0, 1] + T2[1, 0]))
+    k = (a * beta * Abar) ** (1 / (1 - a))
+    ms = dsg.solve_markov_switching(
+        brock_mirman(), dict(alpha=a, beta=beta, A=1.0, rho=0.9, sigma=0.01),
+        {"A": A, "rho": rho, "sigma": sigma}, T2, next_regime=("rho", "sigma"), order=order,
+        guess=dict(k=k, z=1.0, c=(1 - a * beta) * Abar * k ** a, y=Abar * k ** a))
+    return ms, a, A / Abar - 1, rho, sigma
+
+
+def test_second_order_with_identical_regimes_is_solve_second_order():
+    model, params, guess = rbc.build()
+    s2 = dsg.solve_second_order(dsg.solve(model, params, guess=guess))
+    ms = dsg.solve_markov_switching(model, params, {"rho": (params.rho, params.rho)}, T2,
+                                    guess=guess, order=2)
+    assert isinstance(ms, dsg.SecondOrderSwitchingSolution) and ms.residual < 1e-14
+    for i in range(2):
+        np.testing.assert_allclose(ms.g_kk[i], s2.g_kk, atol=1e-13)
+        np.testing.assert_allclose(ms.g_ss[i], s2.g_ss, atol=1e-13)
+        for j in range(2):
+            np.testing.assert_allclose(ms.h_kk[i, j], s2.h_kk, atol=1e-13)
+            np.testing.assert_allclose(ms.h_uu[i, j], s2.h_uu, atol=1e-13)
+            np.testing.assert_allclose(ms.h_ku[i, j], s2.h_ku, atol=1e-13)
+            np.testing.assert_allclose(ms.h_ss[i, j], s2.h_s2, atol=1e-13)
+    assert max(np.max(np.abs(ms.g_ks)), np.max(np.abs(ms.h_ks)), np.max(np.abs(ms.h_us))) == 0
+    rule, mine = s2.decision_rule(), ms.decision_rule(1, 0)
+    for name in ("g_k", "g_u", "g_kk", "g_uu", "g_ku"):
+        np.testing.assert_allclose(getattr(mine, name), getattr(rule, name), atol=1e-13)
+    mean, got = s2.mean_correction(), ms.ergodic_mean(levels=False)
+    for n in model.names:
+        assert got[n] == pytest.approx(mean[n], abs=1e-12)
+
+
+def test_second_order_has_the_closed_form_of_log_utility_and_full_depreciation():
+    ms, a, d, rho, sigma = solve_brock_mirman()
+    assert ms.first.perturbed == ["A"]
+    Gk = np.array([[a * (a - 1), a], [a, 0.0]])
+    for i in range(2):
+        Gs = np.array([a * d[i], d[i]])
+        for r in range(2):                                    # c and y
+            np.testing.assert_allclose(ms.g_kk[i, r], Gk, atol=1e-6)
+            np.testing.assert_allclose(ms.g_ks[i, r], Gs, atol=1e-6)
+        np.testing.assert_allclose(ms.g_ss[i], 0.0, atol=1e-6)
+        for j in range(2):
+            np.testing.assert_allclose(ms.h_kk[i, j, 0], Gk, atol=1e-6)
+            np.testing.assert_allclose(ms.h_ks[i, j, 0], Gs, atol=1e-6)
+            np.testing.assert_allclose(ms.h_kk[i, j, 1], np.diag([0, rho[j] * (rho[j] - 1)]),
+                                       atol=1e-6)
+            np.testing.assert_allclose(ms.h_ku[i, j, 1, :, 0], [0, rho[j] * sigma[j]], atol=1e-6)
+            assert ms.h_uu[i, j, 1, 0, 0] == pytest.approx(sigma[j] ** 2, abs=1e-6)
+            np.testing.assert_allclose(ms.h_ss[i, j], 0.0, atol=1e-6)
+    # The rule for c' composes the two: log(1 + c') = log(1 + chi d') + rho' log(1 + z)
+    # + sigma' eps + alpha log(1 + chi d) + alpha log(1 + z) + alpha^2 log(1 + k).
+    rule = ms.decision_rule(0, 1)
+    assert rule.g_kk[2, 0, 0] == pytest.approx(a ** 2 * (a ** 2 - 1), abs=1e-6)
+    assert rule.g_ku[2, 0, 0] == pytest.approx(a ** 2 * sigma[1], abs=1e-6)
+    assert rule.g_ks[2, 0] == pytest.approx(a ** 2 * (d[1] + a * d[0]), abs=1e-6)
+
+
+def test_frwz_simple_model_has_no_second_order_terms():
+    # Foerster et al. (2016), Proposition 3: the first-order solution is exact.
+    model = dsg.Model(states=["e"], jumps=["pi"], shocks=["eps"],
+                      equations=lambda nxt, cur, eps, p: [
+                          nxt.e - eps.eps, p["phi"] * cur.pi + p["sigma"] * cur.e - nxt.pi])
+    ms = dsg.solve_markov_switching(model, dict(phi=1.0, sigma=0.1),
+                                    {"phi": (1.25, 0.96), "sigma": (0.1, 0.6)},
+                                    [[0.95, 0.05], [0.15, 0.85]], guess=dict(e=0.0, pi=0.0),
+                                    starts=20, order=2)
+    for name in ("g_kk", "g_ks", "g_ss", "h_kk", "h_ku", "h_uu", "h_ks", "h_us", "h_ss"):
+        assert np.max(np.abs(getattr(ms, name))) < 1e-10, name
+
+
+def test_order_must_be_one_or_two():
+    with pytest.raises(ValueError, match="order"):
+        dsg.solve_markov_switching(fisher_model(), dict(alpha=1.0, rho=0.7), {"alpha": (1.8, 1.1)},
+                                   T2, guess=dict(r=0.0, pi=0.0), order=3)
+
+
+def test_second_order_conditional_mean_matches_a_simulation():
+    ms, *_ = solve_brock_mirman()
+    cond = ms.conditional_mean()
+    sim = ms.simulate(20000, seed=1, burn=200)
+    sd = np.std(sim["c"])
+    for s in (0, 1):
+        assert abs(np.mean(sim["c"][sim["regime"] == s]) - cond[s, 2]) < 0.1 * sd
+    first = ms.first.simulate(20000, seed=1, burn=200)
+    np.testing.assert_array_equal(first["regime"], sim["regime"])
+    # The second-order terms move the conditional means away from the first-order ones.
+    gap = np.abs(cond - ms.first.moments()["conditional_mean"])
+    assert np.max(gap) > 1e-5
+
+
+def test_second_order_irf_with_a_linear_model_is_the_first_order_irf():
+    ms = dsg.solve_markov_switching(fisher_model(), dict(alpha=1.0, rho=0.7),
+                                    {"alpha": (1.8, 1.1)}, T2, guess=dict(r=0.0, pi=0.0), order=2)
+    path = [0, 0, 1, 1, 0, 1]
+    got, want = ms.irf("e", periods=6, regime=path), ms.first.irf("e", periods=6, regime=path)
+    for n in ("r", "pi"):
+        np.testing.assert_allclose(got[n], want[n], atol=1e-12)
+    np.testing.assert_allclose(ms.irf("e", periods=6, regime=path, pruning=False)["pi"],
+                               want["pi"], atol=1e-12)
+
+
+def test_second_order_irf_is_asymmetric_and_depends_on_the_regime():
+    ms, *_ = solve_brock_mirman()
+    up = ms.irf("e", size=1.0, periods=8, regime=0)
+    down = ms.irf("e", size=-1.0, periods=8, regime=0)
+    other = ms.irf("e", size=1.0, periods=8, regime=1)
+    assert np.max(np.abs(up["c"] + down["c"])) > 1e-6
+    assert np.max(np.abs(up["c"] - other["c"])) > 1e-3
+    # z' = z^rho exp(sigma eps): its response at impact is exact at second order up to eps^3.
+    assert up["z"][0] / 100 == pytest.approx(0.01 + 0.5 * 0.01 ** 2, rel=1e-6)

@@ -25,6 +25,18 @@ MATLAB:
   5. A model whose regimes are identical, whose solution must be the Klein solution of the
      constant-parameter model, on the package's RBC and three-equation New Keynesian examples.
 
+The second order (solve_second_order_switching) is checked against
+
+  6. the second-order coefficients Foerster et al. (2016, section 6.1) print for their RBC, 48
+     per regime, rounded to four decimals;
+  7. solve_second_order, validated against Dynare, when the regimes are identical;
+  8. the closed form of stochastic growth with log utility and full depreciation, whose savings
+     rate alpha*beta holds whatever the productivity process, here with switching productivity
+     (perturbed), persistence and volatility, so that every second-order coefficient is known;
+     and the conditional means of the pruned rules, against a simulation.
+
+Section 3 also checks their Proposition 3: the second-order terms of that model are zero.
+
 No external tool is needed.
 """
 from __future__ import annotations
@@ -172,9 +184,8 @@ RBC_PRINTED = {   # rows c, k, z; columns k(-1), z(-1), eps, 1; truncated to fou
 }
 
 
-def rbc_part() -> None:
-    print("\n2. Foerster et al. (2016), Markov-switching RBC: printed first-order coefficients")
-
+def frwz_rbc():
+    """The RBC of Foerster et al. (2016), with its parameterization and steady state."""
     def equations(nxt, cur, eps, p):
         a, d, u = p["alpha"], p["delta"], p["upsilon"]
         return [
@@ -193,8 +204,13 @@ def rbc_part() -> None:
     mu = (2 / 3) * 0.0274 + (1 / 3) * (-0.0337)
     k = (np.exp((a - 1) * mu) / a * (np.exp((1 - u) * mu) / b - 1 + d)) ** (1 / (a - 1))
     c = k * (1 - d - np.exp(mu) + (np.exp((1 - u) * mu) / b - 1 + d) / a)
-    ms = dsg.solve_markov_switching(model, params, switching, T,
-                                    guess=dict(kp=k, z=np.exp(mu), c=c),
+    return model, params, switching, T, dict(kp=k, z=np.exp(mu), c=c)
+
+
+def rbc_part() -> None:
+    print("\n2. Foerster et al. (2016), Markov-switching RBC: printed first-order coefficients")
+    model, params, switching, T, guess = frwz_rbc()
+    ms = dsg.solve_markov_switching(model, params, switching, T, guess=guess,
                                     next_regime=("mu", "rho", "sigma"), starts=200)
     print(f"  steady state c = {ms.steady['c']:.6f}, k = {ms.steady['kp']:.5f}, "
           f"z = {ms.steady['z']:.5f} (printed 2.08259, 22.1504, 1.007); perturbed "
@@ -254,6 +270,10 @@ def simple_part() -> None:
     print(f"  pi_t = {ms.F[0][0, 0]:.6f} eps_t in regime 1, {ms.F[1][0, 0]:.6f} in regime 2 "
           f"(printed -0.08 and -0.625)")
     check("solution minus -sigma/phi", float(np.max(np.abs(ms.F[:, 0, 0] - exact))), 1e-14)
+    s2 = dsg.solve_second_order_switching(ms)
+    largest = max(float(np.max(np.abs(getattr(s2, name)))) for name in
+                  ("g_kk", "g_ks", "g_ss", "h_kk", "h_ku", "h_uu", "h_ks", "h_us", "h_ss"))
+    check("second-order terms (Proposition 3: zero)", largest, 1e-10)
     lagged = dsg.Model(states=["pl"], jumps=["pi"], shocks=["eps"],
                        equations=lambda nxt, cur, eps, p: [nxt.pl - cur.pi,
                                                            p["phi"] * cur.pi - nxt.pi])
@@ -297,12 +317,173 @@ def klein_part() -> None:
         check(f"{model.name}: F, P, Q minus Klein's, and constants", float(err), 1e-13)
 
 
+# ------------------------------------------------------- 6. FRWZ (2016) RBC at second order
+# Their second-order terms, 1/2 H [w kron w] with w = (k_{t-1}, z_{t-1}, eps_t, 1): the 16 rows of
+# H' in the order of the Kronecker product, columns c, k, z, printed to four decimals.
+RBC_PRINTED_2 = {
+    0: """-0.0009 -0.0003 0;  0.0022 -0.0957 0;  0.0002 -0.0069 0;  -0.0004 -0.0168 0;
+          0.0022 -0.0957 0;  -0.1173 2.3364 -0.0894;  0.0006 0.0153 0.0007;  0.0008 0.0374 0.0018;
+          0.0002 -0.0069 0;  0.0006 0.0153 0.0007;  0.0000 0.0011 0.0001;  0.0001 0.0027 0.0001;
+          -0.0004 -0.0168 0;  0.0008 0.0374 0.0018;  0.0001 0.0027 0.0001;  -0.0495 0.0557 0.0003""",
+    1: """-0.0009 -0.0003 0;  0 0 0;  0.0005 -0.0208 0;  -0.0021 0.0405 0;
+          0 0 0;  0 0 0;  0 0 0;  0 0 0;
+          0.0005 -0.0208 0;  0 0 0;  0.0004 0.0100 0.0005;  -0.0012 -0.0193 -0.0009;
+          -0.0021 0.0405 0;  0 0 0;  -0.0012 -0.0193 -0.0009;  -0.0467 0.0869 0.0017""",
+}
+
+
+def compose(G1, H1, G2, H2):
+    """Gradient and Hessian of ``outer(inner(w))``, from those of ``inner`` and ``outer``."""
+    return G2 @ G1, (np.einsum("ap,rab,bq->rpq", G1, H2, G1)
+                     + np.einsum("ra,apq->rpq", G2, H1))
+
+
+def frwz_form(ms, j):
+    """The solution in regime ``j`` on FRWZ's ``(k_{t-1}, z_{t-1}, eps_t, chi)``, in levels.
+
+    The package's states are ``(k_{t-1}, z_t)``: ``z_t`` follows its law of motion into
+    regime ``j``, consumption is the regime-``j`` rule at ``(k_{t-1}, z_t)``, and ``k_t``, the
+    package's ``kp`` at ``t+1``, the law of motion out of regime ``j``. Returns the gradient
+    ``(3, 4)`` and the Hessian ``(3, 4, 4)`` of ``(c, k, z)``.
+    """
+    sc = ms.first.coords.scale                                  # kp, z, c
+    pick = np.diag([0.0, 1.0, 1.0, 1.0])                        # (k_{t-2}, z_{t-1}, eps_t, chi)
+    Dz = np.concatenate([ms.P[0, j][1], ms.Q[0, j][1], [ms.p[0, j][1]]])[None]
+    gz, hz = compose(pick, np.zeros((4, 4, 4)), Dz, ms._h_full(0, j)[1][None])
+    Gx = np.vstack([[1.0, 0, 0, 0], gz, [0, 0, 0, 1.0]])        # (kp_t, z_t, chi)
+    Hx = np.zeros((3, 4, 4))
+    Hx[1] = hz[0]
+    gc, hc = compose(Gx, Hx, np.concatenate([ms.F[j][0], [ms.f[j][0]]])[None], ms._g_full(j))
+    keep = [0, 1, 3]                                            # kp's law has no eps_{t+1}
+    Dk = np.concatenate([ms.P[j, 0][0], [ms.p[j, 0][0]]])[None]
+    gk, hk = compose(Gx, Hx, Dk, ms._h_full(j, 0)[0][np.ix_(keep, keep)][None])
+    out = np.array([sc[2], sc[0], sc[1]])
+    inp = np.array([sc[0], sc[1], 1.0, 1.0])
+    G = np.vstack([gc, gk, gz]) * out[:, None] / inp
+    H = np.concatenate([hc, hk, hz]) * out[:, None, None] / inp[:, None] / inp[None, :]
+    return G, H
+
+
+def rbc2_part() -> None:
+    print("\n6. Foerster et al. (2016), Markov-switching RBC: printed second-order coefficients")
+    model, params, switching, T, guess = frwz_rbc()
+    ms = dsg.solve_markov_switching(model, params, switching, T, guess=guess,
+                                    next_regime=("mu", "rho", "sigma"), starts=200, order=2)
+    print(f"  residual of the second-order conditions {ms.residual:.1e}")
+    check("law of motion of k, second order: next regime 1 minus next regime 2",
+          float(max(max(np.max(np.abs(ms.h_kk[j, 0, 0] - ms.h_kk[j, 1, 0])),
+                        np.max(np.abs(ms.h_ks[j, 0, 0] - ms.h_ks[j, 1, 0])),
+                        abs(ms.h_ss[j, 0, 0] - ms.h_ss[j, 1, 0])) for j in (0, 1))), 1e-15)
+    worst, worst_units, count = 0.0, 0.0, 0
+    for j in (0, 1):
+        _, H = frwz_form(ms, j)
+        mine = H.reshape(3, 16).T
+        printed = np.array([[float(v) for v in row.split()]
+                            for row in RBC_PRINTED_2[j].split(";")])
+        print(f"  regime {j + 1}, rows (k,k) (k,z) (k,eps) (k,1) (z,z) (z,eps) (z,1) (eps,eps) "
+              f"(eps,1) (1,1), columns c, k, z:")
+        for r in (0, 1, 2, 3, 5, 6, 7, 10, 11, 15):
+            print("    " + " ".join(f"{v:10.6f}" for v in mine[r]))
+        # Printed rounded to four decimals, unlike the first-order block, which is truncated:
+        # 0.0000522 prints as 0.0001, 0.0016707 as 0.0017.
+        worst = max(worst, float(np.max(np.abs(np.round(mine, 4) - printed))))
+        worst_units = max(worst_units, float(np.max(np.abs(mine - printed))) / 1e-4)
+        count += printed.size
+    print(f"       {count} printed entries, largest |computed - printed| "
+          f"{worst_units:.2f} of a unit of the fourth decimal")
+    check(f"{count} coefficients rounded to four decimals minus printed", worst, 1e-12)
+
+
+# ---------------------------------------------- 7. identical regimes at second order: Dynare form
+def klein2_part() -> None:
+    print("\n7. Identical regimes at second order: solve_second_order, validated against Dynare")
+    for mod, name in ((rbc, "rho"), (nk, "rho_a")):
+        model, params, guess = mod.build()
+        s2 = dsg.solve_second_order(dsg.solve(model, params, guess=guess))
+        v = getattr(params, name)
+        ms = dsg.solve_markov_switching(model, params, {name: (v, v)},
+                                        [[0.9, 0.1], [0.3, 0.7]], guess=guess, order=2)
+        err = max(np.max(np.abs(ms.g_kk - s2.g_kk)), np.max(np.abs(ms.h_kk - s2.h_kk)),
+                  np.max(np.abs(ms.h_ku - s2.h_ku)), np.max(np.abs(ms.h_uu - s2.h_uu)),
+                  np.max(np.abs(ms.g_ss - s2.g_ss)), np.max(np.abs(ms.h_ss - s2.h_s2)))
+        check(f"{model.name}: g_kk, h_kk, h_ku, h_uu, g_ss, h_ss minus solve_second_order's",
+              float(err), 1e-13)
+        cross = max(np.max(np.abs(ms.g_ks)), np.max(np.abs(ms.h_ks)), np.max(np.abs(ms.h_us)))
+        check(f"{model.name}: terms in (k, chi) and (eps, chi)", float(cross), 1e-13)
+        mc, em = s2.mean_correction(), ms.ergodic_mean(levels=False)
+        check(f"{model.name}: ergodic mean minus solve_second_order's",
+              float(max(abs(mc[n] - em[n]) for n in model.names)), 1e-12)
+
+
+# ------------------------------------------------------------- 8. closed form at second order
+def brock_mirman():
+    """Log utility, full depreciation, switching productivity, persistence and volatility.
+
+    Declared as text, so that the derivatives in the variables are exact and only those along
+    the perturbation parameter are differences.
+    """
+    model = dsg.from_equations(
+        ["k(+1) = y - c", "z(+1) = exp(rho*log(z) + sigma*e)",
+         "1/c = beta*alpha*y(+1)/(k(+1)*c(+1))", "y = A*z*k**alpha"],
+        states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+        parameters=["alpha", "beta", "A", "rho", "sigma"], name="brock_mirman")
+    return model, dict(alpha=0.33, beta=0.96, A=1.0, rho=0.9, sigma=0.01)
+
+
+def closed2_part() -> None:
+    print("\n8. Log utility and full depreciation: k' = alpha beta y and c = (1 - alpha beta) y")
+    model, params = brock_mirman()
+    a, beta = params["alpha"], params["beta"]
+    A, rho, sigma = np.array([1.05, 0.95]), np.array([0.9, 0.5]), np.array([0.01, 0.03])
+    T = np.array([[0.9, 0.1], [0.2, 0.8]])
+    Abar = float(np.array([T[1, 0], T[0, 1]]) @ A / (T[0, 1] + T[1, 0]))     # ergodic mean
+    k = (a * beta * Abar) ** (1 / (1 - a))
+    ms = dsg.solve_markov_switching(model, params, {"A": A, "rho": rho, "sigma": sigma}, T,
+                                    guess=dict(k=k, z=1.0, c=(1 - a * beta) * Abar * k ** a,
+                                               y=Abar * k ** a),
+                                    next_regime=("rho", "sigma"), order=2)
+    print(f"  perturbed {ms.first.perturbed}; in proportional deviations, with "
+          f"d = A(s)/Abar - 1,\n  1 + y = (1 + chi d)(1 + z)(1 + k)^alpha and "
+          f"1 + z' = (1 + z)^rho(s') exp(sigma(s') eps)")
+    worst = 0.0
+    for i in range(2):
+        d = (A[i] - Abar) / Abar
+        Gk = np.array([[a * (a - 1), a], [a, 0.0]])
+        Gs = np.array([a * d, d])
+        for r in range(2):                                     # c and y
+            worst = max(worst, np.max(np.abs(ms.g_kk[i, r] - Gk)),
+                        np.max(np.abs(ms.g_ks[i, r] - Gs)), abs(ms.g_ss[i, r]))
+        for j in range(2):
+            worst = max(worst, np.max(np.abs(ms.h_kk[i, j, 0] - Gk)),
+                        np.max(np.abs(ms.h_ks[i, j, 0] - Gs)), abs(ms.h_ss[i, j, 0]),
+                        np.max(np.abs(ms.h_kk[i, j, 1] - np.diag([0.0, rho[j] * (rho[j] - 1)]))),
+                        np.max(np.abs(ms.h_ku[i, j, 1] - [[0.0], [rho[j] * sigma[j]]])),
+                        abs(ms.h_uu[i, j, 1, 0, 0] - sigma[j] ** 2),
+                        np.max(np.abs(ms.h_ku[i, j, 0])), np.max(np.abs(ms.h_uu[i, j, 0])),
+                        np.max(np.abs(ms.h_us[i, j])), np.max(np.abs(ms.h_ks[i, j, 1])),
+                        abs(ms.h_ss[i, j, 1]))
+    print(f"       c in regime 1: g_kk {np.round(ms.g_kk[0, 0], 6).tolist()}, "
+          f"g_ks {np.round(ms.g_ks[0, 0], 6).tolist()} (alpha = {a})")
+    check("every second-order coefficient minus the closed form", float(worst), 1e-9)
+    nobs = 100_000
+    sim = ms.simulate(nobs, seed=0, burn=200)
+    cond = ms.conditional_mean()
+    gap = max(abs(float(np.mean(sim["c"][sim["regime"] == s])) - cond[s, 2]) for s in (0, 1))
+    sd = float(np.std(sim["c"]))
+    print(f"       mean of c given each regime: closed form {cond[:, 2].round(6)}, "
+          f"{nobs} simulated periods {[round(float(np.mean(sim['c'][sim['regime'] == s])), 6) for s in (0, 1)]}")
+    check("conditional mean of c, simulated minus closed form, in s.d. of c", gap / sd, 0.05)
+
+
 def main() -> int:
     nk_part()
     rbc_part()
     simple_part()
     fisher_part()
     klein_part()
+    rbc2_part()
+    klein2_part()
+    closed2_part()
     print()
     if failures:
         print(f"FAILED: {failures}")

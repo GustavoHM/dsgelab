@@ -48,7 +48,7 @@ Name-indexed view over one period's vector, handed to the equations.
 | `v.vec(prefix, n=None)` | gather `K0, K1, …` (prefix `"K"`) into an array, in index order |
 | `v.to_dict()`, `v.array` | the whole period |
 
-### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None)`
+### `from_equations(equations, *, states, jumps, shocks, parameters, name="model", derivatives="both", steady_state_model=None, calibration_equations=None, trend_vars=None, log_trend_vars=None, deflators=None, log_deflators=None)`
 
 Requires sympy. Builds a `Model` from text equations, with exact analytic
 derivatives. `x` is the variable at `t` and `x(+1)` at `t+1`.
@@ -58,9 +58,26 @@ A lag `x(-k)` is carried by the states `LAG1_x`, …, `LAGk_x`, with
 A lead `x(+k)` with `k >= 2` is rewritten as `LEAD{k-1}_x(+1)` and carried by the
 jumps `LEAD1_x`, …, `LEAD{k-1}_x`, with `LEAD1_x = x(+1)` and
 `LEADj_x = LEAD{j-1}_x(+1)`. `LEADj_x` therefore holds `x` at `t+j`, and `y(+2)`
-creates `LEAD1_y`. Each auxiliary has its own equation and is listed in
+creates `LEAD1_y`. For a state the chain starts from the jump `LEAD0_x = x`, with
+`LEAD1_x = LEAD0_x(+1)`, so that the equation of `LEAD1_x` has a jump at `t+1` and
+holds in expectation (`a(+2)` of an exogenous state `a` creates `LEAD0_a` and
+`LEAD1_a`). Each auxiliary has its own equation and is listed in
 `model.auxiliary`. The lag of a jump becomes a new state, and the jump keeps its
 classification.
+
+`trend_vars`, `log_trend_vars`, `deflators` and `log_deflators` declare the trends
+of a model written in levels, as `trend_var(growth_factor=g) A;`,
+`log_trend_var(log_growth_factor=g) A;`, `var(deflator=D) x;` and
+`var(log_deflator=D) x;` do in a `.mod`: `trend_vars={"A": "gA"}` and
+`deflators={"k": "A", "P": "M(-1)/A"}`. A trend variable is not a state or a jump
+and has no equation, since `A(+1) = A g(+1)` is implied. The growth factor may
+contain variables and parameters, and the deflator trend variables, variables and
+parameters, but neither contains a shock or a deflated variable. The equations are
+detrended as `from_mod` detrends a `.mod` (see Reading Dynare files), with the
+same balanced-growth check, and the model returned is the detrended one, with the
+declarations in `model.trends`. The parameters have no values at this point, so
+the check holds them at one random draw, and an equation balanced only at some
+values of its parameters is refused.
 
 `derivatives` is `"third"`, `"both"`, `"jacobian"` or `"none"`. The default
 `"both"` builds the Jacobian and Hessian. `"third"` adds the exact third-derivative
@@ -70,7 +87,8 @@ closed form given as assignments `"name = expr"` in order (Dynare's block), whic
 `calibration_equations` is `{parameter: "steady-state condition"}`, the
 counterpart of MacroModelling's `k[ss]/q[ss] = 2.5 | β`, solved together with the
 steady state. Raises `dsgelab.symbolic.SymbolicError` (a `ValueError`) on an
-undeclared name, a lagged innovation, a wrong equation count or a parse failure.
+undeclared name, a lagged innovation, a wrong equation count, a parse failure or a
+declared trend that the equations do not balance.
 
 ### `optimality_conditions(problem) -> dict`
 
@@ -534,6 +552,46 @@ not held within the bounds. The policy at the grid points is in `values`
 (`"smolyak"` on a `SmolyakGrid`),
 `iterations`, `converged`, `distance` (the last change) and `history` (every change).
 
+### `improved_time_iteration(model, params, *, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), tol=1e-8, max_iter=100, linear_tol=1e-10, linear_max_iter=1000) -> TimeIterationSolution`
+
+Improved time iteration, as dolo's `improved_time_iteration`: Newton's method on the equilibrium
+conditions of every grid point at once, with next period's policy interpolated from the unknowns
+themselves, on the same declaration and with the same arguments and result as `time_iteration`.
+The Jacobian is a block for each point, the derivative with next period's policy held fixed, plus
+the derivative through next period's policy, which is linear in the policy's values because the
+interpolant is. That term is applied without forming the matrix, and each Newton step is solved by
+GMRES, preconditioned by the blocks, to a residual of `linear_tol` relative to the right-hand side
+or for at most `linear_max_iter` iterations. A step that does not reduce the sum of squares of
+the conditions, in complementarity form, is halved up to nine times, and when none does the
+iteration takes one step of time iteration instead. It stops when a step moves no jump by more
+than `tol`, and `iterations` counts the Newton steps.
+
+The fixed point is that of `time_iteration` on the same grid. On dolo's RBC, its Markov RBC and
+its consumption–savings model, the Newton steps number 4 to 10 where time iteration takes 114 to
+361 iterations to a tolerance of 1e-11. Newton's method needs a start close enough to the solution:
+with a borrowing limit that binds on part of the grid, it may not converge from a distant policy.
+A `TimeIterationSolution` with a loose `tol`, passed as `initial`, is such a start.
+
+### `expectations_iteration(model, params, *, expectations, grid, markov=None, cov=None, n_quad=5, quadrature=None, bounds=None, interpolation=None, initial=None, guess=None, steady=None, positive=(), damping=0.5, tol=1e-8, max_iter=5000, inner_tol=1e-12, inner_max_iter=50) -> TimeIterationSolution`
+
+Iteration on the conditional expectations of the Euler equations, the parameterized expectations
+that dolo's documentation describes for its `fgh` models, `0 = f(s, x, E[h(s', x')])`, and that
+dolo 0.4.9.20 does not implement. Each expectation is a jump, named in `expectations`, whose
+equilibrium condition involves `t+1`, such as `z - beta E[c'^(-gamma) R']`, and the controls'
+conditions involve nothing at `t+1`, such as `c^(-gamma) - z`. The conditions are paired with the
+jumps by position, as in `time_iteration`, and the call raises `ValueError` when the condition in
+an expectation's position has nothing at `t+1` or the one in a control's position has something.
+
+Each iteration integrates the expectations at every grid point, with today's controls and next
+period's policy both taken from the current policy, averages them with the old ones with weight
+`damping` on the new, and solves the controls' conditions for today's controls, point by point
+and with no integral. Bounds apply to the controls only. At the fixed point the policy solves the
+equations that `time_iteration` solves on the same grid. Without damping the iteration can
+diverge: on stochastic growth with log utility and full depreciation, a change in consumption
+moves the next update by about `-(1 - alpha beta) / (alpha beta)` times as much, -1.8 with
+`alpha = 0.36` and `beta = 0.99`, and by about `1 - damping / (alpha beta)` times as much with
+damping.
+
 ### `CartesianGrid(axes)`
 
 A tensor grid: `axes` maps each name to an increasing vector of nodes, or to `(low, high, n)` for
@@ -789,7 +847,7 @@ sequence-jacobian's `agrid`.
 
 ## Markov regime switching
 
-### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100) -> MarkovSwitchingSolution`
+### `solve_markov_switching(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, starts=0, seed=0, initial=(), ctx=None, positive=(), h=1e-6, tol=1e-11, maxiter=100, order=1, cov=None) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution`
 
 The first-order solution of a model some of whose parameters switch with a Markov chain. The model
 is an ordinary `Model`; it holds in expectation over the next regime and the next innovation,
@@ -826,7 +884,9 @@ stable solution found is used and every distinct solution is kept. Newton's meth
 many points does not prove that a stable solution is the only one, as the Gröbner-basis search of
 Foerster et al. (2016) does; more `starts` make a second one more likely to be found if it exists.
 `MarkovSwitchingError` is raised when no starting point converges or no solution found is stable,
-with what was found in its `solutions`.
+with what was found in its `solutions`. With `order=2` the first-order solution is passed to
+`solve_second_order_switching`, with `cov` as the shock covariance, and the result is a
+`SecondOrderSwitchingSolution`.
 
 ### `MarkovSwitchingSolution`
 
@@ -845,12 +905,55 @@ ergodic distribution of the regimes) and `coords`.
 | `regime_moments(cov=None)` | `(pi, mean, second)`: the ergodic probabilities and the mean and second moment of the states given each regime |
 | `variables(k, regimes, constants=True)`, `to_levels(paths)`, `regime_params(regime)`, `summary()` | paths from states, levels, the parameters of one regime, a report |
 
+### `solve_second_order_switching(first, cov=None, *, h=1e-4, direct_limit=20000) -> SecondOrderSwitchingSolution`
+
+The second order of a Markov-switching model, around the `MarkovSwitchingSolution` `first`, by the
+partition perturbation of Foerster, Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). The
+perturbation parameter `chi` scales the innovations and the perturbed switching parameters, and is
+one in the model. The second derivatives of the residuals are taken at each pair of regimes, with
+the switching parameters that are not perturbed at their regime values, so every coefficient may
+differ across regimes. The derivatives along `chi` are central differences; with a model that has
+exact first derivatives (`from_equations`), the cross derivatives with the variables come from
+them. Given the first-order solution, the laws of motion give the second derivatives of the
+states in terms of those of the jumps, and the expected rows, averaged over the next regime and
+the next innovation, give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, each
+with one block of unknowns per regime, coupled through the transition matrix. The first has
+`h * n_jumps * n_states**2` unknowns and is solved as one dense system up to `direct_limit`.
+`cov` enters `g_ss` and `h_ss` only.
+
+### `SecondOrderSwitchingSolution`
+
+With `i = s_t`, `j = s_{t+1}`, `k = k_t` and `eps = eps_{t+1}`, in the rescaled deviations and
+at `chi = 1`,
+
+```
+u_t     = F[i] k + f[i] + 1/2 g_kk[i](k, k) + g_ks[i] k + 1/2 g_ss[i]
+k_{t+1} = P[i,j] k + Q[i,j] eps + p[i,j] + 1/2 h_kk[i,j](k, k) + h_ku[i,j](k, eps)
+          + 1/2 h_uu[i,j](eps, eps) + h_ks[i,j] k + h_us[i,j] eps + 1/2 h_ss[i,j]
+```
+
+The index `s` stands for `chi`, and `g_ss` and `h_ss` are its full second derivatives, the
+convention of Dynare's `g_s2`. `first` is the first-order solution, whose `F`, `f`, `P`, `Q`,
+`p`, `h`, `transition`, `steady` and `model` are repeated here. `Sigma` is the shock covariance and
+`residual` the largest residual of the second-order conditions of the expected rows, recomputed
+from the solution. With identical regimes, `g_kk`, `h_kk`, `h_ku`, `h_uu` and `g_ss` are those of
+`solve_second_order`, `h_ss` is its `h_s2`, and the terms in `chi` with `k` or `eps` are zero.
+
+| Method | Meaning |
+|---|---|
+| `decision_rule(regime, next_regime)` | a `SwitchingDecisionRule`: `[k_{t+1}; u_{t+1}]` on `(k_t, eps_{t+1}, chi)`, with `g_k`, `g_u`, `g_s`, `g_kk`, `g_ku`, `g_uu`, `g_ks`, `g_us` and `g_ss`, rows `model.states + model.jumps`, the form in which Foerster et al. (2016) print their solutions. The jumps' `g_ss` includes `F h_ss`, the effect of `chi` through the states |
+| `irf(name, size=1.0, periods=40, *, regime=0, state=None, pruning=True, levels=False, percent=True)` | the path with the innovation minus the path without it, from `state` (the deviation of the states in the period before, the steady state by default) along a regime held or a path of `periods` regimes, as `MarkovSwitchingSolution.irf` dates them. The response depends on the regimes and the state, and a negative innovation is not the mirror of a positive one |
+| `simulate(periods=1000, cov=None, *, seed=None, burn=100, levels=False, regimes=None, pruning=True)` | the draws of `MarkovSwitchingSolution.simulate` with the same `seed`, through the second-order rules, pruned as in Andreasen, Fernández-Villaverde and Rubio-Ramírez (2018), with the first-order part, regime constants included, feeding the quadratic terms |
+| `conditional_mean(cov=None)`, `ergodic_mean(cov=None, levels=True)` | the mean of every variable given each regime (`(h, n_vars)`, rescaled deviations) and the unconditional mean, in closed form under the pruned rules |
+| `jumps(k, regime)`, `next_states(k, eps, regime, next_regime)` | the rules, without pruning |
+| `at_covariance(cov)`, `to_levels(paths)`, `summary()` | the solution at another covariance, levels, a report |
+
 ### `switching_system(model, params, switching, transition, *, steady=None, guess=None, next_regime=(), perturbed=None, ctx=None, positive=(), h=1e-6, tol=1e-11) -> (SwitchingSystem, SteadyState, perturbed)`
 
 The linearisation behind `solve_markov_switching`. `SwitchingSystem` holds `A`, `B`, `C`, `c`,
 one block per pair of regimes, in `A[i,j] E y' = B[i,j] y + C[i,j] eps' + c[i,j]`, with one row
-scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion) and `expected` (the
-other rows).
+scaling for every pair, and `transition`, `n_k`, `motion` (the laws of motion), `expected` (the
+other rows) and `row_scale` (the divisor of each row).
 
 ### `msv_solutions(system, *, starts=0, seed=0, initial=(), complex=False, tol=1e-11, maxiter=100) -> (solutions, tried, converged)`
 
@@ -1043,6 +1146,11 @@ restarts. `fixed` holds variables that do not grow at a given level.
 
 `dsgelab.bgp.bgp_residual(model, params, X, G, ctx=None)` is the residual itself,
 the model evaluated at the two dates.
+
+The trends of a model in levels are declared in `from_mod` (`trend_var`,
+`var(deflator=)`) or in `from_equations` (`trend_vars=`, `deflators=`), which detrend
+it with the same check. `balanced_growth` takes the model in levels without
+declarations.
 
 ---
 

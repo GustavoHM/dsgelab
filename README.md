@@ -108,7 +108,7 @@ examples in English and Portuguese.
 | AR(1) processes as Markov chains (Tauchen, Rouwenhorst), with stationary distribution and simulation | `tauchen`, `rouwenhorst`, `MarkovChain` |
 | BVAR with the Sims–Zha prior (marginal density, posterior draws, forecasts, IRFs) and the DSGE-VAR of Del Negro and Schorfheide with its IRFs, validated against Dynare's `+bvar` and `dsge_var` | `bvar`, `bvar_density`, `BVAR`, `EstimationProblem(dsge_var=...)`, `dsge_var_irf` |
 | Heterogeneous agents by the sequence-space Jacobian: one or two assets by a Markov chain, fake-news Jacobians, general equilibrium, linear and nonlinear impulse responses, validated against sequence-jacobian | `HetBlock`, `SimpleBlock`, `SolvedBlock`, `BlockModel` |
-| Markov regime switching to first order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions` |
+| Markov regime switching to first and second order: partition perturbation, every solution found, mean-square stability, IRFs by regime, simulation and moments, pruned at second order | `solve_markov_switching`, `MarkovSwitchingSolution`, `msv_solutions`, `solve_second_order_switching` |
 | Likelihood of regime switching by Kim's filter, filtered and smoothed regime probabilities, estimation of switching parameters and transition probabilities | `kim_filter`, `MarkovSwitchingProblem` |
 | Nonlinear perfect-foresight transitions, announced policy and shock paths | `perfect_foresight` |
 | Perfect foresight with expectation errors (news, surprises) | `perfect_foresight_with_expectation_errors` |
@@ -131,7 +131,7 @@ examples in English and Portuguese.
 | Welfare at second order, conditional and unconditional; consumption equivalent | `welfare`, `consumption_equivalent` |
 | Occasionally binding constraints (OccBin), any number of them, surprise shocks | `OccbinModel`, `occbin_simulate` |
 | Extended path, deterministic and stochastic (sparse or full tree, hybrid correction) | `extended_path` |
-| Models in levels: declared trends with Dynare's balanced-growth check; the growth path | `from_mod`, `balanced_growth` |
+| Models in levels: declared trends with Dynare's balanced-growth check; the growth path | `from_mod`, `from_equations(trend_vars=, deflators=)`, `balanced_growth` |
 | Read a Dynare `.mod` file, macros and leads/lags included | `from_mod` |
 | Export a model to Dynare and to MacroModelling.jl | `to_dynare`, `to_macromodelling` |
 | Calibration on targets, with an identification diagnostic; calibration equations inside the model | `calibrate`, `target_jacobian`, `from_equations(calibration_equations=)` |
@@ -299,9 +299,10 @@ planned.
   of the points on each axis. Collocation on a Smolyak grid solves for all the coefficients at once with a
   dense Jacobian of `(n_nodes * n_jumps)^2` entries, 425 MB for six states at level 4. The shocks
   are integrated by a tensor Gauss–Hermite rule, which projection builds for at most two shocks.
-- **Markov regime switching is first order only,** with exogenous transition probabilities, and
+- **Markov regime switching stops at second order,** with exogenous transition probabilities, and
   Newton's method from finitely many starting points cannot prove that a stable solution is
-  unique. Kim's filter is an approximation, whose error the validation measures.
+  unique. Kim's filter, which uses the first-order solution, is an approximation, whose error the
+  validation measures.
 - **Heterogeneous agents have at most two endogenous states,** the assets, on grids that stay
   fixed along a path. The Markov matrix may move with the inputs, and a transition may start from
   any distribution on the grids.
@@ -309,7 +310,6 @@ planned.
   densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
   identification and sensitivity plots are not reproduced.
 - **The extended path's hybrid correction stops at second order.**
-- **Trends can be declared only in a `.mod` file.** `from_equations` does not accept them yet.
 - **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul` and
   `estimation` are skipped, and their options are not applied. The dedicated routes
   `ModFile.identification`, `ModFile.method_of_moments` and `ModFile.irf_matching` read their

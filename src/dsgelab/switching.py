@@ -50,13 +50,13 @@ how many stable solutions they found.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, overload
 
 import numpy as np
 from numpy.typing import ArrayLike
 
 from .klein import BlanchardKahnError, klein
-from .linearize import Coordinates, first_order_system
+from .linearize import Coordinates, first_order_system, second_derivatives
 from .markov import MarkovChain
 from .model import Covariance, Model, Params, Point, get_param, set_params
 from .solution import _psd_factor, shock_covariance
@@ -64,7 +64,8 @@ from .steady import SteadyState, steady_state
 
 __all__ = ["MarkovSwitchingError", "SwitchingSystem", "MSVSolution", "MarkovSwitchingSolution",
            "switching_system", "msv_solutions", "mean_square_stability",
-           "solve_markov_switching"]
+           "solve_markov_switching", "SecondOrderSwitchingSolution", "SwitchingDecisionRule",
+           "solve_second_order_switching"]
 
 
 class MarkovSwitchingError(RuntimeError):
@@ -105,7 +106,7 @@ class SwitchingSystem:
     with one row scaling common to every pair of regimes, so that rows averaged
     over ``s_{t+1}`` are commensurate. ``motion`` lists the rows that are laws of
     motion of the states, which hold for every ``s_{t+1}``; ``expected`` the
-    rest, which hold in expectation.
+    rest, which hold in expectation. ``row_scale`` is the divisor of each row.
     """
 
     A: np.ndarray                 # (h, h, n, n)
@@ -116,6 +117,7 @@ class SwitchingSystem:
     n_k: int
     motion: np.ndarray = field(default=None, repr=False)
     expected: np.ndarray = field(default=None, repr=False)
+    row_scale: np.ndarray = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         self.A = np.asarray(self.A, dtype=float)
@@ -124,6 +126,8 @@ class SwitchingSystem:
         self.c = np.asarray(self.c, dtype=float)
         self.transition = _transition(self.transition)
         h, n = self.h, self.n
+        self.row_scale = (np.ones(n) if self.row_scale is None
+                          else np.asarray(self.row_scale, dtype=float))
         if self.A.shape != (h, h, n, n) or self.B.shape != (h, h, n, n):
             raise ValueError(f"A and B must be ({h}, {h}, n, n), one matrix per pair of regimes")
         if self.C.shape[:3] != (h, h, n) or self.c.shape != (h, h, n):
@@ -280,8 +284,8 @@ def switching_system(model: Model, params: Params, switching: Mapping[str, Seque
     row[row < 1e-12] = 1.0
     A, B = A / row[:, None], B / row[:, None]
     C, c = C / row[:, None], c / row
-    return SwitchingSystem(A=A, B=B, C=C, c=c, transition=T, n_k=model.n_states), steady, \
-        perturbed
+    return SwitchingSystem(A=A, B=B, C=C, c=c, transition=T, n_k=model.n_states,
+                           row_scale=row), steady, perturbed
 
 
 # ======================================================================= solutions
@@ -781,6 +785,7 @@ class MarkovSwitchingSolution:
         return "\n".join(lines)
 
 
+@overload
 def solve_markov_switching(model: Model, params: Params,
                            switching: Mapping[str, Sequence[float]],
                            transition: MarkovChain | ArrayLike, *,
@@ -789,8 +794,47 @@ def solve_markov_switching(model: Model, params: Params,
                            starts: int = 0, seed: int | None = 0,
                            initial: Sequence[ArrayLike] = (), ctx: Any = None,
                            positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
-                           maxiter: int = 100) -> MarkovSwitchingSolution:
-    """Solve a Markov-switching model to first order.
+                           maxiter: int = 100, order: Literal[1] = 1, cov: Covariance = None
+                           ) -> MarkovSwitchingSolution: ...
+
+
+@overload
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: Literal[2], cov: Covariance = None
+                           ) -> SecondOrderSwitchingSolution: ...
+
+
+@overload
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: int = 1, cov: Covariance = None
+                           ) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution: ...
+
+
+def solve_markov_switching(model: Model, params: Params,
+                           switching: Mapping[str, Sequence[float]],
+                           transition: MarkovChain | ArrayLike, *,
+                           steady: SteadyState | None = None, guess: Point | None = None,
+                           next_regime: Sequence[str] = (), perturbed: Sequence[str] | None = None,
+                           starts: int = 0, seed: int | None = 0,
+                           initial: Sequence[ArrayLike] = (), ctx: Any = None,
+                           positive: Sequence[str] = (), h: float = 1e-6, tol: float = 1e-11,
+                           maxiter: int = 100, order: int = 1, cov: Covariance = None
+                           ) -> MarkovSwitchingSolution | SecondOrderSwitchingSolution:
+    """Solve a Markov-switching model to first or second order.
 
     Parameters
     ----------
@@ -814,6 +858,12 @@ def solve_markov_switching(model: Model, params: Params,
         be found if one exists.
     initial : sequence of arrays
         Starting points of shape ``(h, n_jumps, n_states)`` tried first.
+    order : int
+        1 for the first-order solution, a :class:`MarkovSwitchingSolution`; 2
+        for :func:`solve_second_order_switching` around it, a
+        :class:`SecondOrderSwitchingSolution`.
+    cov : mapping, array or None
+        Shock covariance of the second-order risk terms; unused at first order.
 
     Raises
     ------
@@ -822,6 +872,8 @@ def solve_markov_switching(model: Model, params: Params,
         the solutions it finds is mean-square stable. ``solutions`` on the
         exception holds what was found.
     """
+    if order not in (1, 2):
+        raise ValueError(f"order must be 1 or 2, not {order!r}")
     system, steady, perturbed = switching_system(
         model, params, switching, transition, steady=steady, guess=guess,
         next_regime=next_regime, perturbed=perturbed, ctx=ctx, positive=positive, h=h)
@@ -837,8 +889,556 @@ def solve_markov_switching(model: Model, params: Params,
         raise MarkovSwitchingError(
             f"none of the {len(found)} solutions found from {tried} starting points is "
             f"mean-square stable (stability radii {radii})", found)
-    return MarkovSwitchingSolution(
+    first = MarkovSwitchingSolution(
         model=model, steady=steady, system=system, solution=stable[0], solutions=found,
         params=params, switching={k: np.asarray(v, dtype=float).ravel()
                                   for k, v in switching.items()},
         next_regime=list(next_regime), perturbed=perturbed, tried=tried, converged=converged)
+    return first if order == 1 else solve_second_order_switching(first, cov)
+
+
+
+# ==================================================================== second order
+def _pair_hessian(model, steady, params, switching, names_next, perturbed, means, i, j, row, h):
+    """Hessian of the residuals in ``[y'; y; eps; chi]`` for ``s_t = i``, ``s_{t+1} = j``.
+
+    In the rescaled deviations and divided by the row scaling, as the first-order
+    matrices are. The block in ``[y'; y; eps]`` is :func:`second_derivatives` at the
+    parameters of the pair with ``chi = 0``. The derivatives along ``chi`` move the
+    perturbed parameters and are taken by central differences with the same step.
+    """
+    n, ne = model.n_vars, model.n_shocks
+    m = 2 * n + ne
+    p0 = _regime_params(params, switching, names_next, perturbed, means, i, j, 0.0)
+    H = np.zeros((n, m + 1, m + 1))
+    H[:, :m, :m] = second_derivatives(model, steady, p0, ctx=steady.ctx, h=h, row_scale=row)
+    if not perturbed:
+        return H
+    coords = Coordinates.from_steady_state(steady)
+
+    def F(w, chi):
+        p = _regime_params(params, switching, names_next, perturbed, means, i, j, chi)
+        return model.residuals(coords.to_level(w[:n]), coords.to_level(w[n:2 * n]), w[2 * n:],
+                               p, steady.ctx) / row
+
+    zero = np.zeros(m)
+    H[:, m, m] = (F(zero, h) - 2.0 * F(zero, 0.0) + F(zero, -h)) / (h * h)
+    scale = np.concatenate([coords.scale, coords.scale, np.ones(ne)])
+
+    def J(chi):
+        p = _regime_params(params, switching, names_next, perturbed, means, i, j, chi)
+        exact = model.jacobian(coords.center, coords.center, np.zeros(ne), p, steady.ctx)
+        return None if exact is None else exact * scale[None, :] / row[:, None]
+
+    if J(0.0) is not None:
+        # With exact first derivatives, one difference along chi, with a first-derivative step.
+        step = 1e-6
+        val = (J(step) - J(-step)) / (2.0 * step)
+        H[:, :m, m] = val
+        H[:, m, :m] = val
+        return H
+    for a in range(m):
+        e = np.zeros(m)
+        e[a] = h
+        val = (F(e, h) - F(e, -h) - F(-e, h) + F(-e, -h)) / (4.0 * h * h)
+        H[:, a, m] = val
+        H[:, m, a] = val
+    return H
+
+
+@dataclass
+class SwitchingDecisionRule:
+    """Second-order rule for ``[k_{t+1}; u_{t+1}]`` given ``s_t`` and ``s_{t+1}``.
+
+    The arguments are the states ``k_t``, the innovation ``eps_{t+1}`` and the
+    perturbation parameter ``chi``, which is one in the model and is kept as an
+    argument, as Foerster, Rubio-Ramírez, Waggoner and Zha (2016) keep it. The
+    rule is ``g_k k + g_u eps + g_s + 1/2 g_kk[k, k] + g_ku[k, eps] + 1/2 g_uu[eps, eps]
+    + g_ks k + g_us eps + 1/2 g_ss``. Rows follow ``model.states + model.jumps``.
+    """
+
+    g_k: np.ndarray             # (n, n_k)
+    g_u: np.ndarray             # (n, n_eps)
+    g_s: np.ndarray             # (n,)
+    g_kk: np.ndarray            # (n, n_k, n_k)
+    g_ku: np.ndarray            # (n, n_k, n_eps)
+    g_uu: np.ndarray            # (n, n_eps, n_eps)
+    g_ks: np.ndarray            # (n, n_k)
+    g_us: np.ndarray            # (n, n_eps)
+    g_ss: np.ndarray            # (n,)
+
+
+@dataclass
+class SecondOrderSwitchingSolution:
+    """Second-order solution of a Markov-switching model, around a first-order one.
+
+    With ``i = s_t``, ``j = s_{t+1}``, in the rescaled deviations and at ``chi = 1``::
+
+        u_t     = F[i] k + f[i] + 1/2 g_kk[i](k, k) + g_ks[i] k + 1/2 g_ss[i]
+        k_{t+1} = P[i,j] k + Q[i,j] eps + p[i,j] + 1/2 h_kk[i,j](k, k) + h_ku[i,j](k, eps)
+                  + 1/2 h_uu[i,j](eps, eps) + h_ks[i,j] k + h_us[i,j] eps + 1/2 h_ss[i,j]
+
+    with ``k = k_t`` and ``eps = eps_{t+1}``. The index ``s`` stands for the
+    perturbation parameter ``chi``, which scales the innovations and the perturbed
+    switching parameters. ``g_ss`` and ``h_ss`` are its full second derivatives,
+    the convention of Dynare's ``g_s2``, and they depend on ``Sigma``; the other
+    blocks do not. ``residual`` is the largest residual of the second-order
+    conditions of the expected rows, recomputed from the solution.
+    """
+
+    first: MarkovSwitchingSolution
+    g_kk: np.ndarray            # (h, n_u, n_k, n_k)
+    g_ks: np.ndarray            # (h, n_u, n_k)
+    g_ss: np.ndarray            # (h, n_u)
+    h_kk: np.ndarray            # (h, h, n_k, n_k, n_k)
+    h_ku: np.ndarray            # (h, h, n_k, n_k, n_eps)
+    h_uu: np.ndarray            # (h, h, n_k, n_eps, n_eps)
+    h_ks: np.ndarray            # (h, h, n_k, n_k)
+    h_us: np.ndarray            # (h, h, n_k, n_eps)
+    h_ss: np.ndarray            # (h, h, n_k)
+    Sigma: np.ndarray = field(repr=False)
+    residual: float = 0.0
+    step: float = 1e-4
+
+    # -- shorthands ------------------------------------------------------
+    @property
+    def model(self) -> Model:
+        return self.first.model
+
+    @property
+    def h(self) -> int:
+        return self.first.h
+
+    @property
+    def transition(self) -> np.ndarray:
+        return self.first.transition
+
+    @property
+    def steady(self) -> SteadyState:
+        return self.first.steady
+
+    @property
+    def F(self) -> np.ndarray:
+        return self.first.F
+
+    @property
+    def f(self) -> np.ndarray:
+        return self.first.f
+
+    @property
+    def P(self) -> np.ndarray:
+        return self.first.P
+
+    @property
+    def Q(self) -> np.ndarray:
+        return self.first.Q
+
+    @property
+    def p(self) -> np.ndarray:
+        return self.first.p
+
+    def to_levels(self, paths: Mapping[str, ArrayLike]) -> dict[str, np.ndarray]:
+        """Convert deviation paths to levels using the steady state and the scaling."""
+        return self.first.to_levels(paths)
+
+    def at_covariance(self, cov: Covariance) -> "SecondOrderSwitchingSolution":
+        """This solution if ``cov`` is the covariance it was computed at, else one solved at ``cov``."""
+        if cov is None:
+            return self
+        Sigma = shock_covariance(self.model.shocks, cov)
+        if Sigma.shape == self.Sigma.shape and np.allclose(Sigma, self.Sigma, rtol=1e-12, atol=0.0):
+            return self
+        return solve_second_order_switching(self.first, Sigma, h=self.step)
+
+    # -- the rules -------------------------------------------------------
+    def jumps(self, k: ArrayLike, regime: int) -> np.ndarray:
+        """``u_t`` given ``k_t`` and ``s_t = regime``, without pruning."""
+        k, i = np.asarray(k, dtype=float), int(regime)
+        return (self.F[i] @ k + self.f[i] + 0.5 * np.einsum("rab,a,b->r", self.g_kk[i], k, k)
+                + self.g_ks[i] @ k + 0.5 * self.g_ss[i])
+
+    def next_states(self, k: ArrayLike, eps: ArrayLike | None, regime: int,
+                    next_regime: int) -> np.ndarray:
+        """``k_{t+1}`` given ``k_t``, ``eps_{t+1}``, ``s_t = regime`` and ``s_{t+1} = next_regime``."""
+        k = np.asarray(k, dtype=float)
+        e = np.zeros(self.model.n_shocks) if eps is None else np.asarray(eps, dtype=float)
+        i, j = int(regime), int(next_regime)
+        return (self.P[i, j] @ k + self.Q[i, j] @ e + self.p[i, j]
+                + 0.5 * np.einsum("rab,a,b->r", self.h_kk[i, j], k, k)
+                + np.einsum("rab,a,b->r", self.h_ku[i, j], k, e)
+                + 0.5 * np.einsum("rab,a,b->r", self.h_uu[i, j], e, e)
+                + self.h_ks[i, j] @ k + self.h_us[i, j] @ e + 0.5 * self.h_ss[i, j])
+
+    def _g_full(self, i):
+        """Second derivatives of the jumps in ``(k, chi)``: ``(n_u, n_k + 1, n_k + 1)``."""
+        nk = self.model.n_states
+        G = np.zeros((self.model.n_jumps, nk + 1, nk + 1))
+        G[:, :nk, :nk] = self.g_kk[i]
+        G[:, :nk, nk] = self.g_ks[i]
+        G[:, nk, :nk] = self.g_ks[i]
+        G[:, nk, nk] = self.g_ss[i]
+        return G
+
+    def _h_full(self, i, j):
+        """Second derivatives of the states in ``(k, eps, chi)``: ``(n_k, n_z, n_z)``."""
+        nk, ne = self.model.n_states, self.model.n_shocks
+        nz = nk + ne + 1
+        kz, ez, c = slice(0, nk), slice(nk, nk + ne), nz - 1
+        H = np.zeros((nk, nz, nz))
+        H[:, kz, kz] = self.h_kk[i, j]
+        H[:, kz, ez] = self.h_ku[i, j]
+        H[:, ez, kz] = np.transpose(self.h_ku[i, j], (0, 2, 1))
+        H[:, ez, ez] = self.h_uu[i, j]
+        H[:, kz, c] = self.h_ks[i, j]
+        H[:, c, kz] = self.h_ks[i, j]
+        H[:, ez, c] = self.h_us[i, j]
+        H[:, c, ez] = self.h_us[i, j]
+        H[:, c, c] = self.h_ss[i, j]
+        return H
+
+    def decision_rule(self, regime: int, next_regime: int) -> SwitchingDecisionRule:
+        """The rule for ``[k_{t+1}; u_{t+1}]`` given ``s_t = regime`` and ``s_{t+1} = next_regime``.
+
+        The states and jumps of ``t+1`` as functions of ``(k_t, eps_{t+1}, chi)``,
+        Dynare's decision-rule form with the perturbation parameter kept as an
+        argument, which is the form in which Foerster et al. (2016) print their
+        solutions.
+        """
+        i, j = int(regime), int(next_regime)
+        nk, ne = self.model.n_states, self.model.n_shocks
+        nz = nk + ne + 1
+        kz, ez, c = slice(0, nk), slice(nk, nk + ne), nz - 1
+        D = np.hstack([self.P[i, j], self.Q[i, j], self.p[i, j][:, None]])    # d k'/dz
+        Y = np.vstack([D, np.eye(nz)[c][None]])                              # d (k', chi)/dz
+        Hk = self._h_full(i, j)
+        Hu = (np.einsum("ap,rab,bq->rpq", Y, self._g_full(j), Y)
+              + np.einsum("ra,apq->rpq", self.F[j], Hk))
+        Du = self.F[j] @ D
+        Du[:, c] += self.f[j]
+        Dy, Hy = np.vstack([D, Du]), np.concatenate([Hk, Hu])
+        return SwitchingDecisionRule(
+            g_k=Dy[:, kz], g_u=Dy[:, ez], g_s=Dy[:, c], g_kk=Hy[:, kz, kz], g_ku=Hy[:, kz, ez],
+            g_uu=Hy[:, ez, ez], g_ks=Hy[:, kz, c], g_us=Hy[:, ez, c], g_ss=Hy[:, c, c])
+
+    # -- paths -----------------------------------------------------------
+    def _path(self, k0, path, eps, pruning=True):
+        """States and jumps along a regime path, from ``k0`` in the period before the first.
+
+        ``path[t]`` is the regime of period ``t``, and the regime of the period
+        before the first is taken equal to ``path[0]``. ``eps[t]`` arrives in
+        period ``t``. With pruning (Kim, Kim, Schaumburg and Sims, 2008; Andreasen,
+        Fernández-Villaverde and Rubio-Ramírez, 2018) the first-order part, with
+        its regime constants, feeds the quadratic terms, which do not feed
+        themselves.
+        """
+        periods, nk = len(path), self.model.n_states
+        kf = np.zeros((periods, nk))
+        ks = np.zeros((periods, nk))
+        u = np.zeros((periods, self.model.n_jumps))
+        f_prev, s_prev = np.asarray(k0, dtype=float), np.zeros(nk)
+        for t in range(periods):
+            i, j, e = (path[t - 1] if t else path[0]), path[t], eps[t]
+            if pruning:
+                kf[t] = self.P[i, j] @ f_prev + self.Q[i, j] @ e + self.p[i, j]
+                ks[t] = (self.P[i, j] @ s_prev
+                         + 0.5 * np.einsum("rab,a,b->r", self.h_kk[i, j], f_prev, f_prev)
+                         + np.einsum("rab,a,b->r", self.h_ku[i, j], f_prev, e)
+                         + 0.5 * np.einsum("rab,a,b->r", self.h_uu[i, j], e, e)
+                         + self.h_ks[i, j] @ f_prev + self.h_us[i, j] @ e
+                         + 0.5 * self.h_ss[i, j])
+                u[t] = (self.F[j] @ (kf[t] + ks[t]) + self.f[j]
+                        + 0.5 * np.einsum("rab,a,b->r", self.g_kk[j], kf[t], kf[t])
+                        + self.g_ks[j] @ kf[t] + 0.5 * self.g_ss[j])
+                f_prev, s_prev = kf[t], ks[t]
+            else:
+                kf[t] = self.next_states(f_prev, e, i, j)
+                u[t] = self.jumps(kf[t], j)
+                f_prev = kf[t]
+        return kf + ks, u
+
+    def _named(self, k, u):
+        out = {n: k[:, i] for i, n in enumerate(self.model.states)}
+        out.update({n: u[:, i] for i, n in enumerate(self.model.jumps)})
+        return out
+
+    def simulate(self, periods: int = 1000, cov: Covariance = None, *, seed: int | None = None,
+                 burn: int = 100, levels: bool = False, regimes: ArrayLike | None = None,
+                 pruning: bool = True) -> dict[str, np.ndarray]:
+        """Simulate regimes and variables with the second-order rules, pruned by default.
+
+        The draws are those of :meth:`MarkovSwitchingSolution.simulate` with the
+        same ``seed``: the regimes from the chain from its ergodic distribution,
+        unless a path of ``periods + burn`` regimes is given, and the innovations.
+        The simulation starts at the steady state and ``burn`` periods are
+        discarded. Without pruning the quadratic terms feed on themselves.
+        """
+        other = self.at_covariance(cov)
+        if other is not self:
+            return other.simulate(periods, seed=seed, burn=burn, levels=levels, regimes=regimes,
+                                  pruning=pruning)
+        rng = np.random.default_rng(seed)
+        total = periods + burn
+        if regimes is None:
+            chain = MarkovChain(np.arange(self.h, dtype=float), self.transition)
+            path = chain.simulate(total, seed=int(rng.integers(2 ** 32)), indices=True)
+        else:
+            path = np.asarray(regimes, dtype=int)
+            if path.size != total:
+                raise ValueError(f"the regime path needs {total} entries, periods + burn")
+        eps = rng.standard_normal((total, self.model.n_shocks)) @ _psd_factor(self.Sigma).T
+        k, u = self._path(np.zeros(self.model.n_states), path, eps, pruning)
+        paths = self._named(k[burn:], u[burn:])
+        paths["regime"] = path[burn:]
+        return self.to_levels(paths) if levels else paths
+
+    def irf(self, name: str, size: float = 1.0, periods: int = 40, *,
+            regime: int | Sequence[int] = 0, state: ArrayLike | None = None,
+            pruning: bool = True, levels: bool = False,
+            percent: bool = True) -> dict[str, np.ndarray]:
+        """Impulse response to an innovation of ``size`` in shock ``name``, along a regime path.
+
+        ``regime`` is a regime held for the whole response, or a path of
+        ``periods`` regimes; the impulse arrives in the first, with the regime of
+        the period before equal to it, as in :meth:`MarkovSwitchingSolution.irf`.
+        The response is the path with the innovation minus the path without it,
+        from the same ``state`` (the deviation of the states in the period
+        before, the steady state by default) and along the same regimes, with no
+        other innovation. At second order the regime constants interact with the
+        innovation, so the response depends on the regime path and on the state,
+        and a negative innovation is not the mirror of a positive one. With
+        ``levels=True`` the path with the innovation is returned, in levels.
+        """
+        path = (np.full(periods, int(np.asarray(regime))) if np.isscalar(regime)
+                else np.asarray(regime, dtype=int))
+        if path.size != periods:
+            raise ValueError(f"the regime path has {path.size} entries for {periods} periods")
+        if np.any(path < 0) or np.any(path >= self.h):
+            raise ValueError(f"regimes run from 0 to {self.h - 1}")
+        k0 = np.zeros(self.model.n_states) if state is None else np.asarray(state, dtype=float)
+        eps = np.zeros((periods, self.model.n_shocks))
+        base = self._named(*self._path(k0, path, eps, pruning))
+        if periods:
+            eps[0, self.model.shock_position(name)] = size
+        shocked = self._named(*self._path(k0, path, eps, pruning))
+        if levels:
+            return self.to_levels(shocked)
+        return {n: (shocked[n] - base[n]) * (100.0 if percent else 1.0) for n in shocked}
+
+    # -- moments ---------------------------------------------------------
+    def conditional_mean(self, cov: Covariance = None) -> np.ndarray:
+        """``(h, n_vars)``: the mean of every variable given each regime, under the pruned rules.
+
+        In closed form, in the rescaled deviations, from the first-order moments
+        of :meth:`MarkovSwitchingSolution.regime_moments`. The second-order part of
+        the states solves ``q_j = sum_i T[i,j] (P[i,j] q_i + pi_i E[d_ij | s=i])``,
+        with ``d_ij`` the quadratic terms of the law of motion, whose innovation
+        terms have mean ``1/2 h_uu : Sigma``.
+        """
+        other = self.at_covariance(cov)
+        if other is not self:
+            return other.conditional_mean()
+        if not self.first.solution.stable:
+            raise MarkovSwitchingError("moments need a mean-square stable solution")
+        T, h, nk = self.transition, self.h, self.model.n_states
+        pi, mk, Mk = _regime_moments(self.P, self.p, self.Q, self.Sigma, T)
+        Lq = np.eye(h * nk)
+        rq = np.zeros(h * nk)
+        for i in range(h):
+            for j in range(h):
+                if T[i, j] == 0.0:
+                    continue
+                Lq[j * nk:(j + 1) * nk, i * nk:(i + 1) * nk] -= T[i, j] * self.P[i, j]
+                d = 0.5 * (np.einsum("rab,ab->r", self.h_kk[i, j], Mk[i])
+                           + np.einsum("rab,ab->r", self.h_uu[i, j], self.Sigma)
+                           + self.h_ss[i, j]) + self.h_ks[i, j] @ mk[i]
+                rq[j * nk:(j + 1) * nk] += T[i, j] * pi[i] * d
+        q = np.linalg.solve(Lq, rq).reshape(h, nk) if nk else np.zeros((h, 0))
+        w = np.where(pi > 0, pi, 1.0)
+        second = np.where(pi[:, None] > 0, q / w[:, None], 0.0)
+        out = np.zeros((h, self.model.n_vars))
+        for j in range(h):
+            k = mk[j] + second[j]
+            u = (self.F[j] @ k + self.f[j] + 0.5 * np.einsum("rab,ab->r", self.g_kk[j], Mk[j])
+                 + self.g_ks[j] @ mk[j] + 0.5 * self.g_ss[j])
+            out[j] = np.concatenate([k, u])
+        return out
+
+    def ergodic_mean(self, cov: Covariance = None, levels: bool = True) -> dict[str, float]:
+        """Unconditional mean of every variable under the pruned rules, in levels by default."""
+        mean = self.first.ergodic @ self.conditional_mean(cov)
+        out = {n: float(mean[i]) for i, n in enumerate(self.model.names)}
+        if not levels:
+            return out
+        return {n: float(v) for n, v in self.to_levels(out).items()}
+
+    def summary(self) -> str:
+        return self.first.summary() + f"\n  second-order residual : {self.residual:.3e}"
+
+
+def _coupled_solve(blocks, rhs, direct_limit, label):
+    """Solve ``sum_j blocks[i][j] x_j = rhs_i``, one dense block per pair of regimes."""
+    h, size = rhs.shape
+    if h * size > direct_limit:
+        raise MarkovSwitchingError(
+            f"the {label} system has {h * size} unknowns, more than direct_limit={direct_limit}; "
+            f"raise it")
+    M = np.block([[blocks[i][j] for j in range(h)] for i in range(h)])
+    return np.linalg.solve(M, rhs.ravel()).reshape(rhs.shape)
+
+
+def solve_second_order_switching(first: MarkovSwitchingSolution, cov: Covariance = None, *,
+                                 h: float = 1e-4, direct_limit: int = 20000
+                                 ) -> SecondOrderSwitchingSolution:
+    """Second-order terms of a Markov-switching model around its first-order solution.
+
+    Foerster, Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2): given the
+    first-order solution, the second derivatives of the decision rules solve a
+    linear system. The laws of motion give the second derivatives of the states
+    in terms of those of the jumps, and the expected rows, averaged over the next
+    regime and the next innovation, then give three linear systems in the jumps'
+    blocks, solved in turn: in ``(k, k)``, in ``(k, chi)`` and in ``(chi, chi)``.
+    Each has one block of unknowns per regime, coupled through the transition
+    matrix. The derivatives of the residuals are taken at each pair of regimes,
+    with the switching parameters that are not perturbed at their regime values,
+    so that every coefficient may differ across regimes.
+
+    Parameters
+    ----------
+    first : MarkovSwitchingSolution
+        Output of :func:`solve_markov_switching`.
+    cov : mapping, array or None
+        Shock covariance, which enters ``g_ss`` and ``h_ss`` only.
+    h : float
+        Step for the second differences.
+    direct_limit : int
+        Largest number of unknowns of the ``(k, k)`` system,
+        ``h * n_jumps * n_states**2``, which is solved as one dense system.
+    """
+    if not first.solution.is_real:
+        raise MarkovSwitchingError("the second order needs a real first-order solution")
+    model, sysm = first.model, first.system
+    hr, T = first.h, first.transition
+    nk, nu, ne = model.n_states, model.n_jumps, model.n_shocks
+    n = nk + nu
+    m = 2 * n + ne
+    nz = nk + ne + 1
+    kz, ez, c = slice(0, nk), slice(nk, nk + ne), nz - 1
+    Sigma = shock_covariance(model.shocks, cov)
+    blocks = sysm._blocks()
+    L, E = sysm.motion, sysm.expected
+    F, f, P, Q, p = first.F, first.f, first.P, first.Q, first.p
+    pi = _ergodic(T)
+    means = {k: float(pi @ v) for k, v in first.switching.items()}
+    mean_params = set_params(first.params, means)
+    names_next = set(first.next_regime)
+
+    hK = np.zeros((hr, hr, nk, nz, nz))     # the states' Hessian with the jumps' blocks at zero
+    R = np.zeros((hr, hr, nu, nz, nz))      # the expected rows with the jumps' blocks at zero
+    D = np.zeros((hr, hr, nu, nu))          # multiplies the blocks of the current regime
+    MB = np.zeros((hr, hr, nk, nu))         # the states' blocks per unit of the current jumps'
+    for i in range(hr):
+        for j in range(hr):
+            b = blocks[i, j]
+            Hij = _pair_hessian(model, first.steady, mean_params, first.switching, names_next,
+                                first.perturbed, means, i, j, sysm.row_scale, h)
+            # d [y'; y; eps; chi] / d (k, eps, chi) at first order
+            V = np.zeros((m + 1, nz))
+            V[:nk, kz], V[:nk, ez], V[:nk, c] = P[i, j], Q[i, j], p[i, j]
+            V[nk:n, kz], V[nk:n, ez] = F[j] @ P[i, j], F[j] @ Q[i, j]
+            V[nk:n, c] = F[j] @ p[i, j] + f[j]
+            V[n:n + nk, kz] = np.eye(nk)
+            V[n + nk:2 * n, kz], V[n + nk:2 * n, c] = F[i], f[i]
+            V[2 * n:m, ez] = np.eye(ne)
+            V[m, c] = 1.0
+            K = np.einsum("ap,rab,bq->rpq", V, Hij, V)
+            lead = b["AkE"] + b["AuE"] @ F[j]
+            hK[i, j] = -np.einsum("ka,apq->kpq", b["M"], K[L])
+            R[i, j] = K[E] + np.einsum("ra,apq->rpq", lead, hK[i, j])
+            MB[i, j] = b["M"] @ b["BuL"]
+            D[i, j] = lead @ MB[i, j] - b["BuE"]
+
+    def coupled(kron_of, size):
+        """``sum_j T[i,j] (kron(D_ij, I) x_i + kron(AuE_ij, kron_of(i, j)) x_j)``, as blocks."""
+        out = []
+        for i in range(hr):
+            row = [np.zeros((nu * size, nu * size)) for _ in range(hr)]
+            for j in range(hr):
+                if T[i, j] != 0.0:
+                    row[i] += T[i, j] * np.kron(D[i, j], np.eye(size))
+                    row[j] += T[i, j] * np.kron(blocks[i, j]["AuE"], kron_of(i, j))
+            out.append(row)
+        return out
+
+    # (k, k): sum_j T_ij [D_ij G_i + AuE_ij G_j(P_ij, P_ij)] = -sum_j T_ij R_ij
+    rhs = np.stack([-np.einsum("j,jrab->rab", T[i], R[i][:, :, kz, kz]).ravel()
+                    for i in range(hr)])
+    g_kk = _coupled_solve(coupled(lambda i, j: np.kron(P[i, j], P[i, j]).T, nk * nk), rhs,
+                          direct_limit, "(k, k)").reshape(hr, nu, nk, nk)
+    g_kk = 0.5 * (g_kk + np.transpose(g_kk, (0, 1, 3, 2)))
+
+    # (k, chi): sum_j T_ij [D_ij G_i + AuE_ij G_j P_ij] = -sum_j T_ij [R_ij + AuE_ij g_kk_j(P, p)]
+    rhs = np.zeros((hr, nu * nk))
+    for i in range(hr):
+        for j in range(hr):
+            AuE = blocks[i, j]["AuE"]
+            rhs[i] -= T[i, j] * (R[i, j][:, kz, c]
+                                 + AuE @ np.einsum("abc,bp,c->ap", g_kk[j], P[i, j], p[i, j])
+                                 ).ravel()
+    g_ks = _coupled_solve(coupled(lambda i, j: P[i, j].T, nk), rhs, direct_limit,
+                          "(k, chi)").reshape(hr, nu, nk)
+
+    # (chi, chi), with the variance of the innovations:
+    # sum_j T_ij [D_ij G_i + AuE_ij G_j] = -sum_j T_ij [R_ij + R_ij[eps, eps] : Sigma
+    #     + AuE_ij (g_kk_j(p, p) + 2 g_ks_j p + g_kk_j(Q, Q) : Sigma)]
+    rhs = np.zeros((hr, nu))
+    for i in range(hr):
+        for j in range(hr):
+            AuE = blocks[i, j]["AuE"]
+            known = (R[i, j][:, c, c] + np.einsum("rab,ab->r", R[i, j][:, ez, ez], Sigma)
+                     + AuE @ (np.einsum("abc,b,c->a", g_kk[j], p[i, j], p[i, j])
+                              + 2.0 * g_ks[j] @ p[i, j]
+                              + np.einsum("abc,bp,cq,pq->a", g_kk[j], Q[i, j], Q[i, j], Sigma)))
+            rhs[i] -= T[i, j] * known
+    g_ss = _coupled_solve(coupled(lambda i, j: np.eye(1), 1), rhs, direct_limit,
+                          "(chi, chi)").reshape(hr, nu)
+
+    # The states, from the laws of motion.
+    h_kk = np.zeros((hr, hr, nk, nk, nk))
+    h_ks = np.zeros((hr, hr, nk, nk))
+    h_ss = np.zeros((hr, hr, nk))
+    for i in range(hr):
+        for j in range(hr):
+            h_kk[i, j] = hK[i, j][:, kz, kz] + np.einsum("ka,abc->kbc", MB[i, j], g_kk[i])
+            h_ks[i, j] = hK[i, j][:, kz, c] + MB[i, j] @ g_ks[i]
+            h_ss[i, j] = hK[i, j][:, c, c] + MB[i, j] @ g_ss[i]
+    out = SecondOrderSwitchingSolution(
+        first=first, g_kk=g_kk, g_ks=g_ks, g_ss=g_ss, h_kk=h_kk,
+        h_ku=hK[:, :, :, kz, ez].copy(), h_uu=hK[:, :, :, ez, ez].copy(), h_ks=h_ks,
+        h_us=hK[:, :, :, ez, c].copy(), h_ss=h_ss, Sigma=Sigma, step=h)
+
+    # Residual of the expected rows' conditions, recomputed from the assembled solution.
+    X = np.zeros((nk + 1, nz))
+    X[:nk, kz] = np.eye(nk)
+    X[nk, c] = 1.0
+    worst = 0.0
+    for i in range(hr):
+        acc = np.zeros((nu, nz, nz))
+        for j in range(hr):
+            if T[i, j] == 0.0:
+                continue
+            b = blocks[i, j]
+            Hk = out._h_full(i, j)
+            Y = np.vstack([np.hstack([P[i, j], Q[i, j], p[i, j][:, None]]), np.eye(nz)[c][None]])
+            u_next = (np.einsum("ap,rab,bq->rpq", Y, out._g_full(j), Y)
+                      + np.einsum("ra,apq->rpq", F[j], Hk))
+            u_now = np.einsum("ap,rab,bq->rpq", X, out._g_full(i), X)
+            lead = b["AkE"] + b["AuE"] @ F[j]
+            acc += T[i, j] * (R[i, j] - np.einsum("ra,apq->rpq", lead, hK[i, j])
+                              + np.einsum("ra,apq->rpq", b["AkE"], Hk)
+                              + np.einsum("ra,apq->rpq", b["AuE"], u_next)
+                              - np.einsum("ra,apq->rpq", b["BuE"], u_now))
+        for x in (acc[:, kz, kz], acc[:, kz, c],
+                  acc[:, c, c] + np.einsum("rab,ab->r", acc[:, ez, ez], Sigma)):
+            worst = max(worst, float(np.max(np.abs(x), initial=0.0)))
+    out.residual = worst
+    return out

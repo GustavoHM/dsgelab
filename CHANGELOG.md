@@ -99,12 +99,45 @@ features, without changing the API of an earlier release. The rest of the milest
   1.9e-8. The full linear approximations of `G` differ by 1.3e-2, while selected `K/Z` entries
   checked against sequence-jacobian's direct nonlinear transition agree within 1.4e-3. On a
   smaller grid, fake news agrees with direct differentiation within 1.3e-8.
+- `solve_second_order_switching` and `solve_markov_switching(..., order=2)`: the second-order
+  solution of a Markov-switching model, by the partition perturbation of Foerster,
+  Rubio-Ramírez, Waggoner and Zha (2016, Proposition 2). Given the first-order solution, the laws
+  of motion give the states' second derivatives in terms of the jumps', and the expected rows
+  give three linear systems, in `(k, k)`, `(k, chi)` and `(chi, chi)`, one block per regime.
+  `SecondOrderSwitchingSolution` has the blocks by regime, `decision_rule(i, j)` the rule for
+  `[k'; u']` on `(k, eps', chi)` (`SwitchingDecisionRule`), pruned simulation and impulse
+  responses along a regime path, and the conditional and ergodic means in closed form.
+  `validation/compare_switching.py` reproduces the 96 second-order coefficients that Foerster et
+  al. (2016) print for their RBC, all of them once rounded to four decimals (the largest
+  difference is 0.48 of a unit of the fourth decimal). With identical regimes it agrees with
+  `solve_second_order` within 7.9e-15, and on stochastic growth with log utility and full
+  depreciation, with switching productivity, persistence and volatility, every coefficient agrees
+  with the closed form within 1.3e-10.
+- `from_equations(trend_vars=..., log_trend_vars=..., deflators=..., log_deflators=...)`
+  declares the trends of a model written in levels, as `trend_var`, `log_trend_var`,
+  `var(deflator=)` and `var(log_deflator=)` do in a `.mod`. The text equations are detrended as
+  `from_mod` detrends a `.mod`, with Dynare's balanced-growth check, and the declarations are in
+  `model.trends`. `validation/compare_bgp.py` writes Solow and Ramsey from Dynare 7.2's
+  `tests/bgp`, with their trends declared, and `tests/trend_var/fs2000_nonstationary.mod` as
+  text equations. Against Dynare, the steady state agrees within 3.4e-14, the IRFs within 9.7e-14
+  of each variable's largest response, the paths under the same 200 shocks within 8.2e-14 and the
+  variance matrix within 7.8e-14 of its largest entry. Against `from_mod` on the same `.mod` the
+  largest difference is 1.4e-13.
 
 ### Changed
 
 - `value_iteration`'s `interpolation` defaults to `None`, which is `"linear"` on a
   `CartesianGrid`, so that a `SmolyakGrid` can refuse a value. Calls that worked before give the
   same results.
+- In `from_equations`, the lead `x(+k)`, `k >= 2`, of a state starts from a new jump
+  `LEAD0_x = x`, with `LEAD1_x = LEAD0_x(+1)`. Before, `LEAD1_x = x(+1)` had no jump at `t+1`, and
+  with an exogenous state the solver refused the model as inconsistent. A model with the lead of
+  an endogenous state has one more auxiliary and the same solution.
+
+### Fixed
+
+- The balanced-growth check of a `.mod` failed with a `NameError` on an equation that holds two
+  trends after detrending, such as Solow with technology and population declared as trends.
 
 ## 0.9.0 — 2026-11-05
 

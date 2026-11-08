@@ -603,19 +603,35 @@ initval; c = 0.8; k = 10; y = 1; end;
 """)
 ss_t = trended.steady_state()                    # the model comes out already detrended
 
+same = dsg.from_equations(                       # the same declarations, as text equations
+    ["1/c = beta/c(+1)*(alpha*y(+1)/k + 1 - delta)", "c + k = y + (1-delta)*k(-1)",
+     "y = k(-1)**alpha*A**(1-alpha)"],
+    states=[], jumps=["c", "k", "y"], shocks=[], parameters=["alpha", "beta", "delta", "g"],
+    trend_vars={"A": "g"}, deflators={"c": "A", "k": "A", "y": "A"})
+ss_e = dsg.steady_state(same, dict(c=0.8, k=10, y=1), trended.params)
+round(ss_e.values["k"] / ss_e.values["y"], 4)
+max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12
+
 solow = dsg.from_equations(
     ["E(+1) = gE*E", "y = k**alpha*E**(1-alpha)", "k(+1) = (1-delta)*k + s*y"],
     states=["E", "k"], jumps=["y"], shocks=[], parameters=["alpha", "delta", "s", "gE"])
 bgp = dsg.balanced_growth(solow, dict(alpha=0.33, delta=0.02, s=0.2, gE=1.01))
 abs(bgp.growth["y"] - 1.01) &lt; 1e-12
 abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</code></pre>
-<pre class="output" data-label="Output"><code><span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
+<pre class="output" data-label="Output"><code><span class="out-expr">round(ss_e.values["k"] / ss_e.values["y"], 4)</span>
+8.26
+<span class="out-expr">max(abs(ss_e.values[v] - ss_t.values[v]) for v in "cky") &lt; 1e-12</span>
+True
+<span class="out-expr">abs(bgp.growth["y"] - 1.01) &lt; 1e-12</span>
 True
 <span class="out-expr">abs(bgp.ratio("k", "y") - 0.2/(1.01 - 1 + 0.02)) &lt; 1e-10</span>
 True</code></pre>
   <p>In a <code>.mod</code> written in levels, <code>trend_var</code> and <code>var(deflator=)</code>
   are detrended as Dynare does it, and an equation that still depends on the level of the trend is
-  refused. <code>balanced_growth</code> computes the growth factors and the ratios between variables
+  refused. In <code>from_equations</code> the same declarations are <code>trend_vars=</code> and
+  <code>deflators=</code>, with the same detrending and the same check, and the steady state above
+  is the one of the <code>.mod</code>. The ratio k/y is αg/(g/β − 1 + δ).
+  <code>balanced_growth</code> computes the growth factors and the ratios between variables
   that share the trend, which is the problem Dynare's <code>bgp.write</code> solves.</p>
   <h3>19. Is the model identified before it is estimated?</h3>
 <pre><code>ident = dsg.identification(ar, dict(rho=0.8), free=["rho", "stderr e"],
@@ -1076,6 +1092,48 @@ f"{errors.mean():.1e}, {np.median(errors):.1e}"</code></pre>
   equation is written as a ratio, and they are largest in the cell where the bound starts to bind.
   The validation solves three of the example models in dolo's repository, among them consumption
   and saving with this limit, and agrees with dolo's <code>time_iteration</code> to 1e-9 or better.</p>
+<pre><code>newton = dsg.improved_time_iteration(saving, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                     grid={"w": (0.2, 12.0, 80)}, markov={"y": income},
+                                     bounds={"c": (0.0, lambda s, p: s.w)},
+                                     initial={"c": lambda s, p: 0.5 * s.w})
+newton.converged, newton.iterations
+bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)
+
+def saver_z(nxt, cur, eps, p):           # the expectation in the Euler equation as the jump z
+    return [
+        nxt.w - (p["R"] * (cur.w - cur.c) + nxt.y),
+        np.log(nxt.y) - 0.9 * np.log(cur.y) - eps.e,
+        cur.c - cur.z ** (-1 / p["gamma"]),                         # c given z, paired with c &lt;= w
+        cur.z - p["beta"] * p["R"] * nxt.c ** -p["gamma"],          # z = beta R E[c'^-gamma]
+    ]
+
+saving_z = dsg.Model(states=["w", "y"], jumps=["c", "z"], shocks=["e"], equations=saver_z)
+ei = dsg.expectations_iteration(saving_z, {"beta": 0.95, "R": 1.03, "gamma": 2.0},
+                                expectations=["z"], grid={"w": (0.2, 12.0, 80)},
+                                markov={"y": income}, bounds={"c": (0.0, lambda s, p: s.w)},
+                                initial={"c": lambda s, p: 0.5 * s.w,
+                                         "z": lambda s, p: (0.5 * s.w) ** -2.0})
+ei.converged
+bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">newton.converged, newton.iterations</span>
+(True, 9)
+<span class="out-expr">bool(np.abs(newton.values - ti.values).max() &lt; 1e-6)</span>
+True
+<span class="out-expr">ei.converged</span>
+True
+<span class="out-expr">bool(np.abs(ei.values[..., 0] - ti.values[..., 0]).max() &lt; 1e-6)</span>
+True</code></pre>
+  <p><code>improved_time_iteration</code> solves the same equations by Newton's method on all the
+  grid points at once, with the derivative through next period's policy, as dolo's routine of the
+  same name does. From the same start it takes 9 steps where time iteration takes 179, and the two
+  policies agree within the tolerance of time iteration, which stops when the policy moves by less
+  than 1e-8 and so lies some 1e-7 from the fixed point. <code>expectations_iteration</code> needs the
+  expectation in the Euler equation declared as a jump. Each iteration integrates it with the
+  current policy and then finds consumption from it, at every grid point, without an integral,
+  and the result is again time iteration's policy. dolo documents this iteration, as
+  parameterized expectations, and does not implement it. The validation compares
+  <code>improved_time_iteration</code> with dolo's on the three models of the time-iteration
+  validation, within 4e-10, and both methods with the closed form of stochastic growth.</p>
   <h3>31. Stochastic growth, by value function iteration</h3>
 <pre><code>alpha, beta = 0.36, 0.95
 log_z = dsg.rouwenhorst(0.9, 0.02, 5)                 # log productivity
@@ -1510,6 +1568,48 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   likelihood, the mixture of the Kalman filters of all 4096 regime paths, by the last number. The
   validation reproduces the nine solutions that Foerster et al. (2013) print for a New Keynesian
   model, and checks Kim's filter against statsmodels' Hamilton filter.</p>
+<pre><code>growth = dsg.Model(
+    states=["k", "z"], jumps=["c", "y"], shocks=["e"],
+    equations=lambda nxt, cur, eps, p: [
+        nxt.k - (cur.y - cur.c),                                       # full depreciation
+        nxt.z - np.exp(p["rho"] * np.log(cur.z) + p["sigma"] * eps.e),
+        1 / cur.c - p["beta"] * p["alpha"] * nxt.y / (nxt.k * nxt.c),  # log utility
+        cur.y - p["A"] * cur.z * cur.k ** p["alpha"]])
+A = np.array([1.05, 0.95])
+ms2 = dsg.solve_markov_switching(
+    growth, {"alpha": 0.33, "beta": 0.96, "A": 1.0, "rho": 0.9, "sigma": 0.01},
+    {"A": A, "rho": (0.9, 0.5), "sigma": (0.01, 0.03)}, T, next_regime=("rho", "sigma"),
+    guess={"k": 0.2, "z": 1.0, "c": 0.4, "y": 0.6}, order=2)
+ms2.first.perturbed, f"{ms2.residual:.0e}"
+d = A / (ms2.first.ergodic @ A) - 1
+np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)     # y on k and chi: alpha d(s)
+np.round(ms2.h_uu[0, :, 1, 0, 0], 6)                       # z' on eps^2: sigma(s')^2
+up, down = (ms2.irf("e", size=s, regime=1)["y"][:3] for s in (1.0, -1.0))
+np.round(up + down, 4)
+first = ms2.first.moments()["conditional_mean"][:, 3]
+ms2.to_levels({"y": first})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</code></pre>
+<pre class="output" data-label="Output"><code><span class="out-expr">ms2.first.perturbed, f"{ms2.residual:.0e}"</span>
+(['A'], '4e-16')
+<span class="out-expr">np.round(ms2.g_ks[:, 1, 0], 6), np.round(0.33 * d, 6)</span>
+([0.01082 -0.02164], [0.01082 -0.02164])
+<span class="out-expr">np.round(ms2.h_uu[0, :, 1, 0, 0], 6)</span>
+[0.0001 0.0009]
+<span class="out-expr">np.round(up + down, 4)</span>
+[0.09 0.062 0.0247]
+<span class="out-expr">ms2.to_levels({"y": first})["y"].round(4), ms2.to_levels({"y": ms2.conditional_mean()[:, 3]})["y"].round(4)</span>
+([0.6084 0.5288], [0.6089 0.5301])</code></pre>
+  <p>At second order (<code>order=2</code>), the partition perturbation gives the second
+  derivatives of the decision rules by solving linear systems, one block per regime (Foerster et al.,
+  2016). Stochastic growth with log utility and full depreciation has the closed form
+  <code>k' = alpha beta y</code>, whatever the process of productivity, so every second-order
+  coefficient is known: the productivity level switches and is perturbed, and the persistence and
+  volatility of <code>z</code> switch at <code>t+1</code> without being perturbed. The coefficient
+  of output on capital and <code>chi</code> is <code>alpha d(s)</code>, with <code>d(s)</code> the
+  regime's productivity relative to its ergodic mean, and that of <code>z'</code> on the squared
+  innovation is the variance of the next regime. A positive and a negative innovation no longer
+  give mirror responses, and the means of output given each regime move away from the first-order
+  ones. The validation reproduces the 96 second-order coefficients that Foerster et al. (2016)
+  print for their RBC.</p>
 </div></section>
 
 <section id="box"><div class="wrap">
@@ -1539,8 +1639,8 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
     Diebold–Mariano and PIT, mixed-frequency observables, and plots of the results.</p></div>
     <div class="card"><h4>Occasionally binding constraints</h4><p>OccBin with any number of
     constraints, time-varying rules and surprise shocks, as in Dynare's <code>+occbin</code>.</p></div>
-    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first order, with
-    every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
+    <div class="card"><h4>Regime switching</h4><p>Markov-switching parameters to first and second
+    order, with every solution found and mean-square stability, and Kim's filter for estimation.</p></div>
     <div class="card"><h4>Extended path</h4><p>Deterministic and stochastic, on a sparse or full
     tree, with the hybrid risk correction.</p></div>
     <div class="card"><h4>Models in levels</h4><p>Declared trends, the balanced-growth check and the
@@ -2012,9 +2112,10 @@ f"{dsg.kim_filter(space, sim['pi'][:12]).loglik - dsg.enumerated_likelihood(spac
   <a href="https://github.com/jessegrabowski/gEconpy">gEconpy</a>.</strong> It derives the
   first-order conditions from declared blocks, accepts a declared analytic steady state, estimates
   by Bayesian methods (through PyMC) and exports to Dynare, as dsgelab does, but it has no
-  second-order solution. For global methods beyond Chebyshev collocation (on tensor or Smolyak
-  grids), time iteration, value function iteration and the endogenous grid method, such as
-  expectations iteration, <a href="https://github.com/EconForge/dolo.py">dolo</a> documents more.
+  second-order solution. Among global methods, dsgelab has Chebyshev collocation (on tensor or
+  Smolyak grids), time iteration, improved or on the expectations, value function iteration and
+  the endogenous grid method, and <a href="https://github.com/EconForge/dolo.py">dolo</a> also
+  documents time iteration over a finite horizon.
   For heterogeneous agents, dsgelab has the sequence-space Jacobian method with one or two assets,
   validated against <a href="https://github.com/shade-econ/sequence-jacobian">sequence-jacobian</a>;
   <a href="https://github.com/gboehl/econpizza">econpizza</a> also solves models with two assets.</p></div>
