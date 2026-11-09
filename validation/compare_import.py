@@ -63,7 +63,8 @@ def _mods():
 
 def compare(name: str, path: Path, out: Path = HERE / "out_import",
             ss_floor: float = 1e-8, steady_from_dynare: bool = False,
-            steady_start_from_dynare: bool = False) -> dict:
+            steady_start_from_dynare: bool = False, steady_tol: float = 1e-11,
+            check_steady: bool = True, steady_analytic: bool = False) -> dict:
     """Compare one .mod with the Dynare run exported to ``out/<name>.mat``."""
     ex = _load(name, out)
     if ex is None:
@@ -100,7 +101,8 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
         # a linear model without initval starts from zero, as Dynare itself does
         start = ({v: ys[v] for v in mf.endogenous} if steady_start_from_dynare else
                  {} if mf.linear else {v: ys[v] for v in mf.missing_guess})
-        ss = mf.steady_state(guess=start, params=params)
+        ss = mf.steady_state(guess=start, params=params, tol=steady_tol,
+                             analytic=steady_analytic)
         # relative error, absolute below ss_floor. mmb/compare.py passes 1: a variable whose steady
         # state is zero (an output gap, a debt ratio) is otherwise compared on its rounding error
         d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), ss_floor) for v in mf.endogenous)
@@ -111,7 +113,7 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
 
     # --- orthogonalised IRFs and moments
     sol = dsg.solve(model, params, steady=ss, qz_criterium=1 + 1e-6,
-                    check_steady=not steady_from_dynare)   # Dynare's default qz_criterium
+                    check_steady=check_steady and not steady_from_dynare)  # Dynare's qz default
     cov = np.atleast_2d(np.asarray(ex.sigma_e, float))
     live = [i for i in range(len(ex.exo_names)) if cov[i, i] > 0]
     L = np.zeros_like(cov)
