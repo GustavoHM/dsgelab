@@ -23,7 +23,10 @@ features, without changing the API of an earlier release. The rest of the milest
 - Symbolic models print the constant pi as a number before lambdification, so an endogenous
   variable named `pi` no longer replaces the constant in `normpdf` and similar expressions.
 - A lone `log(a) - log(b)` is evaluated as `log(a / b)`, preserving its real domain and derivatives
-  when both arguments are negative, as in BMZ12's output-gap equation.
+  when both arguments are negative, as in BMZ12's output-gap equation. Other nonfinite evaluations
+  involving logarithms are retried with complex logarithms, while all other operations stay real,
+  and accepted only if their imaginary parts cancel; a remaining imaginary component is never
+  silently discarded.
 
 ## 1.0.0rc1 — 2026-11-08
 

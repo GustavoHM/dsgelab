@@ -148,3 +148,22 @@ def test_log_difference_preserves_its_real_domain():
     with np.errstate(invalid="ignore"):
         assert np.isnan(single.residuals(x, x, None, {"y_ss": -4.0})[0])
         assert np.isnan(total.residuals(x, x, None, {"y_ss": -4.0})[0])
+
+
+def test_complex_evaluation_accepts_only_cancelled_imaginary_parts():
+    m = from_equations(["y = log(y) + log(a) - 2*log(b)"], states=[], jumps=["y"],
+                       shocks=[], parameters=["a", "b"])
+    x = np.array([-2.0])
+    params = {"a": -3.0, "b": -4.0}
+    r = m.residuals(x, x, None, params)
+    np.testing.assert_allclose(r, [-2.0 - np.log(0.375)], rtol=0.0, atol=1e-15)
+    J = m.jacobian(x, x, None, params)
+    np.testing.assert_allclose(J, [[0.0, 1.5]], rtol=0.0, atol=1e-15)
+    H = m.hessian(x, x, None, params)
+    np.testing.assert_allclose(H, [[[0.0, 0.0], [0.0, 0.25]]], rtol=0.0, atol=1e-15)
+    third = from_equations(["y = log(y) + log(a) - 2*log(b)"], states=[], jumps=["y"],
+                           shocks=[], parameters=["a", "b"], derivatives="third")
+    T = third.third(x, x, None, params)
+    assert T.to_dense()[0, 1, 1, 1] == pytest.approx(0.25, abs=1e-15)
+    with np.errstate(invalid="ignore"):
+        assert np.isnan(m.residuals(x, x, None, {"a": -3.0, "b": 4.0})[0])

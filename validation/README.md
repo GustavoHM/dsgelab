@@ -431,9 +431,11 @@ This checks the local approximation, not the point as a steady state.
 
 In `CA_BMZ12`, `ygap` and `ygap_ss` are both negative. The symbolic frontend rewrites a lone
 `log(a) - log(b)` as `log(a / b)`, which has the same real domain and derivatives: it is real when
-the arguments have the same sign and NaN when they have opposite signs. Dynare's point supplies
-only the starting guess; `dsgelab` solves its own steady state. The reference run sets Dynare's
-`solve_tolf` and `solve_tolx` to 1e-14, leaving a residual of 2e-12.
+the arguments have the same sign and NaN when they have opposite signs. Other nonfinite evaluations
+involving logarithms are retried with complex logarithms, while all other operations stay real, and
+accepted only when their imaginary parts cancel numerically.
+Dynare's point supplies only the starting guess; `dsgelab` solves its own steady state. The
+reference run sets Dynare's `solve_tolf` and `solve_tolx` to 1e-14, leaving a residual of 2e-12.
 
 **What the set leaves out.** Six other Rep-MMB models from central banks and official
 institutions were tried, and `from_mod` does not yet read or solve them, or their comparison does
