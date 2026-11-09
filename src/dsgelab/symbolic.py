@@ -209,9 +209,10 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                 + [float(get_param(params, p)) for p in parameters])
         return np.asarray(f_res(*vals), dtype=float).ravel()
 
+    numeric_pi = {sympy.pi: sympy.Float(np.pi)}
     jac_fn = hess_fn = third_fn = None
     if derivatives in ("jacobian", "both", "third"):
-        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms))
+        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms)).xreplace(numeric_pi)
         f_jac = sympy.lambdify(all_syms, Jm, modules="numpy")
 
         def jac_fn(x_next, x_now, e, params, ctx=None):
@@ -219,7 +220,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                               dtype=float).reshape(n, m)
 
     if derivatives == "both":
-        blocks = [sympy.hessian(expr, w_syms) for expr in exprs]
+        blocks = [sympy.hessian(expr, w_syms).xreplace(numeric_pi) for expr in exprs]
         f_hess = sympy.lambdify(all_syms, blocks, modules="numpy")
 
         def hess_fn(x_next, x_now, e, params, ctx=None):
@@ -232,7 +233,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         hessian_blocks = []
         for equation, expr in enumerate(exprs):
             for i, j in combinations_with_replacement(range(m), 2):
-                derivative = expr.diff(w_syms[i], w_syms[j])
+                derivative = expr.diff(w_syms[i], w_syms[j]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j)))):
@@ -255,7 +256,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         blocks = []
         for equation, expr in enumerate(exprs):
             for i, j, k in combinations_with_replacement(range(m), 3):
-                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k])
+                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j, k)))):

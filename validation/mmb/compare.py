@@ -1,6 +1,6 @@
 """compare.py: central-bank models of the Macroeconomic Model Data Base, read by from_mod.
 
-The eighteen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
+The nineteen .mod files come from Rep-MMB (fetch.sh) and are read as they are, as
 ../compare_import.py does for Dynare's own examples, with the same comparison: steady state,
 orthogonalised IRFs of every variable to every shock with nonzero variance, 40 periods, and
 theoretical standard deviations. Parameters that the .mod leaves undefined, and steady-state
@@ -27,7 +27,7 @@ from compare_import import compare  # noqa: E402
 VALIDATED = (
     "BRA_SAMBA08", "CA_BMZ12", "CA_LS07", "CL_MS07", "EACZ_GEM03", "EAUS_NAWM08",
     "EA_ALSV06", "EA_AWM05", "ESREA_FIMOD12", "G2_SIGMA08", "GPM6_IMF13", "EA_SWW14",
-    "HK_FP13", "UK_SM11", "US_DNGS15", "US_FRB03", "US_FRB08", "US_SW07",
+    "HK_FP13", "UK_SM11", "US_CMR14", "US_DNGS15", "US_FRB03", "US_FRB08", "US_SW07",
 )
 
 

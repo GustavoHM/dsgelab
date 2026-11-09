@@ -352,13 +352,13 @@ The Macroeconomic Model Data Base (MMB, [macromodelbase.com](https://www.macromo
 collects models in Dynare, and its replication toolbox Rep-MMB
 ([github.com/AlexMeyer-Gohde/Rep-MMB](https://github.com/AlexMeyer-Gohde/Rep-MMB)) holds 148 of
 them at the commit `fetch.sh` uses. The folder
-`mmb/` reads eighteen of them with `from_mod`, as they are, and compares them with Dynare in the
+`mmb/` reads nineteen of them with `from_mod`, as they are, and compares them with Dynare in the
 same way as `compare_import.py`. The set covers models built or used at the Banco Central do
 Brasil, the ECB, the Federal Reserve, the Banco Central de Chile, the Bank of England, the
 Riksbank and the IMF, from 9 to 361 variables.
 
 ```bash
-bash mmb/fetch.sh          # 18 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
+bash mmb/fetch.sh          # 19 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
 bash mmb/run_dynare.sh     # ../strip_mod.py and the same stoch_simul(order=1) for all
 python mmb/compare.py
 ```
@@ -382,6 +382,7 @@ GPM6_IMF13     291  622   4.2e-17  0.0e+00  3.8e-11   4.1e-12  OK  (common Dynar
 EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
 HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
 UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
+US_CMR14        70  272   2.2e-16  0.0e+00  6.6e-07   1.7e-11  OK  (common Dynare point, residual 3e-06)
 US_DNGS15       38   33   0.0e+00  0.0e+00  1.4e-12   5.1e-13  OK
 US_FRB03       279  365   0.0e+00  0.0e+00  6.6e-10   1.8e-09  OK
 US_FRB08       361  335   2.2e-16  0.0e+00  5.8e-10   1.7e-09  OK
@@ -396,6 +397,7 @@ US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
 | `EAUS_NAWM08` | New Area-Wide Model, ECB (Coenen, McAdam and Straub, 2008), euro area and United States |
 | `EA_SWW14` | Smets, Warne and Wouters (2014), ECB |
 | `US_SW07` | Smets and Wouters (2007) |
+| `US_CMR14` | Christiano, Motto and Rostagno (2014), risk shocks and financial frictions |
 | `US_DNGS15` | Del Negro, Giannoni and Schorfheide (2015), Federal Reserve Bank of New York |
 | `US_FRB03`, `US_FRB08` | FRB/US, Federal Reserve Board, linearised with rational expectations (2003 version of Levin, Wieland and Williams, and February 2008 version) |
 | `CL_MS07` | Medina and Soto (2007), Banco Central de Chile |
@@ -427,7 +429,9 @@ and `run_dynare.sh` passes that option for these models. The parameters listed a
 Dynare are declared and never assigned in the `.mod`. `GPM6_IMF13` declares nonstationary
 variables and uses `steady(nocheck)`. Its comparison linearises both programs at Dynare's supplied
 point, whose residual is 6, with `check_steady=False`; the IRF and moment tolerance stays 1e-6.
-This checks the local approximation, not the point as a steady state.
+This checks the local approximation, not the point as a steady state. `US_CMR14` is also compared
+at Dynare's supplied point, whose residual is 3e-06, rather than at an independently solved steady
+state. Its `@#for` loops are expanded by `from_mod`.
 
 In `CA_BMZ12`, `ygap` and `ygap_ss` are both negative. The symbolic frontend rewrites a lone
 `log(a) - log(b)` as `log(a / b)`, which has the same real domain and derivatives: it is real when
@@ -435,13 +439,11 @@ the arguments have the same sign and NaN when they have opposite signs. Dynare's
 only the starting guess; `dsgelab` solves its own steady state. The reference run sets Dynare's
 `solve_tolf` and `solve_tolx` to 1e-14, leaving a residual of 2e-12.
 
-**What the set leaves out.** Six other Rep-MMB models from central banks and official
+**What the set leaves out.** Five other Rep-MMB models from central banks and official
 institutions were tried, and `from_mod` does not yet read or solve them, or their comparison does
-not yet pass. `US_CMR14` is read, including its `@#for` loops, but at the common Dynare point its
-largest IRF and moment deviations are 0.474 and 0.881, so it is not a validated replication.
-`CA_ToTEM10` (Bank of Canada), `DEREA_GEAR16` (Bundesbank), `EA_GNSS10` (Banca d'Italia),
-`EA_QUEST3` (European Commission) and `FI_AINO16` (Bank of Finland) take parameters or the steady
-state from MATLAB files.
+not yet pass. `CA_ToTEM10` (Bank of Canada), `DEREA_GEAR16` (Bundesbank), `EA_GNSS10` (Banca
+d'Italia), `EA_QUEST3` (European Commission) and `FI_AINO16` (Bank of Finland) take parameters or
+the steady state from MATLAB files.
 
 **Further public candidates, not yet run here.** The
 [OpenSourcedMacroModels](https://github.com/dkgaraujo/OpenSourcedMacroModels) catalogue links
