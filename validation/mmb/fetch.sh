@@ -13,6 +13,7 @@ BASE="https://raw.githubusercontent.com/AlexMeyer-Gohde/Rep-MMB/$COMMIT/Rep-MMB"
 # model  sha256 of <model>_rep.mod
 MODELS="
 BRA_SAMBA08  74a5c2dae055e46c766091818906b98a186d215e880a8cbe45facaa662d2c1ff
+CA_BMZ12     35ab746fbb8092db84689d3a0ba14681fd7f838d744c59c952a712f92bbc6f63
 CA_LS07      4b6760e8427dd04e73b61ccdebadab6e9dffe8355cf9fba72a4c956e8c1072ca
 CL_MS07      00aceed3ba4ea74f314f8ad21e19120047274069d3305b77a2d6a662c9601017
 EACZ_GEM03   e623ae1a2a4ee9ebd7a878655bfb06d4c9a396ff19cd54ebb354d67fffef4833

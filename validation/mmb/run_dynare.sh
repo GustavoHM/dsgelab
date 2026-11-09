@@ -39,6 +39,7 @@ for src in "${FILES[@]}"; do
   rm -rf work/*
   steady_opts=""
   case "$base" in
+    CA_BMZ12) steady_opts="solve_tolf=1e-14, solve_tolx=1e-14" ;;
     GPM6_IMF13) steady_opts="nocheck" ;;
     US_CMR14) steady_opts="maxit=1000, solve_algo=1" ;;
   esac

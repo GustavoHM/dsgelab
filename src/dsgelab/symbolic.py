@@ -128,6 +128,32 @@ def parse_system(equations: Sequence[str], *, variables: Sequence[str],
                 par=ns["par"], namespace=ns)
 
 
+def _combine_real_log_difference(expr, sympy):
+    """Combine a lone ``log(a) - log(b)`` without widening its real domain."""
+    def signed_log(term):
+        if isinstance(term, sympy.log) and len(term.args) == 1:
+            return 1, term.args[0]
+        if (isinstance(term, sympy.Mul) and len(term.args) == 2 and term.args[0] == -1
+                and isinstance(term.args[1], sympy.log) and len(term.args[1].args) == 1):
+            return -1, term.args[1].args[0]
+        return 0, None
+
+    def combine(add):
+        logs = []
+        for i, term in enumerate(add.args):
+            sign, arg = signed_log(term)
+            if sign:
+                logs.append((i, sign, arg))
+        if len(logs) != 2 or logs[0][1] == logs[1][1]:
+            return add
+        (i, sign_i, arg_i), (j, _, arg_j) = logs
+        numerator, denominator = (arg_i, arg_j) if sign_i == 1 else (arg_j, arg_i)
+        rest = [term for k, term in enumerate(add.args) if k not in (i, j)]
+        return sympy.Add(*rest, sympy.log(numerator / denominator))
+
+    return expr.replace(lambda e: isinstance(e, sympy.Add), combine)
+
+
 def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str],
                            shocks: Sequence[str], parameters: Sequence[str],
                            name: str = "model", derivatives: str = "both",
@@ -161,7 +187,8 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                                 f"{sorted(str(x) for x in stray)}")
     equations = (list(source_equations) if source_equations is not None
                  else [str(e) for e in exprs])
-    exprs = [e.xreplace({sympy.pi: sympy.Float(np.pi)}) for e in exprs]
+    exprs = [_combine_real_log_difference(e.xreplace({sympy.pi: sympy.Float(np.pi)}), sympy)
+             for e in exprs]
 
     w_syms = ([nxt[v] for v in var_names] + [cur[v] for v in var_names]
               + [eps[s] for s in shocks])
