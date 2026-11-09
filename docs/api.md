@@ -173,12 +173,14 @@ tolerance raises `RuntimeError` itself, so `except RuntimeError` catches both.
 
 ## First-order solution
 
-### `solve(model, params, *, steady=None, guess=None, ctx=None, ctx_update=None, positive=(), h=1e-6, equilibrate=True, tol=1e-11, qz_criterium=None) -> FirstOrderSolution`
+### `solve(model, params, *, steady=None, guess=None, ctx=None, ctx_update=None, positive=(), h=1e-6, equilibrate=True, tol=1e-11, qz_criterium=None, check_steady=True) -> FirstOrderSolution`
 
 Pass either a solved `steady` or a `guess`. `h` is the differencing step, used
 when the model has no exact Jacobian. `equilibrate` scales the rows of the
 pencil, which leaves the solution unchanged and changes its conditioning. A
 model that fails the Blanchard–Kahn condition raises `BlanchardKahnError`.
+`check_steady=False` linearises at a supplied point with nonzero residual,
+matching Dynare's `steady(nocheck)`; the default refuses that point.
 
 ### `FirstOrderSolution`
 

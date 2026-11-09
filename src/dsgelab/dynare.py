@@ -9,11 +9,11 @@ the parameter assignments, the ``model`` block -- with model-local ``#``
 variables, equation tags, ``model(linear)``, leads and lags of any order and the
 ``steady_state(x)`` operator --, ``steady_state_model``, ``initval`` and
 ``shocks``. The macro processor is covered for ``@#define``, ``@#if`` /
-``@#ifdef`` / ``@#ifndef`` / ``@#else`` / ``@#endif`` and ``@{...}``
-substitution. Every other statement -- ``stoch_simul``, ``estimation``,
-``verbatim`` MATLAB, plots -- is skipped: this is an importer of MODELS, not an
-interpreter of Dynare scripts. What cannot be read is refused with the line
-that caused it, never approximated: ``@#include``, ``@#for``, ``varexo_det``,
+``@#ifdef`` / ``@#ifndef`` / ``@#else`` / ``@#endif``, ``@#for`` over explicit
+arrays and ``@{...}`` substitution. Every other statement -- ``stoch_simul``,
+``estimation``, ``verbatim`` MATLAB, plots -- is skipped: this is an importer of
+MODELS, not an interpreter of Dynare scripts. What cannot be read is refused
+with the line that caused it, never approximated: ``@#include``, ``varexo_det``,
 leads of a shock, ``expectation``, ``diff``, ``adl``, external functions.
 
 The translation
@@ -83,6 +83,8 @@ def _strip_comments(text: str) -> str:
     text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
     out = []
     for line in text.splitlines():
+        if line.strip() in ("close all", "clear all", "clc"):
+            continue
         if line.lstrip().startswith("@#"):
             out.append(line.split("//")[0])
             continue
@@ -101,62 +103,113 @@ def _macro_value(expr: str, env: dict):
     try:
         return eval(py, {"__builtins__": {}}, dict(env))      # names are macro values only
     except Exception as exc:
+        numeric = {}
+        for name, value in env.items():
+            if isinstance(value, str) and re.fullmatch(r"[+-]?\d+(?:\.\d+)?", value):
+                numeric[name] = float(value) if "." in value else int(value)
+        if numeric:
+            try:
+                return eval(py, {"__builtins__": {}}, {**env, **numeric})
+            except Exception:
+                pass
         raise DynareImportError(f"macro expression not understood: {expr!r} ({exc})") from exc
 
 
 def _macro(text: str, defines: Mapping | None) -> str:
     env = dict(defines or {})
     fixed = set(env)             # names given by the caller win over @#define
-    out, stack = [], []          # stack of (taking_this_branch, any_branch_taken)
 
-    def active():
-        return all(s[0] for s in stack)
+    def expand(lines):
+        out, stack = [], []      # stack of (taking_this_branch, any_branch_taken)
 
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("@#"):
-            body = s[2:].strip()
-            word = body.split(None, 1)[0] if body else ""
-            rest = body[len(word):].strip()
-            if word == "define":
-                if active():
-                    name, _, val = rest.partition("=")
-                    if name.strip() not in fixed:
-                        env[name.strip()] = _macro_value(val, env)
-            elif word in ("if", "ifdef", "ifndef"):
-                if word == "if":
-                    cond = bool(_macro_value(rest, env)) if active() else False
-                elif word == "ifdef":
-                    cond = rest in env
+        def active():
+            return all(s[0] for s in stack)
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            s = line.strip()
+            if s.startswith("@#"):
+                body = s[2:].strip()
+                word = body.split(None, 1)[0] if body else ""
+                rest = body[len(word):].strip()
+                if word == "for":
+                    depth, j = 1, i + 1
+                    while j < len(lines) and depth:
+                        directive = lines[j].strip()
+                        if re.match(r"@#\s*for\b", directive):
+                            depth += 1
+                        elif re.match(r"@#\s*endfor\b", directive):
+                            depth -= 1
+                        j += 1
+                    if depth:
+                        raise DynareImportError("@#for without @#endfor")
+                    if active():
+                        m = re.fullmatch(r"([A-Za-z_]\w*)\s+in\s+(.+)", rest, flags=re.S)
+                        if not m:
+                            raise DynareImportError(f"cannot read macro loop: {s!r}")
+                        name, values = m.group(1), _macro_value(m.group(2), env)
+                        if isinstance(values, (str, bytes)):
+                            raise DynareImportError(f"macro loop is not over an array: {s!r}")
+                        try:
+                            values = list(values)
+                        except TypeError as exc:
+                            raise DynareImportError(f"macro loop is not over an array: {s!r}") from exc
+                        missing = object()
+                        previous = env.get(name, missing)
+                        for value in values:
+                            env[name] = value
+                            out.extend(expand(lines[i + 1:j - 1]))
+                        if previous is missing:
+                            env.pop(name, None)
+                        else:
+                            env[name] = previous
+                    i = j
+                    continue
+                if word == "define":
+                    if active():
+                        name, _, val = rest.partition("=")
+                        if name.strip() not in fixed:
+                            env[name.strip()] = _macro_value(val, env)
+                elif word in ("if", "ifdef", "ifndef"):
+                    if word == "if":
+                        cond = bool(_macro_value(rest, env)) if active() else False
+                    elif word == "ifdef":
+                        cond = rest in env
+                    else:
+                        cond = rest not in env
+                    stack.append([cond, cond])
+                elif word == "elseif":
+                    if not stack:
+                        raise DynareImportError("@#elseif without @#if")
+                    take = (not stack[-1][1]) and bool(_macro_value(rest, env))
+                    stack[-1] = [take, stack[-1][1] or take]
+                elif word == "else":
+                    if not stack:
+                        raise DynareImportError("@#else without @#if")
+                    stack[-1] = [not stack[-1][1], True]
+                elif word == "endif":
+                    if not stack:
+                        raise DynareImportError("@#endif without @#if")
+                    stack.pop()
+                elif word == "endfor":
+                    raise DynareImportError("@#endfor without @#for")
+                elif word == "echo" or word == "":
+                    pass
                 else:
-                    cond = rest not in env
-                stack.append([cond, cond])
-            elif word == "elseif":
-                if not stack:
-                    raise DynareImportError("@#elseif without @#if")
-                take = (not stack[-1][1]) and bool(_macro_value(rest, env))
-                stack[-1] = [take, stack[-1][1] or take]
-            elif word == "else":
-                if not stack:
-                    raise DynareImportError("@#else without @#if")
-                stack[-1] = [not stack[-1][1], True]
-            elif word == "endif":
-                if not stack:
-                    raise DynareImportError("@#endif without @#if")
-                stack.pop()
-            elif word == "echo" or word == "":
-                pass
-            else:
-                raise DynareImportError(f"macro directive not supported: {s!r}")
-            continue
-        if not active():
-            continue
-        if "@{" in line:
-            line = re.sub(r"@\{([^}]*)\}", lambda m: str(_macro_value(m.group(1), env)), line)
-        out.append(line)
-    if stack:
-        raise DynareImportError("@#if without @#endif")
-    return "\n".join(out)
+                    raise DynareImportError(f"macro directive not supported: {s!r}")
+                i += 1
+                continue
+            if active():
+                if "@{" in line:
+                    line = re.sub(r"@\{([^}]*)\}", lambda m: str(_macro_value(m.group(1), env)), line)
+                out.append(line)
+            i += 1
+        if stack:
+            raise DynareImportError("@#if without @#endif")
+        return out
+
+    return "\n".join(expand(text.splitlines()))
 
 
 def _statements(text: str) -> list[str]:
@@ -305,7 +358,7 @@ class _Parser:
             if name in self.endo or name in self.exo:
                 o = int(off.replace(" ", "")) if off is not None else 0
                 return ph(name, o)
-            if name in self.param_set and off is None:
+            if name in self.param_set:
                 key = f"__P{len(mapping)}__"
                 mapping[key] = ("__param__", name)
                 return key
@@ -1189,8 +1242,8 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
         text, label = str(source), "mod"
     name = name or label
 
-    if re.search(r"^\s*@#\s*(include|includepath|for)\b", text, flags=re.M):
-        raise DynareImportError("@#include, @#includepath and @#for are not read")
+    if re.search(r"^\s*@#\s*(include|includepath)\b", text, flags=re.M):
+        raise DynareImportError("@#include and @#includepath are not read")
     src = _macro(_strip_comments(text), defines)
     # verbatim blocks are MATLAB, whose own `end` would end the block early
     src = re.sub(r"^\s*verbatim\s*;.*?^\s*end\s*;", " ", src, flags=re.S | re.M)
@@ -1269,6 +1322,9 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
                 occbin_body = body
             i = j + 1
             continue
+        if st in ("close all", "clear all", "clc"):
+            i += 1
+            continue
         if word == "var" and not st.startswith("var_"):
             names_ = _declared(st, "var")
             vo = _options(st[len(word):])
@@ -1319,6 +1375,8 @@ def from_mod(source: str | os.PathLike[str], *, defines: Mapping | None = None,
 
     if model_stmts is None:
         raise DynareImportError("no model block")
+    # Dynare tolerates repeated parameter declarations; the last assignment wins.
+    params = list(dict.fromkeys(params))
     for kind_, names_ in (("var", endo), ("varexo", exo), ("parameters", params)):
         dup = sorted({n_ for n_ in names_ if names_.count(n_) > 1})
         if dup:

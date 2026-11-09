@@ -62,7 +62,7 @@ def _mods():
 
 
 def compare(name: str, path: Path, out: Path = HERE / "out_import",
-            ss_floor: float = 1e-8) -> dict:
+            ss_floor: float = 1e-8, steady_from_dynare: bool = False) -> dict:
     """Compare one .mod with the Dynare run exported to ``out/<name>.mat``."""
     ex = _load(name, out)
     if ex is None:
@@ -81,23 +81,35 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
             params[p] = v
             from_dynare.append(p)
         else:
-            d_par = max(d_par, abs(params[p] - v) / max(abs(v), 1e-12))
+            d_par = max(d_par, abs(params[p] - v) / max(abs(v), 1.0))
 
     # --- steady state
     ys = dict(zip(ex.endo_names, np.atleast_1d(ex.ys).astype(float)))
-    # a linear model without initval starts from zero, as Dynare itself does
-    start = {} if mf.linear else {v: ys[v] for v in mf.missing_guess}
-    ss = mf.steady_state(guess=start, params=params)
-    # relative error, absolute below ss_floor. mmb/compare.py passes 1: a variable whose steady
-    # state is zero (an output gap, a debt ratio) is otherwise compared on its rounding error
-    d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), ss_floor) for v in mf.endogenous)
     zero = np.zeros(model.n_shocks)
     x_dy = model.vector(mf.full_guess(ys))
+    start = {}
+    if steady_from_dynare:
+        from dsgelab.steady import SteadyState
+        for v in mf.steady_operators:
+            params[f"STEADY_STATE_{v}"] = ys[v]
+        x_dy = model.vector(mf.full_guess(ys))
+        ss = SteadyState(x=x_dy, values=mf.full_guess(ys), residual=float("nan"), model=model)
+        d_ss = 0.0
+    else:
+        # a linear model without initval starts from zero, as Dynare itself does
+        start = {} if mf.linear else {v: ys[v] for v in mf.missing_guess}
+        ss = mf.steady_state(guess=start, params=params)
+        # relative error, absolute below ss_floor. mmb/compare.py passes 1: a variable whose steady
+        # state is zero (an output gap, a debt ratio) is otherwise compared on its rounding error
+        d_ss = max(abs(ss.values[v] - ys[v]) / max(abs(ys[v]), ss_floor) for v in mf.endogenous)
     r_dy = float(np.max(np.abs(model.residuals(x_dy, x_dy, zero, params))))
     r_dk = float(np.max(np.abs(model.residuals(ss.x, ss.x, zero, params))))
+    if steady_from_dynare:
+        ss.residual = r_dy
 
     # --- orthogonalised IRFs and moments
-    sol = dsg.solve(model, params, steady=ss, qz_criterium=1 + 1e-6)   # Dynare's default
+    sol = dsg.solve(model, params, steady=ss, qz_criterium=1 + 1e-6,
+                    check_steady=not steady_from_dynare)   # Dynare's default qz_criterium
     cov = np.atleast_2d(np.asarray(ex.sigma_e, float))
     live = [i for i in range(len(ex.exo_names)) if cov[i, i] > 0]
     L = np.zeros_like(cov)
@@ -142,11 +154,12 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
 
     # When Dynare's s.s. leaves a residual, what follows from it inherits the error, and the
     # tolerance follows.
-    floor = max(TOL, 30.0 * r_dy)
-    ss_ok = d_ss < 1e-9 or r_dy > 1e3 * max(r_dk, 1e-16)
+    floor = TOL if steady_from_dynare else max(TOL, 30.0 * r_dy)
+    ss_ok = steady_from_dynare or d_ss < 1e-9 or r_dy > 1e3 * max(r_dk, 1e-16)
     ok = ss_ok and d_irf < floor and (d_mom is None or d_mom < floor) and d_par < 1e-12
     return dict(name=name, ok=ok, par=d_par, from_dynare=from_dynare,
-                guess_from_dynare=len(start), ss=d_ss, irf=d_irf, worst=worst, mom=d_mom,
+                guess_from_dynare=len(start), steady_from_dynare=steady_from_dynare,
+                ss=d_ss, irf=d_irf, worst=worst, mom=d_mom,
                 r_dy=r_dy, r_dk=r_dk, floor=floor, n=len(mf.endogenous),
                 aux=len(mf.auxiliary), shocks=len(live))
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dsgelab — replicações</title>
-<meta name="description" content="Artigos replicados com o dsgelab: Heutel (2012), crescimento estocástico, princípio de Taylor, treze modelos de bancos centrais e quatro modelos publicados do DSGE_mod comparados com o Dynare. Cada bloco Python desta página é executado.">
+<meta name="description" content="Artigos replicados com o dsgelab: Heutel (2012), crescimento estocástico, princípio de Taylor, dezessete modelos de bancos centrais e quatro modelos publicados do DSGE_mod comparados com o Dynare. Cada bloco Python desta página é executado.">
 <link rel="alternate" hreflang="en" href="https://gustavohm.github.io/dsgelab/replications.html">
 <link rel="alternate" hreflang="pt-BR" href="https://gustavohm.github.io/dsgelab/pt-br/replications.html">
 <link rel="alternate" hreflang="x-default" href="https://gustavohm.github.io/dsgelab/replications.html">
@@ -190,14 +190,14 @@ print(sol_nk.klein.n_stable, raised)</code></pre>
   <h2>Modelos de bancos centrais</h2>
   <p>O Macroeconomic Model Data Base (MMB,
   <a href="https://www.macromodelbase.com">macromodelbase.com</a>) guarda seus modelos em Dynare,
-  e sua caixa de replicação, o Rep-MMB, reúne 148 deles. Treze, construídos ou usados em bancos
+  e sua caixa de replicação, o Rep-MMB, reúne 148 deles. Dezessete, construídos ou usados em bancos
   centrais e no FMI, são lidos por <code>dsg.from_mod</code> sem alteração, de 9 a 361 variáveis.
   O Dynare 7.2 resolve o mesmo arquivo em primeira ordem, e as colunas dão o maior desvio entre os
   dois programas no estado estacionário, nas IRFs de cada variável a cada choque (40 períodos) e
   nos desvios-padrão teóricos. Os scripts estão em <code>validation/mmb/</code>, e o
   <a href="https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md">validation/README.md</a>
   explica como cada coluna é medida.</p>
-<pre><code class="plain">bash validation/mmb/fetch.sh        # 13 arquivos .mod num commit fixo do Rep-MMB, conferidos por SHA-256
+<pre><code class="plain">bash validation/mmb/fetch.sh        # 17 arquivos .mod num commit fixo do Rep-MMB, conferidos por SHA-256
 bash validation/mmb/run_dynare.sh   # precisa do Octave e do Dynare
 python validation/mmb/compare.py</code></pre>
   <table>
@@ -213,6 +213,10 @@ python validation/mmb/compare.py</code></pre>
       <tr><td>CL_MS07 <span style="color:var(--muted)">(Banco Central de Chile; Medina e Soto 2007)</span></td><td class="num">124</td><td class="num">0,0e+00</td><td class="num">3,2e-10</td><td class="num">2,6e-10</td><td class="ok">OK</td></tr>
       <tr><td>UK_SM11 <span style="color:var(--muted)">(Bank of England; Harrison, Thomas e de Weymarn 2008)</span></td><td class="num">123</td><td class="num">0,0e+00</td><td class="num">2,6e-11</td><td class="num">5,2e-11</td><td class="ok">OK</td></tr>
       <tr><td>EA_ALSV06 <span style="color:var(--muted)">(Riksbank; Adolfson, Laséen, Lindé e Villani, versão reduzida)</span></td><td class="num">9</td><td class="num">0,0e+00</td><td class="num">1,3e-13</td><td class="num">1,5e-13</td><td class="ok">OK</td></tr>
+      <tr><td>EA_AWM05 <span style="color:var(--muted)">(AWM, BCE; Fagan, Henry e Mestre 2001)</span></td><td class="num">205</td><td class="num">0,0e+00</td><td class="num">4,6e-10</td><td class="num">3,2e-09</td><td class="ok">OK</td></tr>
+      <tr><td>ESREA_FIMOD12 <span style="color:var(--muted)">(FiMod; Stähler e Thomas 2012)</span></td><td class="num">292</td><td class="num">4,0e-15</td><td class="num">2,2e-11</td><td class="num">7,2e-12</td><td class="ok">OK</td></tr>
+      <tr><td>G2_SIGMA08 <span style="color:var(--muted)">(SIGMA, Federal Reserve; Erceg, Guerrieri e Gust 2008)</span></td><td class="num">238</td><td class="num">0,0e+00</td><td class="num">1,7e-10</td><td class="num">6,9e-09</td><td class="ok">OK</td></tr>
+      <tr><td>GPM6_IMF13 <span style="color:var(--muted)">(Global Projection Model de seis regiões, FMI; Carabenciov et al. 2013)</span></td><td class="num">291</td><td class="num">0,0e+00</td><td class="num">3,8e-11</td><td class="num">4,1e-12</td><td class="ok">OK†</td></tr>
       <tr><td>EACZ_GEM03 <span style="color:var(--muted)">(GEM, FMI; Laxton e Pesenti 2003)</span></td><td class="num">239</td><td class="num">6,8e-13</td><td class="num">1,1e-11</td><td class="num">1,2e-08</td><td class="ok">OK</td></tr>
       <tr><td>HK_FP13 <span style="color:var(--muted)">(Hong Kong; Funke e Paetz 2013)</span></td><td class="num">47</td><td class="num">0,0e+00</td><td class="num">3,9e-11</td><td class="num">6,3e-09</td><td class="ok">OK</td></tr>
       <tr><td>CA_LS07 <span style="color:var(--muted)">(Canadá; Lubik e Schorfheide 2007)</span></td><td class="num">12</td><td class="num">0,0e+00</td><td class="num">9,6e-15</td><td class="num">1,1e-14</td><td class="ok">OK</td></tr>
@@ -221,14 +225,18 @@ python validation/mmb/compare.py</code></pre>
   <p style="font-size:.9rem;color:var(--muted)">* O estado estacionário do Dynare para o NAWM deixa
   um resíduo de <code>5e-06</code> nas equações, e o que o dsgelab encontra deixa
   <code>9e-14</code>. As IRFs e os momentos herdam o resíduo do Dynare, e por isso o desvio deles
-  fica perto de <code>7e-05</code>. Nos outros doze modelos, o maior
+  fica perto de <code>7e-05</code>. Nos outros dezesseis modelos, o maior
   desvio é <code>1,2e-08</code>. O <code>US_SW07</code> e o <code>US_FRB08</code> declaram
-  parâmetros que o arquivo nunca atribui (três e um), e a comparação toma os valores do Dynare.</p>
-  <p>Outros onze modelos do Rep-MMB, de bancos centrais e instituições oficiais, foram testados, e o
-  <code>from_mod</code> ainda não os lê ou não os resolve. Entre eles estão o SIGMA (Federal
-  Reserve) e o AWM (BCE), que declaram um parâmetro duas vezes, e o ToTEM (Banco do Canadá) e o
-  QUEST III (Comissão Europeia), que tomam parâmetros ou o estado estacionário de arquivos MATLAB.
-  A lista completa está no <code>validation/README.md</code>.</p>
+  parâmetros que o arquivo nunca atribui (três e um), e a comparação toma os valores do Dynare.
+  † O GPM6 declara variáveis não estacionárias e usa <code>steady(nocheck)</code>. Os dois programas
+  são comparados no ponto fornecido pelo Dynare, com resíduo 6; essa linha verifica a aproximação
+  local, não um estado estacionário.</p>
+  <p>Outros sete modelos do Rep-MMB, de bancos centrais e instituições oficiais, foram testados,
+  mas não estão validados. O <code>CA_BMZ12</code> calcula logaritmos de duas quantidades negativas,
+  cujas partes imaginárias se cancelam no Dynare, mas produzem NaN no residual real. O
+  <code>US_CMR14</code> é lido, mas ainda diverge nas IRFs e nos momentos. O ToTEM (Banco do Canadá)
+  e o QUEST III (Comissão Europeia) tomam parâmetros ou o estado estacionário de arquivos MATLAB. A
+  lista completa está no <code>validation/README.md</code>.</p>
 </div></section>
 
 <section id="dsge-mod"><div class="wrap">

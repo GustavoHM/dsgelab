@@ -3,7 +3,9 @@
 import numpy as np
 import pytest
 
+import dsgelab as dsg
 from dsgelab import BlanchardKahnError, klein
+from dsgelab.examples import rbc
 
 
 def test_rbc_closed_form():
@@ -86,3 +88,17 @@ def test_a_state_without_a_law_of_motion_is_refused():
         assert "not determined" in str(exc) or "stable" in str(exc)
     except Exception as exc:                     # pragma: no cover - shape guard
         raise AssertionError(f"unexpected error type {type(exc).__name__}: {exc}")
+
+
+def test_solve_can_explicitly_linearise_away_from_steady_state():
+    model, params, guess = rbc.build()
+    ss = dsg.steady_state(model, guess, params)
+    values = dict(ss.values)
+    values["c"] *= 1.01
+    off = dsg.SteadyState(x=model.vector(values), values=values,
+                          residual=float("nan"), model=model)
+    with pytest.raises(RuntimeError, match="not a steady state"):
+        dsg.solve(model, params, steady=off)
+    sol = dsg.solve(model, params, steady=off, check_steady=False)
+    assert sol.system.steady_residual > 1e-3
+    assert np.isfinite(sol.P).all() and np.isfinite(sol.F).all()

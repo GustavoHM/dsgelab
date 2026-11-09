@@ -8,6 +8,21 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+### Added
+
+- `solve(..., check_steady=False)` linearises at a supplied point with nonzero residual, matching
+  Dynare's `steady(nocheck)`. The default still refuses such a point.
+- `from_mod` expands `@#for` over explicit arrays, accepts Dynare's lead/lag notation on parameters
+  and repeated parameter declarations, and ignores `close all`, `clear all` and `clc`.
+- The MMB validation adds SIGMA, the Area-Wide Model, FiMod and the six-region Global Projection
+  Model, compared with Dynare on the steady state or declared linearisation point, all IRFs and
+  theoretical standard deviations.
+
+### Fixed
+
+- Symbolic models print the constant pi as a number before lambdification, so an endogenous
+  variable named `pi` no longer replaces the constant in `normpdf` and similar expressions.
+
 ## 1.0.0rc1 — 2026-11-08
 
 Release candidate for 1.0, covering milestone 0.10 and the API audit before the freeze.
