@@ -13,7 +13,8 @@ The first and third layers were set up by the package's author. In this one most
 Johannes Pfeifer's collection), from Dynare's test suite and from Heutel's replication files, and
 the reference solvers are Dynare and MacroModelling.jl. A few `.mod` files were written here for
 the validation (`ramsey/nk_linear.mod`, `ramsey/rbc_labortax.mod`, `ramsey/nk_osr_planner.mod`,
-`estimation/unitroot.mod` and the three models in `diagnostics/`). Some features have no
+`estimation/unitroot.mod`, `particle/particle_ar1.mod` and the three models in
+`diagnostics/`). Some features have no
 independent reference. The variance decomposition, pruning, announced parameter paths and the
 Blanchard–Kahn check rest on the test suite, and the autocorrelations and the second-order
 generalised impulse response have no test yet.
@@ -35,7 +36,8 @@ failed steps, and the exit status is non-zero if any step failed. `SKIP_JULIA=1`
 MacroModelling.jl steps, and `SKIP_MH=1` skips the Metropolis–Hastings part of the estimation
 comparison, which takes a few minutes. The script needs GNU Octave with the `statistics` and
 `datatypes` packages, Dynare (`OCTAVE` and `DYNARE_MATLAB` override the search in the usual
-places) and, for the calibration equations, Julia. The `compare_*.py` scripts run under the Python
+places), R with the `forecast` package for the Diebold–Mariano reference (`RSCRIPT` overrides
+`Rscript`) and, for the calibration equations, Julia. The `compare_*.py` scripts run under the Python
 on the `PATH`, or under `PYTHON`, which must have `dsgelab` installed.
 
 `setup_octave_packages.sh` installs `statistics` 2.0.0 and `datatypes` 1.5.0, the versions with

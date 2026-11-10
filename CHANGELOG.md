@@ -8,6 +8,12 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+## 1.0.0rc2 — 2026-11-10
+
+Second release candidate for 1.0, with what changed after 1.0.0rc1: additions to `solve` and
+`from_mod` that the central-bank replications needed, and fixes found in the readiness check
+for 1.0. No name was removed and no default changed.
+
 ### Added
 
 - `solve(..., check_steady=False)` linearises at a supplied point with nonzero residual, matching
@@ -20,6 +26,25 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ### Fixed
 
+- `identification`: for the spectrum criterion and the information matrix, the multicollinearity
+  of each parameter came from the inverse of a matrix that is singular when two parameters are
+  collinear. The inverse is then rounding noise, and a parameter independent of the others could
+  be reported as weakly identified depending on the last bit of the matrix, which differs between
+  machines: on Dynare's `kim2.mod`, in 129 of 2,000 perturbations of one or two units of the last
+  place. The multicollinearity is now a projection, defined for a singular matrix, and the
+  comparisons with the tolerance use one minus the cosine computed from the residual. The numbers
+  for identified models agree with the earlier ones and with Dynare's as before.
+- The external validation ran in full only on the author's machine. `run_plots.sh` without
+  arguments now runs the four parts `compare_plots.py` reads, as `validation/README.md` said it
+  did. The AR(1) of the particle and inversion filters is in the repository
+  (`validation/particle/particle_ar1.mod`) and no longer read from the ignored `mods/` folder.
+  `run_ssj.py` compares its pieces with sequence-jacobian's notebooks without trailing spaces,
+  which an edit had removed from one line, and the weekly workflow installs R, the reference of
+  the Diebold–Mariano test.
+- `docs/api.md` documents `irf_matching`, `IRFMatchingResult`, `local_projection` and
+  `LocalProjectionResult`, which were exported without an entry, and the README's known
+  limitations no longer list the identification strength, the MCMC and identification figures
+  and `@#for`, which 1.0.0rc1 and this version cover.
 - Symbolic models print the constant pi as a number before lambdification, so an endogenous
   variable named `pi` no longer replaces the constant in `normpdf` and similar expressions.
 

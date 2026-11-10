@@ -8,7 +8,10 @@
 #              figures; then its trace plot and autocorrelogram of alp. plots/dyn_saveas.m stands
 #              in for Dynare's and records what each figure draws instead of saving it, and
 #              plots/export_plots.m gathers it with the draws, the mode and the IRF draws.
-# Usage: bash run_plots.sh [densities|mcmc ...]   (no arguments: both)
+#   identification, decomposition   the figures left out in 0.9, described where each part
+#              starts below.
+# Usage: bash run_plots.sh [densities|mcmc|identification|decomposition ...]
+#        (no arguments: the four, which compare_plots.py needs)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -22,7 +25,7 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
 fi
 [ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
-if [ "$#" -eq 0 ]; then set -- densities mcmc; fi
+if [ "$#" -eq 0 ]; then set -- densities mcmc identification decomposition; fi
 here="$(pwd)"
 mkdir -p out_plots
 estimation_line() {   # writes fs2000.mod with another estimation(...) line: <destination> <line>

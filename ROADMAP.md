@@ -660,8 +660,9 @@ of 0.9.0 records, and each keeps the six conditions above.
 Everything in the list above is covered. The `1.0.0rc1` release candidate is published as a
 prerelease on GitHub and archived on Zenodo (DOI
 [10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), and the API is frozen for
-the release-candidate process. The final 1.0 release has not been published; versioning is
-strictly semantic from 1.0 on.
+the release-candidate process. A second candidate, `1.0.0rc2`, is prepared with the additions
+and fixes made after the first, listed in the changelog. The final 1.0 release has not been
+published; versioning is strictly semantic from 1.0 on.
 
 ## Integration with `cgelab`
 

@@ -2073,6 +2073,81 @@ default. The importer reads `order` from the `.mod` options.
 weighting stages and Hansen's J test. `ModFile.method_of_moments` takes parameters
 from `estimated_params`, moments from `matched_moments` and observables from `varobs`.
 
+### `irf_matching(model, targets, *, params, free, observables=None, bounds=None, cov=None, weighting=None, target_cov=None, relative_irf=False, transform=None, guess=None, steady_fn=None, qz_criterium=None, cholesky_tiny=1e-14, se_step=None, cova_compute=True, optimize_=True, options=None) -> IRFMatchingResult`
+
+Estimates `free` by matching impulse responses of the first-order solution, Dynare's
+frequentist `method_of_moments(mom_method=irf_matching)`. Each target is
+`(variable, shock, period, value)` or `(variable, shock, period, value, weight)`, with period 1
+the impact period, and a repeated target is refused. The impulses are the columns of the
+Cholesky factor of `cov`, so correlated shocks are accepted, and `relative_irf=True` reports
+`100 * IRF / L[j, j]` for shock `j`.
+
+The weighting matrix is, in this order, `weighting` (a full matrix or a diagonal), the inverse
+of `target_cov`, or the diagonal of the targets' own weights. `target_cov` is the joint
+covariance of targets estimated elsewhere, such as the one `LocalProjectionResult.targets()`
+returns, and is kept in the result. `observables` gives the order in which the targets are
+sorted, by default that of first appearance; pass the `varobs` order to reproduce Dynare's.
+`transform(irfs, solution)` is applied to the `(horizon, n_variables, n_shocks)` array before
+the targets are selected, in place of a MATLAB `irf_matching_file`, which is not executed.
+`optimize_=False` evaluates at the starting point, as `mode_compute=0` does, and `options` goes
+to `scipy.optimize.least_squares`.
+
+`ModFile.irf_matching(targets=None, **kwargs)` takes the parameters from `estimated_params` and
+the targets and weights from `matched_irfs` and `matched_irfs_weights`. It refuses priors
+(Bayesian IRF matching) and an order other than 1.
+
+```python
+import dsgelab as dsg
+
+def equations(nxt, cur, eps, p):
+    return [nxt.y - p["rho"] * cur.y - eps.e]
+
+model = dsg.Model(states=["y"], jumps=[], shocks=["e"], equations=equations)
+targets = [("y", "e", 1, 1.0), ("y", "e", 2, 0.7), ("y", "e", 3, 0.49)]
+result = dsg.irf_matching(model, targets, params={"rho": 0.5}, free={"rho": 0.5},
+                          cov={"e": 1.0}, guess={"y": 0.0})
+print(round(result.values["rho"], 6))        # 0.7
+```
+
+### `IRFMatchingResult`
+
+`names`, `x` and `values` hold the estimates, `stderr` and `cov` their standard errors and
+covariance, from the inverse of `hessian`, the Hessian of `Q/2`. `objective` is `Q`, without
+the factor and the constant of Dynare's objective. `targets`, `data_irfs` and `model_irfs`
+follow MATLAB's column-major order (period, then observable, then shock), with `irf_labels`
+naming each entry. `weighting` is the matrix used and `target_cov` the external covariance,
+when one was given. `success` and `message` come from the optimiser, and `summary()` prints
+the table.
+
+### `local_projection(data, shock, *, variables=None, horizon, lags=1, controls=(), constant=True, hac_lags=None) -> LocalProjectionResult`
+
+Local projections (Jordà, 2005) of `variables` on an observed `shock`: one OLS regression for
+each horizon from 0 to `horizon`, on the current shock, the current `controls`, a constant and
+`lags` lags of every response, of the shock and of every control. `data` is a mapping of series
+of equal length, or an array whose columns `variables` names, with `shock` among them. The
+covariance is joint across variables and horizons, from the overlapping influence functions
+with a Bartlett kernel of `hac_lags` lags, by default `horizon`. Missing observations are
+refused.
+
+The function does not identify a shock from reduced-form residuals. The series passed as
+`shock` is taken as the structural shock, so a recursive or external identification has to
+produce that series first.
+
+### `LocalProjectionResult`
+
+`irfs[h, i]` is the response of variable `i` at horizon `h`, `stderr` has the same shape, and
+`covariance` follows `irfs.flatten(order="F")`. `coefficients` and `regressor_names` keep the
+whole regressions, and `shock`, `variables`, `lags` and `hac_lags` what was estimated.
+`targets(shock=None, periods=None)` returns the targets and their covariance in the order
+`irf_matching` takes, with periods counted from 1, so that horizon 0 is period 1:
+
+```python
+lp = dsg.local_projection({"y": y, "e": e}, "e", variables=["y"], horizon=10)
+targets, omega = lp.targets(periods=[1, 2, 3])
+result = dsg.irf_matching(model, targets, target_cov=omega, params={"rho": 0.5},
+                          free={"rho": 0.5}, cov={"e": 1.0}, guess={"y": 0.0})
+```
+
 ## Calibration restrictions
 
 ### `check_restrictions(solution, *, irf=(), moments=(), cov=None, relative_irf=False) -> RestrictionCheck`

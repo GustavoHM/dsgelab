@@ -60,6 +60,17 @@ jobs:
       - name: Julia environment
         run: julia --project=validation/macromodelling -e 'using Pkg; Pkg.instantiate(); Pkg.status()'
 
+      # R's forecast::dm.test is the reference of the Diebold-Mariano test in
+      # compare_forecast_eval.py. The published numbers come from forecast 8.24.0 on R 4.5.1;
+      # the package is installed from CRAN's current binary, and the log names its version.
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: "4.5.1"
+      - name: R's forecast package
+        run: |
+          Rscript -e 'install.packages("forecast", repos = "https://cloud.r-project.org")'
+          Rscript -e 'cat("forecast", as.character(packageVersion("forecast")), "\n")'
+
       - name: Validation
         env:
           PYTHON: python

@@ -689,8 +689,9 @@ documentação da 0.9.0 registra, e cada um mantém as seis condições acima.
 Tudo o que está na lista acima está coberto. O candidato a lançamento `1.0.0rc1` está publicado
 como prerelease no GitHub e arquivado no Zenodo (DOI
 [10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), e a API está congelada para
-o processo de candidato a lançamento. A versão final 1.0 ainda não foi publicada; a partir da
-1.0, o versionamento é estritamente semântico.
+o processo de candidato a lançamento. Um segundo candidato, `1.0.0rc2`, está preparado com os
+acréscimos e as correções feitos depois do primeiro, listados no changelog. A versão final 1.0
+ainda não foi publicada; a partir da 1.0, o versionamento é estritamente semântico.
 
 ## Integração com o `cgelab`
 

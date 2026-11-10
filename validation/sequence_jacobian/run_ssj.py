@@ -339,12 +339,19 @@ def notebook_code(name: str) -> str:
     return "\n".join("".join(c["source"]) for c in cells if c["cell_type"] == "code")
 
 
+def _without_trailing_spaces(code: str) -> str:
+    return "\n".join(line.rstrip() for line in code.split("\n"))
+
+
 def load(name: str, pieces: list[str], extension: str = "") -> dict:
     """Runs the pieces, after checking that each one is in the notebook as published, and then
     the extension, which is not."""
-    code = notebook_code(name)
+    # the notebooks carry trailing spaces on some lines, which an editor removes from this file
+    # without changing the model, so the two are compared without them
+    code = _without_trailing_spaces(notebook_code(name))
     for piece in pieces:
-        assert piece in code, f"{name}: a piece of the model is not in the notebook:\n{piece}"
+        assert _without_trailing_spaces(piece) in code, \
+            f"{name}: a piece of the model is not in the notebook:\n{piece}"
     # sequence-jacobian reads the names of the outputs from the source of each function, so the
     # pieces are written to a file and imported from it
     path = OUT / ("model_" + name.replace(".ipynb", ".py"))
