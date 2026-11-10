@@ -18,7 +18,7 @@ for order in 1 2; do
   echo ">>> particle AR(1), order $order"
   rm -rf work_particle/*
   sed "s/^stoch_simul.*/stoch_simul(order=$order, irf=0, periods=0);/" \
-    mods/particle_ar1.mod > work_particle/particle_ar1.mod
+    particle/particle_ar1.mod > work_particle/particle_ar1.mod
   ( cd work_particle && "$OCTAVE" --no-gui --eval "
     pkg load statistics datatypes;
     addpath '$DYNARE_MATLAB';

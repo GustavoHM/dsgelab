@@ -10,7 +10,8 @@
 #         SKIP_MH=1 bash run_all.sh   (skips the estimation's Metropolis, which takes a few minutes)
 #
 # Requires GNU Octave with the statistics and datatypes packages, Dynare (OCTAVE and DYNARE_MATLAB
-# override the search in the usual places) and, for the calibration equations, Julia. The project
+# override the search in the usual places), R with the forecast package (RSCRIPT overrides Rscript)
+# for the Diebold-Mariano reference and, for the calibration equations, Julia. The project
 # in macromodelling/ pins the versions of MacroModelling.jl. The Python that runs the compare_*.py
 # scripts is the one on the PATH, or PYTHON, and needs dsgelab installed, with SALib and QuantEcon
 # for compare_gsa.py, compare_markov.py and compare_value_iteration.py. dolo, the reference of

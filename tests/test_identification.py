@@ -213,3 +213,28 @@ def test_identification_strength_leaves_out_dependent_parameters():
     # the weakest direction moves a and b against each other, with a b fixed
     v = np.abs(s.patterns[:, -1])
     assert v[2] < 1e-6 and v[0] / v[1] == pytest.approx(1.6 / 0.5, rel=1e-4)
+
+
+def test_a_singular_gram_matrix_gives_the_same_verdicts_under_rounding():
+    """Two of three columns are collinear, so the Gram matrix is singular and its inverse is
+    rounding noise. The verdicts must not depend on that noise: the independent parameter is not
+    weak, whatever the last bit of each entry."""
+    from dsgelab.identification import _check, _gram_tilde
+
+    rng = np.random.default_rng(0)
+    J = rng.standard_normal((40, 2))
+    J = np.column_stack([J[:, 0], J[:, 1], -1.5 * J[:, 1], np.zeros(40)])
+    G = J.T @ J
+    names = ["alone", "one", "other", "unused"]
+    cos2 = (J[:, 0] @ J[:, 1]) ** 2 / ((J[:, 0] @ J[:, 0]) * (J[:, 1] @ J[:, 1]))
+    for _ in range(500):
+        Gp = G * (1 + np.finfo(float).eps * rng.integers(-2, 3, G.shape))
+        Gp = (Gp + Gp.T) / 2
+        X, _err = _gram_tilde(Gp, np.zeros_like(Gp), 1e-8)
+        for tol in (1e-8, "auto"):
+            c = _check("spectrum", Gp, X, 0.0, 3, names, tol, 1e-3)
+            assert c.rank == 2
+            assert c.weak == ["one", "other"] and c.weak_pairs == [("one", "other")]
+            assert sorted(c.dependent) == [("one", "other"), ("unused",)]
+            assert c.multicollinearity["alone"] == pytest.approx(cos2, abs=1e-12)
+            assert c.multicollinearity["one"] == pytest.approx(1.0, abs=1e-12)

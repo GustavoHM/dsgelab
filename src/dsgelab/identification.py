@@ -841,16 +841,37 @@ def _cosn(y, X, rcond: float | None = None) -> float:
     are left out of the projection: they are numerical noise, and a regression on
     them, with a huge coefficient, would make any column look collinear.
     """
+    return _cosn_gap(y, X, rcond)[0]
+
+
+def _cosn_gap(y, X, rcond: float | None = None) -> tuple[float, float]:
+    """The cosine of ``_cosn`` and one minus it, the second from the residual.
+
+    Subtracting a cosine that rounds to one from one leaves a few units of the last
+    place, of either sign, and a tolerance of that size would then be met or not by
+    rounding. The residual of an exactly collinear column is itself at rounding
+    level, and its square far below any tolerance.
+    """
     if X.shape[1] == 0:
-        return 0.0
+        return 0.0, 1.0
     b = np.linalg.lstsq(X, y, rcond=rcond)[0]
     if not np.all(np.isfinite(b)):
-        return 0.0
+        return 0.0, 1.0
     yhat = X @ b
     ny, nh = float(y @ y), float(yhat @ yhat)
     if nh == 0.0 or not np.isfinite(nh) or _rank(yhat[:, None], _robust(yhat[:, None])) == 0:
-        return 0.0
-    return float(abs(y @ yhat) / np.sqrt(ny * nh))
+        return 0.0, 1.0
+    cos = float(abs(y @ yhat) / np.sqrt(ny * nh))
+    res = y - yhat
+    return cos, float(res @ res) / ny / (1.0 + cos)
+
+
+def _gram_factor(M: np.ndarray, tol: float) -> np.ndarray:
+    """``F`` with ``F'F = M`` for a symmetric positive semidefinite ``M``, without the
+    directions whose eigenvalue is at most ``tol``, which the rank counts as zero."""
+    w, V = np.linalg.eigh((M + M.T) / 2)
+    keep = w > tol
+    return np.sqrt(w[keep])[:, None] * V[:, keep].T
 
 
 def _robust(X) -> float:
@@ -919,27 +940,41 @@ def _check(name, J, X, error, kind, names, tol_rank, tol_sv) -> IdentificationCh
     sensitive = np.zeros(p, dtype=bool)
     sensitive[ind1] = True
 
+    # mco is the multicollinearity and gap one minus it, computed apart (see _cosn_gap)
     mco = np.full(p, np.nan)
+    gap = np.full(p, np.nan)
     Xnz = nonzero(ind1)
     if kind in (0, 3):
         if ind1.size:
+            # Dynare's 1 - 1 / diag(inv(tilde)) is the squared cosine between each unit
+            # column behind the Gram matrix and its projection on the others. With
+            # dependent columns tilde is singular, and its inverse, where one is returned,
+            # is rounding noise in every entry, also in those of the independent columns.
+            # The projection on a factor of tilde gives the same number and is defined
+            # either way.
             sub = X[np.ix_(ind1, ind1)]
             delta = np.sqrt(np.diag(sub))
             tilde = sub / np.outer(delta, delta)
-            try:
-                inv_diag = np.diag(np.linalg.inv(tilde))
-            except np.linalg.LinAlgError:
-                inv_diag = np.full(ind1.size, np.inf)
-            with np.errstate(divide="ignore"):
-                mco[ind1] = 1 - 1 / inv_diag
+            F = _gram_factor(tilde, tol)
+            cut = float(np.sqrt(tol / np.linalg.norm(tilde, 2)))
+            for ii in range(ind1.size):
+                y, others = F[:, ii], np.delete(F, ii, axis=1)
+                ny = float(y @ y)
+                if ny == 0.0 or others.size == 0:
+                    gap[ind1[ii]] = 1.0
+                else:
+                    res = y - others @ np.linalg.lstsq(others, y, rcond=cut)[0]
+                    gap[ind1[ii]] = min(float(res @ res) / ny, 1.0)
+            mco[ind1] = 1 - gap[ind1]
     else:
         for ii in range(ind1.size):
             others = np.delete(np.arange(ind1.size), ii)
-            mco[ind1[ii]] = _cosn(Xnz[:, ii], with_rest(Xnz[:, others]), rcond)
+            mco[ind1[ii]], gap[ind1[ii]] = _cosn_gap(Xnz[:, ii], with_rest(Xnz[:, others]),
+                                                     rcond)
 
     dependent: list[tuple[str, ...]] = []
-    finite = mco[np.isfinite(mco)]
-    if p and (rank < required or (finite.size and np.min(1 - finite) < tol)):
+    finite = gap[np.isfinite(gap)]
+    if p and (rank < required or (finite.size and np.min(finite) < tol)):
         if ind1.size < p:
             dependent.append(tuple(names[i] for i in range(p) if not sensitive[i]))
         for j in range(rank, full.shape[1]):
@@ -948,18 +983,17 @@ def _check(name, J, X, error, kind, names, tol_rank, tol_sv) -> IdentificationCh
             if group:
                 dependent.append(group)
 
-    pco = np.full((p, p), np.nan)
+    pair_gap = np.full((p, p), np.nan)
     for ii in range(ind1.size):
-        pco[ind1[ii], ind1[ii]] = 1.0
         for jj in range(ii + 1, ind1.size):
-            c = _cosn(Xnz[:, ii], with_rest(Xnz[:, [jj]]), rcond)
-            pco[ind1[ii], ind1[jj]] = pco[ind1[jj], ind1[ii]] = c
+            pair_gap[ind1[ii], ind1[jj]] = _cosn_gap(Xnz[:, ii], with_rest(Xnz[:, [jj]]),
+                                                     rcond)[1]
     weak, pairs = [], []
     for j in range(p):
-        if mco[j] > 1 - tol:
+        if gap[j] < tol:
             weak.append(names[j])
             for k in range(j + 1, p):
-                if pco[j, k] > 1 - tol:
+                if pair_gap[j, k] < tol:
                     pairs.append((names[j], names[k]))
     return IdentificationCheck(criterion=name, jacobian=J, rank=rank, required=required,
                                condition=condition, tolerance=tol,

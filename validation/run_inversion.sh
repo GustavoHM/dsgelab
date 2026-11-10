@@ -14,7 +14,7 @@ fi
 [ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
 mkdir -p out_inversion work_inversion
-cp mods/particle_ar1.mod work_inversion/particle_ar1.mod
+cp particle/particle_ar1.mod work_inversion/particle_ar1.mod
 ( cd work_inversion && "$OCTAVE" --no-gui --eval "
   pkg load statistics datatypes;
   addpath '$DYNARE_MATLAB';

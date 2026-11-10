@@ -283,8 +283,9 @@ planned.
   particle likelihood goes to the posterior mode and to Metropolis–Hastings. The inversion filter
   stops at pruned second order.
 - **Identification is local, at one point.** Dynare's repetition of the analysis over draws
-  from the prior (`prior_mc`), its identification strength from the information matrix and its
-  plots are not reproduced.
+  from the prior (`prior_mc`) is not reproduced. The identification strength comes from the
+  information matrix at first order, and of Dynare's sensitivity bars only those of the moments
+  are computed, without the ones of the reduced form and of the dynamic model.
 - **Global sensitivity covers stability mapping, Monte Carlo filtering and Sobol indices.**
   Dynare's reduced-form mapping (`redform`), its RMSE filtering against data (`rmse`), Morris
   screening and its plots are not reproduced.
@@ -306,16 +307,18 @@ planned.
 - **Heterogeneous agents have at most two endogenous states,** the assets, on grids that stay
   fixed along a path. The Markov matrix may move with the inputs, and a transition may start from
   any distribution on the grids.
-- **Plots are basic.** Impulse responses, paths, decompositions, forecasts and posterior
-  densities, with matplotlib as an optional dependency. MCMC diagnostics plots and Dynare's
-  identification and sensitivity plots are not reproduced.
+- **Plots cover part of Dynare's figures,** with matplotlib as an optional dependency: impulse
+  responses, paths, decompositions, forecasts, priors and posteriors, the MCMC diagnostics
+  (Brooks and Gelman, trace, autocorrelation, mode check), smoothed shocks and observables,
+  OccBin regimes and the identification figures. The figures of the global sensitivity analysis
+  and Dynare's `q2a` annualisation of a decomposition are not reproduced.
 - **The extended path's hybrid correction stops at second order.**
 - **`from_mod` reads the model and ignores the script.** Commands such as `stoch_simul` and
   `estimation` are skipped, and their options are not applied. The dedicated routes
   `ModFile.identification`, `ModFile.method_of_moments` and `ModFile.irf_matching` read their
   respective blocks and accept explicit arguments. In the model block, the constructs the
-  reader cannot translate (`@#include`, `@#for`, `varexo_det`, leads of a shock, `expectation`,
-  `diff`, `adl`, external functions) are refused with an error that quotes the line containing
+  reader cannot translate (`@#include`, a `@#for` that is not over an explicit array,
+  `varexo_det`, leads of a shock, `expectation`, `diff`, `adl`, external functions) are refused with an error that quotes the line containing
   them. Coverage is validated on the Dynare examples and tests listed in `validation/`.
 
 ## Related package

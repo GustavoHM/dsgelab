@@ -460,6 +460,11 @@ class ThirdOrderSolution:
 
 
 def stochastic_steady_state(third: ThirdOrderSolution, **kwargs) -> SteadyState:
+    """Fixed point of the full third-order decision rule with ``sigma=1``.
+
+    The function form of :meth:`ThirdOrderSolution.stochastic_steady_state`, which takes
+    ``guess``, ``tol`` and ``method``.
+    """
     return third.stochastic_steady_state(**kwargs)
 
 
