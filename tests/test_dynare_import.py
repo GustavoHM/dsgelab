@@ -170,6 +170,20 @@ def test_repeated_parameter_declaration_uses_the_last_assignment():
     assert sol.P[0, 0] == pytest.approx(0.8)
 
 
+def test_numeric_parameter_assignment_can_continue_after_an_operator():
+    mf = from_mod("""
+    var x;
+    varexo e;
+    parameters a b;
+    a = 0.5;
+    b = 1 + a *
+        2;
+    model; x = b + e; end;
+    """)
+    assert mf.params["b"] == 2.0
+    assert mf.steady_state().values["x"] == pytest.approx(2.0)
+
+
 def test_macro_for_expands_arrays_and_numeric_string_arithmetic():
     mf = from_mod("""
     @#if 0

@@ -404,7 +404,7 @@ class _Parser:
 
 def _numeric(sympy, text: str, env: Mapping[str, float], funcs):
     from sympy.parsing.sympy_parser import parse_expr, standard_transformations
-    t = text.replace("^", "**")
+    t = " ".join(text.replace("^", "**").split())
     vals = {k: v for k, v in env.items()
             if v is not None and not (isinstance(v, float) and math.isnan(v))}
     local = {}
