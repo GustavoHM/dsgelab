@@ -15,9 +15,9 @@ What comes from Dynare, and why:
   * the parameters that the .mod does NOT define. NK_baseline and RBC_baseline compute some of
     them in a MATLAB steady-state file, which a .mod reader does not execute. The ones the .mod
     defines are read by from_mod and CHECKED against Dynare's.
-  * the starting point of the steady state, only for the variables whose value the .mod does not
-    give in an evaluable form (a MATLAB helper, a missing steady_state_model). The steady state
-    itself is solved by dsgelab and compared.
+  * the starting point of the steady state, for variables whose value the .mod does not give in
+    an evaluable form, or in full when steady_start_from_dynare is requested (CA_BMZ12). The
+    steady state itself is solved by dsgelab and compared.
 
 What is compared, as in compare.py: steady state, orthogonalised (Cholesky) IRFs of every
 variable to every shock with nonzero variance, 40 periods, and theoretical standard deviations.
@@ -62,7 +62,8 @@ def _mods():
 
 
 def compare(name: str, path: Path, out: Path = HERE / "out_import",
-            ss_floor: float = 1e-8, steady_from_dynare: bool = False) -> dict:
+            ss_floor: float = 1e-8, steady_from_dynare: bool = False,
+            steady_start_from_dynare: bool = False) -> dict:
     """Compare one .mod with the Dynare run exported to ``out/<name>.mat``."""
     ex = _load(name, out)
     if ex is None:
@@ -97,7 +98,8 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
         d_ss = 0.0
     else:
         # a linear model without initval starts from zero, as Dynare itself does
-        start = {} if mf.linear else {v: ys[v] for v in mf.missing_guess}
+        start = ({v: ys[v] for v in mf.endogenous} if steady_start_from_dynare else
+                 {} if mf.linear else {v: ys[v] for v in mf.missing_guess})
         ss = mf.steady_state(guess=start, params=params)
         # relative error, absolute below ss_floor. mmb/compare.py passes 1: a variable whose steady
         # state is zero (an output gap, a debt ratio) is otherwise compared on its rounding error

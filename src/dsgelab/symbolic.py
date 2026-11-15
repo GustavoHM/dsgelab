@@ -128,6 +128,32 @@ def parse_system(equations: Sequence[str], *, variables: Sequence[str],
                 par=ns["par"], namespace=ns)
 
 
+def _combine_real_log_difference(expr, sympy):
+    """Combine a lone ``log(a) - log(b)`` without widening its real domain."""
+    def signed_log(term):
+        if isinstance(term, sympy.log) and len(term.args) == 1:
+            return 1, term.args[0]
+        if (isinstance(term, sympy.Mul) and len(term.args) == 2 and term.args[0] == -1
+                and isinstance(term.args[1], sympy.log) and len(term.args[1].args) == 1):
+            return -1, term.args[1].args[0]
+        return 0, None
+
+    def combine(add):
+        logs = []
+        for i, term in enumerate(add.args):
+            sign, arg = signed_log(term)
+            if sign:
+                logs.append((i, sign, arg))
+        if len(logs) != 2 or logs[0][1] == logs[1][1]:
+            return add
+        (i, sign_i, arg_i), (j, _, arg_j) = logs
+        numerator, denominator = (arg_i, arg_j) if sign_i == 1 else (arg_j, arg_i)
+        rest = [term for k, term in enumerate(add.args) if k not in (i, j)]
+        return sympy.Add(*rest, sympy.log(numerator / denominator))
+
+    return expr.replace(lambda e: isinstance(e, sympy.Add), combine)
+
+
 def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str],
                            shocks: Sequence[str], parameters: Sequence[str],
                            name: str = "model", derivatives: str = "both",
@@ -161,7 +187,8 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                                 f"{sorted(str(x) for x in stray)}")
     equations = (list(source_equations) if source_equations is not None
                  else [str(e) for e in exprs])
-    exprs = [e.xreplace({sympy.pi: sympy.Float(np.pi)}) for e in exprs]
+    exprs = [_combine_real_log_difference(e.xreplace({sympy.pi: sympy.Float(np.pi)}), sympy)
+             for e in exprs]
 
     w_syms = ([nxt[v] for v in var_names] + [cur[v] for v in var_names]
               + [eps[s] for s in shocks])
@@ -182,9 +209,10 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                 + [float(get_param(params, p)) for p in parameters])
         return np.asarray(f_res(*vals), dtype=float).ravel()
 
+    numeric_pi = {sympy.pi: sympy.Float(np.pi)}
     jac_fn = hess_fn = third_fn = None
     if derivatives in ("jacobian", "both", "third"):
-        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms))
+        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms)).xreplace(numeric_pi)
         f_jac = sympy.lambdify(all_syms, Jm, modules="numpy")
 
         def jac_fn(x_next, x_now, e, params, ctx=None):
@@ -192,7 +220,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                               dtype=float).reshape(n, m)
 
     if derivatives == "both":
-        blocks = [sympy.hessian(expr, w_syms) for expr in exprs]
+        blocks = [sympy.hessian(expr, w_syms).xreplace(numeric_pi) for expr in exprs]
         f_hess = sympy.lambdify(all_syms, blocks, modules="numpy")
 
         def hess_fn(x_next, x_now, e, params, ctx=None):
@@ -205,7 +233,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         hessian_blocks = []
         for equation, expr in enumerate(exprs):
             for i, j in combinations_with_replacement(range(m), 2):
-                derivative = expr.diff(w_syms[i], w_syms[j])
+                derivative = expr.diff(w_syms[i], w_syms[j]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j)))):
@@ -228,7 +256,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         blocks = []
         for equation, expr in enumerate(exprs):
             for i, j, k in combinations_with_replacement(range(m), 3):
-                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k])
+                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j, k)))):

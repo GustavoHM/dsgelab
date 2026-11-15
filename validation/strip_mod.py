@@ -15,8 +15,13 @@ BLOCKS = ("model", "initval", "steady_state_model", "shocks")
 COMMANDS = r"steady|check|resid|model_diagnostics|write_latex_\w+|stoch_simul"
 
 src, dst = sys.argv[1], sys.argv[2]
-steady_options = sys.argv[3] if len(sys.argv) > 3 else ""
-steady = f"steady({steady_options});" if steady_options else "steady;"
+options = (sys.argv[3] if len(sys.argv) > 3 else "").split(",")
+global_options = [option.strip() for option in options
+                  if re.match(r"\s*solve_tol[fx]\s*=", option)]
+steady_options = ",".join(option for option in options
+                          if option and not re.match(r"\s*solve_tol[fx]\s*=", option))
+steady = "".join(f"options_.{option};\n" for option in global_options)
+steady += f"steady({steady_options});" if steady_options else "steady;"
 text = open(src).read()
 masked = re.sub(r"/\*.*?\*/", lambda m: " " * len(m.group(0)), text, flags=re.S)
 masked = re.sub(r"(//|%)[^\n]*", lambda m: " " * len(m.group(0)), masked)
