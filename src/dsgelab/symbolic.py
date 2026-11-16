@@ -128,6 +128,74 @@ def parse_system(equations: Sequence[str], *, variables: Sequence[str],
                 par=ns["par"], namespace=ns)
 
 
+def _combine_real_log_difference(expr, sympy):
+    """Combine a lone ``log(a) - log(b)`` without widening its real domain."""
+    def signed_log(term):
+        if isinstance(term, sympy.log) and len(term.args) == 1:
+            return 1, term.args[0]
+        if (isinstance(term, sympy.Mul) and len(term.args) == 2 and term.args[0] == -1
+                and isinstance(term.args[1], sympy.log) and len(term.args[1].args) == 1):
+            return -1, term.args[1].args[0]
+        return 0, None
+
+    def combine(add):
+        logs = []
+        for i, term in enumerate(add.args):
+            sign, arg = signed_log(term)
+            if sign:
+                logs.append((i, sign, arg))
+        if len(logs) != 2 or logs[0][1] == logs[1][1]:
+            return add
+        (i, sign_i, arg_i), (j, _, arg_j) = logs
+        numerator, denominator = (arg_i, arg_j) if sign_i == 1 else (arg_j, arg_i)
+        rest = [term for k, term in enumerate(add.args) if k not in (i, j)]
+        return sympy.Add(*rest, sympy.log(numerator / denominator))
+
+    return expr.replace(lambda e: isinstance(e, sympy.Add), combine)
+
+
+def _complex_log(value):
+    array = np.asarray(value)
+    if np.iscomplexobj(array) or np.any(array < 0):
+        return np.log(array, dtype=complex)
+    return np.log(value)
+
+
+def _complex_log_lambdify(sympy, arguments, expressions):
+    cache = None
+
+    def build():
+        nonlocal cache
+        if cache is None:
+            cache = sympy.lambdify(arguments, expressions,
+                                   modules=[{"log": _complex_log}, "numpy"])
+        return cache
+
+    return build
+
+
+def _evaluate_real(function, values, complex_factory=None):
+    """Use complex logarithms only to recover a result whose imaginary parts cancel."""
+    with np.errstate(all="ignore"):
+        raw = np.asarray(function(*values))
+        if complex_factory is None:
+            return np.asarray(raw, dtype=float)
+        resolved = np.real_if_close(raw, tol=1000)
+        if np.iscomplexobj(resolved):
+            return np.full(raw.shape, np.nan)
+        real = np.asarray(resolved, dtype=float)
+        if np.all(np.isfinite(real)):
+            return real
+        try:
+            complex_raw = np.asarray(complex_factory()(*values))
+        except (TypeError, ValueError):
+            return real
+        resolved = np.real_if_close(complex_raw, tol=1000)
+        if np.iscomplexobj(resolved):
+            return real
+        return np.asarray(resolved, dtype=float)
+
+
 def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str],
                            shocks: Sequence[str], parameters: Sequence[str],
                            name: str = "model", derivatives: str = "both",
@@ -161,14 +229,22 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
                                 f"{sorted(str(x) for x in stray)}")
     equations = (list(source_equations) if source_equations is not None
                  else [str(e) for e in exprs])
-    exprs = [e.xreplace({sympy.pi: sympy.Float(np.pi)}) for e in exprs]
+    exprs = [_combine_real_log_difference(e.xreplace({sympy.pi: sympy.Float(np.pi)}), sympy)
+             for e in exprs]
 
     w_syms = ([nxt[v] for v in var_names] + [cur[v] for v in var_names]
               + [eps[s] for s in shocks])
     all_syms = w_syms + [par[p] for p in parameters]
     m = len(w_syms)
+    has_log = any(e.has(sympy.log) for e in exprs)
+
+    def complex_version(expressions):
+        if not has_log:
+            return None
+        return _complex_log_lambdify(sympy, all_syms, expressions)
 
     f_res = sympy.lambdify(all_syms, sympy.Matrix(exprs), modules="numpy")
+    complex_res = complex_version(sympy.Matrix(exprs))
 
     def _args(x_next, x_now, e, params):
         return (list(np.asarray(x_next, dtype=float))
@@ -180,23 +256,26 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         vals = ([nv[v] for v in var_names] + [cv[v] for v in var_names]
                 + [ev[s] for s in shocks]
                 + [float(get_param(params, p)) for p in parameters])
-        return np.asarray(f_res(*vals), dtype=float).ravel()
+        return _evaluate_real(f_res, vals, complex_res).ravel()
 
+    numeric_pi = {sympy.pi: sympy.Float(np.pi)}
     jac_fn = hess_fn = third_fn = None
     if derivatives in ("jacobian", "both", "third"):
-        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms))
+        Jm = sympy.Matrix(exprs).jacobian(sympy.Matrix(w_syms)).xreplace(numeric_pi)
         f_jac = sympy.lambdify(all_syms, Jm, modules="numpy")
+        complex_jac = complex_version(Jm)
 
         def jac_fn(x_next, x_now, e, params, ctx=None):
-            return np.asarray(f_jac(*_args(x_next, x_now, e, params)),
-                              dtype=float).reshape(n, m)
+            return _evaluate_real(f_jac, _args(x_next, x_now, e, params),
+                                  complex_jac).reshape(n, m)
 
     if derivatives == "both":
-        blocks = [sympy.hessian(expr, w_syms) for expr in exprs]
+        blocks = [sympy.hessian(expr, w_syms).xreplace(numeric_pi) for expr in exprs]
         f_hess = sympy.lambdify(all_syms, blocks, modules="numpy")
+        complex_hess = complex_version(blocks)
 
         def hess_fn(x_next, x_now, e, params, ctx=None):
-            raw = f_hess(*_args(x_next, x_now, e, params))
+            raw = _evaluate_real(f_hess, _args(x_next, x_now, e, params), complex_hess)
             return np.array([np.asarray(b, dtype=float).reshape(m, m) for b in raw])
 
     if derivatives == "third":
@@ -205,7 +284,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         hessian_blocks = []
         for equation, expr in enumerate(exprs):
             for i, j in combinations_with_replacement(range(m), 2):
-                derivative = expr.diff(w_syms[i], w_syms[j])
+                derivative = expr.diff(w_syms[i], w_syms[j]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j)))):
@@ -215,10 +294,11 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         hessian_equation_array: np.ndarray = np.asarray(hessian_equations, dtype=np.int64)
         hessian_index_array: np.ndarray = np.asarray(hessian_indices, dtype=np.int64).reshape(-1, 2)
         f_hess = sympy.lambdify(all_syms, hessian_blocks, modules="numpy")
+        complex_hess = complex_version(hessian_blocks)
 
         def hess_fn(x_next, x_now, e, params, ctx=None):
-            values = np.asarray(f_hess(*_args(x_next, x_now, e, params)),
-                                dtype=float).reshape(-1)
+            values = _evaluate_real(f_hess, _args(x_next, x_now, e, params),
+                                    complex_hess).reshape(-1)
             return SparseSecondDerivatives(hessian_equation_array, hessian_index_array,
                                            values, (n, m, m))
 
@@ -228,7 +308,7 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         blocks = []
         for equation, expr in enumerate(exprs):
             for i, j, k in combinations_with_replacement(range(m), 3):
-                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k])
+                derivative = expr.diff(w_syms[i], w_syms[j], w_syms[k]).xreplace(numeric_pi)
                 if derivative == 0:
                     continue
                 for index in sorted(set(permutations((i, j, k)))):
@@ -239,10 +319,11 @@ def model_from_expressions(exprs, *, states: Sequence[str], jumps: Sequence[str]
         derivative_index_array: np.ndarray = np.asarray(
             derivative_indices, dtype=np.int64).reshape(-1, 3)
         f_third = sympy.lambdify(all_syms, blocks, modules="numpy")
+        complex_third = complex_version(blocks)
 
         def third_fn(x_next, x_now, e, params, ctx=None):
-            values = np.asarray(f_third(*_args(x_next, x_now, e, params)),
-                                dtype=float).reshape(-1)
+            values = _evaluate_real(f_third, _args(x_next, x_now, e, params),
+                                    complex_third).reshape(-1)
             return SparseThirdDerivatives(equation_index_array, derivative_index_array, values,
                                           (n, m, m, m))
 
@@ -538,10 +619,13 @@ def calibration_residual(model: Model, targets: dict, params):
         exprs.append(e)
     syms = [sympy.Symbol(v) for v in model.names] + [sympy.Symbol(q) for q in pnames]
     f = sympy.lambdify(syms, exprs, modules="numpy")
+    complex_f = (_complex_log_lambdify(sympy, syms, exprs)
+                 if any(e.has(sympy.log) for e in exprs) else None)
 
     def g(x, p):
-        return np.asarray(f(*list(np.asarray(x, float)),
-                            *[float(get_param(p, q)) for q in pnames]), float).ravel()
+        values = (list(np.asarray(x, float))
+                  + [float(get_param(p, q)) for q in pnames])
+        return _evaluate_real(f, values, complex_f).ravel()
 
     return g
 

@@ -170,6 +170,20 @@ def test_repeated_parameter_declaration_uses_the_last_assignment():
     assert sol.P[0, 0] == pytest.approx(0.8)
 
 
+def test_numeric_parameter_assignment_can_continue_after_an_operator():
+    mf = from_mod("""
+    var x;
+    varexo e;
+    parameters a b;
+    a = 0.5;
+    b = 1 + a *
+        2;
+    model; x = b + e; end;
+    """)
+    assert mf.params["b"] == 2.0
+    assert mf.steady_state().values["x"] == pytest.approx(2.0)
+
+
 def test_macro_for_expands_arrays_and_numeric_string_arithmetic():
     mf = from_mod("""
     @#if 0
@@ -231,3 +245,39 @@ def test_variable_named_pi_does_not_replace_the_constant_in_normpdf():
     x = mf.model.vector(values)
     residual = mf.model.residuals(x, x, np.zeros(mf.model.n_shocks), mf.params)
     assert np.allclose(residual[1:3], 0.0, atol=1e-15)
+
+
+@pytest.mark.parametrize("derivatives", ["both", "third"])
+def test_normcdf_derivatives_keep_constant_pi_separate_from_variable(derivatives):
+    import sympy as sp
+
+    mf = from_mod("""
+    var pi x y;
+    varexo e;
+    parameters rho;
+    rho = 0.5;
+    model;
+    y = normcdf((log(x) + rho^2/2)/rho) + 0*pi;
+    x = rho*x(-1) + e;
+    pi = 1.006 + 0*x;
+    end;
+    initval; x = 0.5009704826899704; y = 0; pi = 1.006; end;
+    """, derivatives=derivatives)
+    model = mf.model
+    x = model.vector(mf.full_guess({"x": 0.5009704826899704, "y": 0.0, "pi": 1.006}))
+    zero = np.zeros(model.n_shocks)
+    col = model.n_vars + model.position("x")
+    jacobian = model.jacobian(x, x, zero, mf.params)
+    hessian = model.hessian(x, x, zero, mf.params)
+    hessian = hessian.to_dense() if derivatives == "third" else hessian
+    actual = [jacobian[0, col], hessian[0, col, col]]
+    if derivatives == "third":
+        third = model.third(x, x, zero, mf.params).to_dense()
+        actual.append(third[0, col, col, col])
+
+    expression = model.symbolic["expressions"][0]
+    values = {sp.Symbol("x"): x[model.position("x")], sp.Symbol("y"): 0.0,
+              sp.Symbol("rho"): mf.params["rho"]}
+    for order, value in enumerate(actual, start=1):
+        expected = float(expression.diff(sp.Symbol("x"), order).subs(values))
+        assert value == pytest.approx(expected, rel=1e-12, abs=1e-12)

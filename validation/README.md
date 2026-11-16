@@ -354,13 +354,15 @@ The Macroeconomic Model Data Base (MMB, [macromodelbase.com](https://www.macromo
 collects models in Dynare, and its replication toolbox Rep-MMB
 ([github.com/AlexMeyer-Gohde/Rep-MMB](https://github.com/AlexMeyer-Gohde/Rep-MMB)) holds 148 of
 them at the commit `fetch.sh` uses. The folder
-`mmb/` reads seventeen of them with `from_mod`, as they are, and compares them with Dynare in the
-same way as `compare_import.py`. The set covers models built or used at the Banco Central do
-Brasil, the ECB, the Federal Reserve, the Banco Central de Chile, the Bank of England, the
-Riksbank and the IMF, from 9 to 361 variables.
+`mmb/` reads twenty-four of them with `from_mod` and compares them with Dynare in the same way as
+`compare_import.py`. The set covers models built or used at the Banco Central do Brasil, the Bank of
+Canada, the Bundesbank, Banca d'Italia, the Bank of Finland, the European Commission, the ECB, the
+Federal Reserve, the Banco Central de Chile, the Bank of England, the Riksbank and the IMF, from 9
+to 361 variables.
 
 ```bash
-bash mmb/fetch.sh          # 17 .mod files at a fixed Rep-MMB commit, each checked by SHA-256
+bash mmb/fetch.sh          # 24 .mod files and their inputs at a fixed Rep-MMB commit, all SHA-256 checked
+python mmb/prepare.py      # explicit MATLAB-supplied values and QUEST3's reference starting point
 bash mmb/run_dynare.sh     # ../strip_mod.py and the same stoch_simul(order=1) for all
 python mmb/compare.py
 ```
@@ -368,20 +370,35 @@ python mmb/compare.py
 ```
 model         vars  aux    params     s.s.     IRFs   moments
 BRA_SAMBA08     41   38   0.0e+00  0.0e+00  6.6e-13   3.8e-13  OK
+CA_BMZ12        66   21   5.5e-16  3.7e-12  1.9e-10   4.0e-11  OK  (Dynare's s.s. with residual 2e-12)
+             s.s. starting point taken from Dynare for 66 variable(s)
+CA_ToTEM10     232  143   0.0e+00  0.0e+00  5.4e-09   6.6e-10  OK  (s.s. residual 7e-06)
+             explicit inputs from pinned Rep-MMB sources: CA_ToTEM10_rep_steadystate.m
 CA_LS07         12   10   0.0e+00  0.0e+00  9.6e-15   1.1e-14  OK
 CL_MS07        124   70   9.0e-14  0.0e+00  3.2e-10   2.6e-10  OK
+DEREA_GEAR16   191  155   0.0e+00  0.0e+00  2.8e-11   2.6e-10  OK
+             explicit inputs from pinned Rep-MMB sources: set_params_31_08_aw1.m, set_steadystate_31_08_aw1.m, DEREA_GEAR16_rep_steadystate.m
 EACZ_GEM03     239  100   3.9e-16  6.8e-13  1.1e-11   1.2e-08  OK
              s.s. starting point taken from Dynare for 2 variable(s)
 EAUS_NAWM08    226  127   0.0e+00  4.8e-06  6.8e-05   7.0e-05  OK  (Dynare's s.s. with residual 5e-06)
 EA_ALSV06        9   12   0.0e+00  0.0e+00  1.3e-13   1.5e-13  OK
 EA_AWM05       205  214  3.7e-16  0.0e+00  4.6e-10   3.2e-09  OK  (unit root accepted with qz_criterium)
+EA_GNSS10       79   51   0.0e+00  0.0e+00  2.0e-11   7.7e-12  OK  (s.s. residual 5e-06)
+             explicit inputs from pinned Rep-MMB sources: median_values.txt
+             s.s. starting point taken from Dynare for 79 variable(s)
+EA_QUEST3      108   79   0.0e+00  2.9e-13  4.8e-12   1.3e-11  OK  (Dynare started at the independently solved dsgelab s.s.)
+             parameters the .mod leaves undefined, taken from Dynare: ISN
+             s.s. starting point taken from Dynare for 1 variable(s)
 ESREA_FIMOD12  292   96   4.0e-15  4.0e-15  2.2e-11   7.2e-12  OK
              s.s. starting point taken from Dynare for 75 variable(s)
 G2_SIGMA08     238  148  3.2e-15  0.0e+00  1.7e-10   6.9e-09  OK
+FI_AINO16       80   72   0.0e+00  0.0e+00  1.6e-11   3.1e-11  OK
+             explicit inputs from pinned Rep-MMB sources: all_parameters_February2016.mat
 GPM6_IMF13     291  622   4.2e-17  0.0e+00  3.8e-11   4.1e-12  OK  (common Dynare point, residual 6e+00)
 EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
 HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
 UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
+US_CMR14        70  272   2.2e-16  0.0e+00  6.6e-07   1.7e-11  OK  (common Dynare point, residual 3e-06)
 US_DNGS15       38   33   0.0e+00  0.0e+00  1.4e-12   5.1e-13  OK
 US_FRB03       279  365   0.0e+00  0.0e+00  6.6e-10   1.8e-09  OK
 US_FRB08       361  335   2.2e-16  0.0e+00  5.8e-10   1.7e-09  OK
@@ -396,6 +413,7 @@ US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
 | `EAUS_NAWM08` | New Area-Wide Model, ECB (Coenen, McAdam and Straub, 2008), euro area and United States |
 | `EA_SWW14` | Smets, Warne and Wouters (2014), ECB |
 | `US_SW07` | Smets and Wouters (2007) |
+| `US_CMR14` | Christiano, Motto and Rostagno (2014), risk shocks and financial frictions |
 | `US_DNGS15` | Del Negro, Giannoni and Schorfheide (2015), Federal Reserve Bank of New York |
 | `US_FRB03`, `US_FRB08` | FRB/US, Federal Reserve Board, linearised with rational expectations (2003 version of Levin, Wieland and Williams, and February 2008 version) |
 | `CL_MS07` | Medina and Soto (2007), Banco Central de Chile |
@@ -406,6 +424,12 @@ US_SW07         41   29   2.7e-16  2.3e-38  2.5e-13   5.3e-13  OK
 | `G2_SIGMA08` | SIGMA, Federal Reserve (Erceg, Guerrieri and Gust, 2008) |
 | `GPM6_IMF13` | Global Projection Model with six regions, IMF (Carabenciov et al., 2013) |
 | `EACZ_GEM03` | Global Economy Model, IMF (Laxton and Pesenti, 2003), euro area and Czech Republic |
+| `CA_BMZ12` | Bank of Canada |
+| `CA_ToTEM10` | ToTEM, Bank of Canada |
+| `DEREA_GEAR16` | GEAR, Bundesbank |
+| `EA_GNSS10` | Gerali, Neri, Sessa and Signoretti (2010), Banca d'Italia |
+| `EA_QUEST3` | QUEST III, European Commission |
+| `FI_AINO16` | AINO, Bank of Finland |
 | `HK_FP13`, `CA_LS07` | Funke and Paetz (2013) for Hong Kong, Lubik and Schorfheide (2007) for Canada |
 
 **What differs from `compare_import.py`.** The steady-state error is relative, and absolute for
@@ -418,26 +442,44 @@ is left out of the IRF column. Price and wage dispersion do not move at first or
 `EAUS_NAWM08` the wage dispersion `EA_SI` responds with 6e-11 in both programs, against responses
 of order 1e4 in other variables. This rule leaves the output of `compare_import.py` unchanged.
 
+**MATLAB-supplied inputs.** `prepare.py` does not execute MATLAB and stores no numeric calibration.
+It copies only known scalar-assignment ranges of the ToTEM and GEAR helpers, rejecting any other
+statement in those ranges; reads GNSS's 25-value text file and expands its indexed uses; and reads
+AINO's declared parameters and shock standard deviations from the MAT file with SciPy. The explicit
+working copies are written to `out/prepared/` and their parameters are checked against Dynare's.
+ToTEM's analytic helper point and GNSS's solver point have residuals of 7e-06 and 5e-06,
+respectively. Both points are accepted with `check_steady=False`, and the IRF/moment tolerance
+accounts for the residual; the output never presents these residuals as zero. GNSS uses all 79
+Dynare values as its starting guess. AINO's pinned file activates only the `epsLAMBDAK` shock, so
+its IRFs and moments cover that shock, not the commented-out alternatives.
+
+`EA_QUEST3` has no MATLAB helper in the pinned source. Dynare's default initial guess stops at a
+residual of 3e-06, which moves the IRFs and moments by 2e-04 and 3e-04. `prepare.py` therefore
+solves the original file with `dsgelab` (residual 1.4e-14) and writes an explicit `initval`;
+`run_dynare.sh` starts Dynare at that independently computed point with tolerances of 1e-12 and
+confirms it. This is a cross-check of the same point, not two independent steady-state solutions.
+The unused parameter `ISN` still comes from Dynare and is reported.
+
 **What limits the comparison.** In `EAUS_NAWM08`, Dynare's steady state leaves a residual of
 5e-06, and the one `dsgelab` finds leaves 9e-14. The IRFs and moments inherit that residual, as
 in `example2`. `EACZ_GEM03` and `G2_SIGMA08` declare an innovation (`interest_`) that no equation
-uses. Dynare 7 refuses these files unless they run with `nostrict`, which drops the innovation,
-and `run_dynare.sh` passes that option for these models. The parameters listed as taken from
+uses; `EA_QUEST3` has two such innovations (`E_EPS_G` and `interest_`). Dynare 7 refuses these
+files unless they run with `nostrict`, which drops the innovation, and `run_dynare.sh` passes that
+option for these models. The parameters listed as taken from
 Dynare are declared and never assigned in the `.mod`. `GPM6_IMF13` declares nonstationary
 variables and uses `steady(nocheck)`. Its comparison linearises both programs at Dynare's supplied
 point, whose residual is 6, with `check_steady=False`; the IRF and moment tolerance stays 1e-6.
-This checks the local approximation, not the point as a steady state.
+This checks the local approximation, not the point as a steady state. `US_CMR14` is also compared
+at Dynare's supplied point, whose residual is 3e-06, rather than at an independently solved steady
+state. Its `@#for` loops are expanded by `from_mod`.
 
-**What the set leaves out.** Seven other Rep-MMB models from central banks and official
-institutions were tried, and `from_mod` does not yet read or solve them, or their comparison does
-not yet pass. In `CA_BMZ12` (Bank of Canada), `ygap` and `ygap_ss` are both negative at Dynare's
-point. The equation `lnygap = log(ygap) - log(ygap_ss)` is real in Dynare only because the
-imaginary parts of its complex logarithms cancel; the real-valued residual in `dsgelab` is NaN.
-`US_CMR14` is read, including its `@#for` loops, but at the common Dynare point its largest IRF
-and moment deviations are 0.474 and 0.881, so it is not a validated replication. `CA_ToTEM10`
-(Bank of Canada), `DEREA_GEAR16` (Bundesbank), `EA_GNSS10` (Banca d'Italia), `EA_QUEST3`
-(European Commission) and `FI_AINO16` (Bank of Finland) take parameters or the steady state from
-MATLAB files.
+In `CA_BMZ12`, `ygap` and `ygap_ss` are both negative. The symbolic frontend rewrites a lone
+`log(a) - log(b)` as `log(a / b)`, which has the same real domain and derivatives: it is real when
+the arguments have the same sign and NaN when they have opposite signs. Other nonfinite evaluations
+involving logarithms are retried with complex logarithms, while all other operations stay real, and
+accepted only when their imaginary parts cancel numerically.
+Dynare's point supplies only the starting guess; `dsgelab` solves its own steady state. The
+reference run sets Dynare's `solve_tolf` and `solve_tolx` to 1e-14, leaving a residual of 2e-12.
 
 **Further public candidates, not yet run here.** The
 [OpenSourcedMacroModels](https://github.com/dkgaraujo/OpenSourcedMacroModels) catalogue links

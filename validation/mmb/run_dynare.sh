@@ -5,7 +5,8 @@
 # Usage:  bash run_dynare.sh [name ...]      (no arguments: all)
 #
 # Each .mod is cut down by ../strip_mod.py to what declares the model, and receives the same
-# stoch_simul(order=1, irf=40, periods=0) in place of the MMB's own commands.
+# stoch_simul(order=1, irf=40, periods=0) in place of the MMB's own commands. Run prepare.py first:
+# QUEST3 uses its explicit dsgelab-computed starting point, and four models use downloaded helpers.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -20,9 +21,9 @@ if [ -z "${DYNARE_MATLAB:-}" ]; then
 fi
 [ -n "${DYNARE_MATLAB:-}" ] || { echo "FATAL: Dynare's matlab/ directory not found. Set DYNARE_MATLAB."; exit 1; }
 
-# EACZ_GEM03 and G2_SIGMA08 declare an innovation (interest_) that no equation uses, which
-# Dynare 7 refuses without nostrict. Dynare then drops it, and compare.py matches shocks by name.
-NOSTRICT=" EACZ_GEM03 G2_SIGMA08 "
+# These files declare innovations that no equation uses, which Dynare 7 refuses without
+# nostrict. Dynare then drops them, and compare.py matches shocks by name.
+NOSTRICT=" EACZ_GEM03 G2_SIGMA08 EA_QUEST3 "
 
 FILES=()
 if [ $# -eq 0 ]; then
@@ -38,17 +39,31 @@ for src in "${FILES[@]}"; do
   echo ">>> $m"
   rm -rf work/*
   steady_opts=""
+  run_base="$base"
   case "$base" in
+    CA_BMZ12) steady_opts="solve_tolf=1e-14, solve_tolx=1e-14" ;;
+    CA_ToTEM10)
+      run_base="${base}_rep"
+      cp mods/CA_ToTEM10_rep_steadystate.m work/ ;;
+    DEREA_GEAR16)
+      run_base="${base}_rep"
+      cp mods/DEREA_GEAR16_rep_steadystate.m mods/set_params_31_08_aw1.m \
+         mods/set_steadystate_31_08_aw1.m work/ ;;
+    EA_GNSS10) cp mods/median_values.txt work/ ;;
+    EA_QUEST3)
+      src="out/prepared/EA_QUEST3_dynare_start.mod"
+      steady_opts="solve_tolf=1e-12, solve_tolx=1e-12" ;;
+    FI_AINO16) steady_opts="solve_algo=1"; cp mods/all_parameters_February2016.mat work/ ;;
     GPM6_IMF13) steady_opts="nocheck" ;;
     US_CMR14) steady_opts="maxit=1000, solve_algo=1" ;;
   esac
-  "$PY" ../strip_mod.py "$src" "work/$m" "$steady_opts"
+  "$PY" ../strip_mod.py "$src" "work/$run_base.mod" "$steady_opts"
   opts="noclearall nograph"
   case "$NOSTRICT" in *" $base "*) opts="$opts nostrict" ;; esac
   ( cd work && "$OCTAVE" --no-gui --eval "
     pkg load statistics datatypes;
     addpath '$DYNARE_MATLAB';
-    dynare $m $opts;
+    dynare $run_base.mod $opts;
     ex = struct();
     ex.ys          = oo_.dr.ys;
     ex.eigval      = oo_.dr.eigval;

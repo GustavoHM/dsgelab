@@ -255,7 +255,7 @@ pip install -e ".[symbolic,test,plot]" && pytest
 ```
 
 The second layer, in [`validation/`](https://github.com/GustavoHM/dsgelab/blob/main/validation/README.md),
-runs Dynare's own example and test `.mod` files in Octave with Dynare, thirteen MMB models,
+runs Dynare's own example and test `.mod` files in Octave with Dynare, twenty-four MMB models,
 four published-model files from Johannes Pfeifer's DSGE_mod, and one calibration in
 MacroModelling.jl. Each result is compared with `dsgelab`'s, for steady states, impulse
 responses, second-order decision-rule tensors, parameter Jacobians, moments, optimal policy,

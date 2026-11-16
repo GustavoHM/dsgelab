@@ -13,6 +13,7 @@ BASE="https://raw.githubusercontent.com/AlexMeyer-Gohde/Rep-MMB/$COMMIT/Rep-MMB"
 # model  sha256 of <model>_rep.mod
 MODELS="
 BRA_SAMBA08  74a5c2dae055e46c766091818906b98a186d215e880a8cbe45facaa662d2c1ff
+CA_BMZ12     35ab746fbb8092db84689d3a0ba14681fd7f838d744c59c952a712f92bbc6f63
 CA_LS07      4b6760e8427dd04e73b61ccdebadab6e9dffe8355cf9fba72a4c956e8c1072ca
 CL_MS07      00aceed3ba4ea74f314f8ad21e19120047274069d3305b77a2d6a662c9601017
 EACZ_GEM03   e623ae1a2a4ee9ebd7a878655bfb06d4c9a396ff19cd54ebb354d67fffef4833
@@ -25,10 +26,26 @@ EA_ALSV06    731ab6783f45455e2bd48ee992b39561a4cc87022b86a82f6b0812a7ddf0a92b
 EA_SWW14     128f72c62d5629ae7b2022280737adfe583660a5de6bce6b9c8e6b9570c42a86
 HK_FP13      98915655d1bdf338ffa0091632217fb8e498946d3b4a824804ec57f70ae3d710
 UK_SM11      348ca8056fa18a58aea649de827cbf9f1c3d55adb0b5e0ab126a8ad54c110ea0
+US_CMR14     1ce9dbfb954600e2ac76afde61eff266f9b9d0ed4fc542fa55d6564e9957df37
 US_DNGS15    8ada225b83f0c8227cc56bd334c573b9e5bd9d168862df7d1a56e210cb0e42cb
 US_FRB03     dd4db1a940ff219682c288d5da0082194adc054dc0faa6f1ba689b2688d3c4fd
 US_FRB08     24332e8fe65e495604d3f66f8ba34de619346fbe3375a08d41cc0613babc4c76
 US_SW07      84e8c3c0933a1075a049137b7958f5206f6802a982384edce5e329a53c62cf7e
+CA_ToTEM10   a6c0cce85d616289822647c913e9342cb0156a121e2907ad3249316647a7608a
+DEREA_GEAR16 fff8edbdd2ac674b852608e652244708611b836c6658c555e973892f6a892219
+EA_GNSS10    cf639266d077fee837fd5309a900f683dc345c6c6476d049462fce2fda1ee960
+EA_QUEST3    0f9afaebb6f29c02ec51124deb4d98ec724efcc855dc4ca69f3912f11db154a2
+FI_AINO16    9ae1a00ada5a07b22662c1c837cf86a895a4fa15cb0963b83e22696f3d0f8fad
+"
+
+# model  source filename  sha256; MATLAB/data inputs used by the .mod, not executed by from_mod
+ASSETS="
+CA_ToTEM10   CA_ToTEM10_rep_steadystate.m       28ddd627af27ad65ee2c12f8ad1908131225b2e19a79f40eff05176f02c7df87
+DEREA_GEAR16 DEREA_GEAR16_rep_steadystate.m     3f823fd8336cf9aa767003ff16c340ea6c489e608f54e9e2aba129a69658f347
+DEREA_GEAR16 set_params_31_08_aw1.m             1201e9b531d2b7a4d67a1ba84f4b91fdde55f055ccd3ef57a0ab0f7ac1c59f5e
+DEREA_GEAR16 set_steadystate_31_08_aw1.m        989e566133ac789be6f29d798e9f718ce494be58645d0820821e1c44853728dc
+EA_GNSS10    median_values.txt                  877f3a3e969ad9d41966935c3e75d0f32823083bd58ab020809cc905909ca2c5
+FI_AINO16    all_parameters_February2016.mat    3d6caa724eecbfadcfab435a6fe88c2fd376af02e8f7a10b047860e7c1078af3
 "
 
 mkdir -p mods
@@ -44,4 +61,15 @@ while read -r m sha; do
     failed=1
   fi
 done <<< "$MODELS"
+while read -r m f sha; do
+  [ -n "$m" ] || continue
+  if curl -fsSL --retry 5 --retry-all-errors --retry-delay 3 -o "mods/$f" "$BASE/$m/$f" \
+     && echo "$sha  mods/$f" | shasum -a 256 -c --status -; then
+    echo "ok  mods/$f"
+  else
+    echo "FAILED  mods/$f"
+    rm -f "mods/$f"
+    failed=1
+  fi
+done <<< "$ASSETS"
 exit $failed

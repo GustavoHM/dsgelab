@@ -8,6 +8,26 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+### Added
+
+- The MMB validation grows from 17 to 24 models, with the Bank of Canada's BMZ12 and ToTEM,
+  Christiano, Motto and Rostagno (2014), the Bundesbank's GEAR, Gerali, Neri, Sessa and Signoretti
+  (2010), the European Commission's QUEST III and the Bank of Finland's AINO.
+  `validation/mmb/prepare.py` writes out the values that four of them take from MATLAB helpers and
+  data files, without executing MATLAB.
+
+### Fixed
+
+- In a symbolic model with an endogenous variable named `pi`, the variable replaced the constant
+  that differentiating `normcdf` or `erf` introduces, so the Jacobian, the Hessian and the third
+  derivatives were wrong without a warning. 1.0.0rc2 had corrected the equations themselves, and
+  the constant is now printed as a number in the derivatives too.
+- A lone `log(a) - log(b)` is evaluated as `log(a / b)`, which keeps its real domain and its
+  derivatives when both arguments are negative, as in BMZ12's output-gap equation. Other nonfinite
+  evaluations that involve logarithms are retried with complex logarithms, with every other
+  operation kept real, and accepted only if the imaginary parts cancel.
+- `from_mod` reads a parameter assignment that continues on the next line after an operator.
+
 ## 1.0.0rc2 — 2026-11-10
 
 Second release candidate for 1.0, with what changed after 1.0.0rc1: additions to `solve` and
