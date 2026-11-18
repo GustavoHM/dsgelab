@@ -11,11 +11,14 @@ without raising an error.
 `f(x_{t+1}, x_t, eps)` treats `eps` as `eps_{t+1}`, unknown at `t`, with
 `E_t eps_{t+1} = 0`. The law of motion is `k_{t+1} = P k_t + Q eps_{t+1}`.
 
-The alternative dates the innovation at `t`, inside the information set. Then
-`x_{t+1}` is a deterministic function of `(x_t, eps_t)`, the conditional
-expectation in every Euler equation is degenerate, and no uncertainty is left
-within the period. First order is unaffected, because certainty equivalence makes
-the two timings coincide. At second order every risk correction comes out zero,
+The alternative dates the innovation at `t`, inside the information set, so
+that it does not enter through `eps`. The package scales by the perturbation
+parameter only what enters through `eps`; from its point of view `x_{t+1}` is
+then a deterministic function of `(x_t, eps_t)` and there is no risk to correct
+for. The model itself still has risk, from the innovations of later periods, as
+in Dynare, where the innovation is dated `t` and the corrections are not zero.
+First order is unaffected, because certainty equivalence makes the two timings
+coincide. At second order every risk correction the package returns is zero,
 and the output looks like a model in which risk happens not to matter.
 
 The library cannot detect this mistake in a model you declare. The package's own
