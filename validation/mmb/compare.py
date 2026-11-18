@@ -53,7 +53,8 @@ def main() -> int:
                         steady_start_from_dynare=name in {"CA_BMZ12", "EA_GNSS10"},
                         steady_tol=1e-5 if name in {"CA_ToTEM10", "EA_GNSS10"} else 1e-11,
                         check_steady=name not in {"CA_ToTEM10", "EA_GNSS10"},
-                        steady_analytic=name == "CA_ToTEM10")
+                        steady_analytic=name == "CA_ToTEM10",
+                        quiet_share=1e-8 if name == "US_CMR14" else 1e-9)
         except Exception as exc:
             print(f"{name:<13} DIVERGE {type(exc).__name__}: {exc}")
             bad += 1
