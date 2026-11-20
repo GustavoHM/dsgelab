@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsgelab"
-version = "1.0.0rc2"
+version = "1.0.0"
 description = "Solve, simulate and estimate DSGE models in Python: perturbation to third order, perfect foresight, OccBin, global methods on dense and sparse grids, regime switching, heterogeneous agents, optimal policy, Bayesian estimation, BVAR and DSGE-VAR, identification, method of moments, global sensitivity and Dynare .mod import, validated against Dynare."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [{name = "Gustavo Hoffmann Moreira", email = "gustavo@gakusai.net"}]
 keywords = ["dsge", "perturbation", "rational expectations", "klein", "macroeconomics"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",

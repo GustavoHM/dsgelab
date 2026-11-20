@@ -8,6 +8,13 @@ features, without changing the API of an earlier release. The rest of the milest
 
 ## Unreleased
 
+## 1.0.0 — 2026-11-20
+
+First stable release. It carries what changed after 1.0.0rc2: fixes to the derivatives of symbolic
+models and to logarithms of negative arguments, and an MMB validation of 24 models. No name was
+removed and no default changed, so the public API in `__all__` is the one frozen in 1.0.0rc1, and
+from this version on versioning is strictly semantic.
+
 ### Added
 
 - The MMB validation grows from 17 to 24 models, with the Bank of Canada's BMZ12 and ToTEM,
@@ -31,6 +38,10 @@ features, without changing the API of an earlier release. The rest of the milest
   `mmb/compare.py` leaves `US_CMR14`'s price and wage dispersion out of the IRF column. At
   Dynare's point, whose residual is 3e-06, they respond with 4e-09 of the largest response, and
   their rounding failed the comparison on one machine and passed it on another.
+- The README and the design notes said that dating the innovation at `t` makes a model
+  deterministic within the period. The model's future innovations stay uncertain; what goes to
+  zero is the risk the package sees, because it scales by sigma only the innovations passed in
+  `eps`, and the second-order risk corrections then come out zero without a warning.
 
 ## 1.0.0rc2 — 2026-11-10
 
