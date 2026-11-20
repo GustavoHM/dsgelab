@@ -270,8 +270,8 @@ Nenhum recurso novo. Os itens abaixo são condições para publicar.
   5 de novembro.
 - [x] Site no GitHub Pages, publicado a partir de `site/` pelo `.github/workflows/pages.yml` a cada
   mudança, com os links para `docs/` apontados para o GitHub (`https://gustavohm.github.io/dsgelab/`).
-- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 1.0.0rc2 é
-  10.5281/zenodo.24107792, a 1.0.0rc1 é 10.5281/zenodo.24057764, a 0.9.0 é
+- [x] DOI no Zenodo a cada release, e `CITATION.cff` com ORCID e DOI. A versão 1.0.0 é
+  10.5281/zenodo.24400276, a 1.0.0rc2 é 10.5281/zenodo.24107792, a 1.0.0rc1 é 10.5281/zenodo.24057764, a 0.9.0 é
   10.5281/zenodo.23992839 (a 0.7.2 é 10.5281/zenodo.23835374, a 0.7.1 é 10.5281/zenodo.23827669,
   a 0.7.0 é 10.5281/zenodo.23825088, a 0.5.0 é 10.5281/zenodo.23456475), e o DOI conceitual
   10.5281/zenodo.23456474, que leva sempre à versão mais recente, está no `CITATION.cff`.
@@ -692,9 +692,10 @@ como prerelease no GitHub e arquivado no Zenodo (DOI
 o processo de candidato a lançamento. Um segundo candidato, `1.0.0rc2`, com os acréscimos e as
 correções feitos depois do primeiro, listados no changelog, está publicado e arquivado da mesma
 forma (DOI [10.5281/zenodo.24107792](https://doi.org/10.5281/zenodo.24107792)). A versão final,
-`1.0.0`, está preparada com as correções feitas depois do segundo candidato, listadas no
-changelog, e com a API congelada na `1.0.0rc1`; a partir da 1.0, o versionamento é estritamente
-semântico.
+`1.0.0`, com as correções feitas depois do segundo candidato, listadas no changelog, e a API
+congelada na `1.0.0rc1`, foi publicada em 20 de novembro de 2026 no PyPI e no GitHub e arquivada
+no Zenodo (DOI [10.5281/zenodo.24400276](https://doi.org/10.5281/zenodo.24400276)). A partir da
+1.0, o versionamento é estritamente semântico.
 
 ## Integração com o `cgelab`
 
