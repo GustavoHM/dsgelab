@@ -662,8 +662,9 @@ prerelease on GitHub and archived on Zenodo (DOI
 [10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), and the API is frozen for
 the release-candidate process. A second candidate, `1.0.0rc2`, with the additions and fixes made
 after the first, listed in the changelog, is published and archived in the same way (DOI
-[10.5281/zenodo.24107792](https://doi.org/10.5281/zenodo.24107792)). The final 1.0 release has
-not been published; versioning is strictly semantic from 1.0 on.
+[10.5281/zenodo.24107792](https://doi.org/10.5281/zenodo.24107792)). The final release,
+`1.0.0`, is prepared with the fixes made after the second candidate, listed in the changelog, and
+with the API frozen in `1.0.0rc1`; versioning is strictly semantic from 1.0 on.
 
 ## Integration with `cgelab`
 

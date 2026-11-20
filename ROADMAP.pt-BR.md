@@ -691,8 +691,10 @@ como prerelease no GitHub e arquivado no Zenodo (DOI
 [10.5281/zenodo.24057764](https://doi.org/10.5281/zenodo.24057764)), e a API está congelada para
 o processo de candidato a lançamento. Um segundo candidato, `1.0.0rc2`, com os acréscimos e as
 correções feitos depois do primeiro, listados no changelog, está publicado e arquivado da mesma
-forma (DOI [10.5281/zenodo.24107792](https://doi.org/10.5281/zenodo.24107792)). A versão final
-1.0 ainda não foi publicada; a partir da 1.0, o versionamento é estritamente semântico.
+forma (DOI [10.5281/zenodo.24107792](https://doi.org/10.5281/zenodo.24107792)). A versão final,
+`1.0.0`, está preparada com as correções feitas depois do segundo candidato, listadas no
+changelog, e com a API congelada na `1.0.0rc1`; a partir da 1.0, o versionamento é estritamente
+semântico.
 
 ## Integração com o `cgelab`
 

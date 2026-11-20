@@ -150,9 +150,10 @@ def equations(nxt, cur, eps, p):
     return [nxt.a - p.rho * cur.a - eps.eps_a]
 ```
 
-and the resulting law of motion is `k_{t+1} = P k_t + Q eps_{t+1}`. Treating the innovation as
-known at `t` instead makes the model deterministic within the period, and every second-order
-risk correction then comes out zero without a warning. Of the package's conventions, this is
+and the resulting law of motion is `k_{t+1} = P k_t + Q eps_{t+1}`. If a model's equations date the
+innovation at `t` instead, so that it does not enter through `eps`, the package sees no risk
+in `E_t` and returns second-order risk corrections of zero without a warning, although the
+model's future innovations are still uncertain. Of the package's conventions, this is
 the only one it cannot check in a user's model.
 
 Two checks run on every model without being requested. `solve` raises `BlanchardKahnError`
