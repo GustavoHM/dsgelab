@@ -398,7 +398,7 @@ GPM6_IMF13     291  622   4.2e-17  0.0e+00  3.8e-11   4.1e-12  OK  (common Dynar
 EA_SWW14        50   35   1.1e-16  1.0e-37  5.6e-13   6.5e-13  OK
 HK_FP13         47   41   0.0e+00  0.0e+00  3.9e-11   6.3e-09  OK
 UK_SM11        123   64   0.0e+00  0.0e+00  2.6e-11   5.2e-11  OK
-US_CMR14        70  272   2.2e-16  0.0e+00  6.6e-07   1.7e-11  OK  (common Dynare point, residual 3e-06)
+US_CMR14        70  272   2.2e-16  0.0e+00  3.3e-11   1.7e-11  OK  (common Dynare point, residual 3e-06)
 US_DNGS15       38   33   0.0e+00  0.0e+00  1.4e-12   5.1e-13  OK
 US_FRB03       279  365   0.0e+00  0.0e+00  6.6e-10   1.8e-09  OK
 US_FRB08       361  335   2.2e-16  0.0e+00  5.8e-10   1.7e-09  OK
@@ -441,6 +441,11 @@ In both scripts, a variable whose largest response is below 1e-9 of the model's 
 is left out of the IRF column. Price and wage dispersion do not move at first order, and in
 `EAUS_NAWM08` the wage dispersion `EA_SI` responds with 6e-11 in both programs, against responses
 of order 1e4 in other variables. This rule leaves the output of `compare_import.py` unchanged.
+In `US_CMR14`, compared at Dynare's point with residual 3e-06, the price and wage dispersion
+`pstar` and `wstar` respond with 4e-09 and 2e-09 of the largest response, and their rounding
+moves the IRF column between 7e-07 and 1.1e-06 from one machine to another. `mmb/compare.py`
+raises the cut to 1e-8 for that model, which leaves out these two variables and the zero `phi`,
+and no other: every other variable's largest response is above 1e-6 of the model's.
 
 **MATLAB-supplied inputs.** `prepare.py` does not execute MATLAB and stores no numeric calibration.
 It copies only known scalar-assignment ranges of the ToTEM and GEAR helpers, rejecting any other

@@ -214,7 +214,7 @@ python validation/mmb/compare.py</code></pre>
       <tr><td>US_DNGS15 <span style="color:var(--muted)">(New York Fed; Del Negro, Giannoni and Schorfheide 2015)</span></td><td class="num">38</td><td class="num">0.0e+00</td><td class="num">1.4e-12</td><td class="num">5.1e-13</td><td class="ok">OK</td></tr>
       <tr><td>US_FRB03 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board; Levin, Wieland and Williams 2003)</span></td><td class="num">279</td><td class="num">0.0e+00</td><td class="num">6.6e-10</td><td class="num">1.8e-09</td><td class="ok">OK</td></tr>
       <tr><td>US_FRB08 <span style="color:var(--muted)">(FRB/US, Federal Reserve Board, February 2008)</span></td><td class="num">361</td><td class="num">0.0e+00</td><td class="num">5.8e-10</td><td class="num">1.7e-09</td><td class="ok">OK</td></tr>
-      <tr><td>US_CMR14 <span style="color:var(--muted)">(Christiano, Motto and Rostagno 2014)</span></td><td class="num">70</td><td class="num">0.0e+00</td><td class="num">6.6e-07</td><td class="num">1.7e-11</td><td class="ok">OK‡</td></tr>
+      <tr><td>US_CMR14 <span style="color:var(--muted)">(Christiano, Motto and Rostagno 2014)</span></td><td class="num">70</td><td class="num">0.0e+00</td><td class="num">3.3e-11</td><td class="num">1.7e-11</td><td class="ok">OK‡</td></tr>
       <tr><td>CL_MS07 <span style="color:var(--muted)">(Banco Central de Chile; Medina and Soto 2007)</span></td><td class="num">124</td><td class="num">0.0e+00</td><td class="num">3.2e-10</td><td class="num">2.6e-10</td><td class="ok">OK</td></tr>
       <tr><td>UK_SM11 <span style="color:var(--muted)">(Bank of England; Harrison, Thomas and de Weymarn 2008)</span></td><td class="num">123</td><td class="num">0.0e+00</td><td class="num">2.6e-11</td><td class="num">5.2e-11</td><td class="ok">OK</td></tr>
       <tr><td>EA_ALSV06 <span style="color:var(--muted)">(Riksbank; Adolfson, Laséen, Lindé and Villani, reduced version)</span></td><td class="num">9</td><td class="num">0.0e+00</td><td class="num">1.3e-13</td><td class="num">1.5e-13</td><td class="ok">OK</td></tr>
@@ -238,14 +238,16 @@ python validation/mmb/compare.py</code></pre>
   <code>9e-14</code>. The IRFs and moments inherit Dynare's residual, which is why their deviation
   stays near <code>7e-05</code>. ToTEM's analytic helper point and GNSS's solver point have
   residuals of <code>7e-06</code> and <code>5e-06</code>. In the other twenty-three models the
-  largest deviation is <code>6.6e-07</code>. <code>US_SW07</code> and <code>US_FRB08</code> declare
+  largest deviation is <code>1.2e-08</code>. <code>US_SW07</code> and <code>US_FRB08</code> declare
   parameters that the file never assigns (three and one), and the comparison takes their values
   from Dynare. QUEST3's reference starts at the independently computed dsgelab steady state, which
   Dynare confirms. AINO's pinned file activates only <code>epsLAMBDAK</code>.
   † GPM6 declares nonstationary variables and uses <code>steady(nocheck)</code>.
   Both programs are compared at Dynare's supplied point, with residual 6, so this row checks the
   local approximation rather than a steady state. ‡ US_CMR14 is likewise compared at Dynare's
-  supplied point, whose residual is <code>3e-06</code>.</p>
+  supplied point, whose residual is <code>3e-06</code>. At that point its price and wage
+  dispersion, which do not move at first order, respond with 4e-09 of the largest response, and
+  are left out of the IRF column.</p>
   <p>The MATLAB-input preparation is documented in <code>validation/README.md</code>.</p>
 </div></section>
 

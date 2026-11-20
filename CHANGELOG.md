@@ -27,6 +27,10 @@ features, without changing the API of an earlier release. The rest of the milest
   evaluations that involve logarithms are retried with complex logarithms, with every other
   operation kept real, and accepted only if the imaginary parts cancel.
 - `from_mod` reads a parameter assignment that continues on the next line after an operator.
+- `validation/run_all.sh` runs `mmb/prepare.py` before Dynare, which a clean checkout needs, and
+  `mmb/compare.py` leaves `US_CMR14`'s price and wage dispersion out of the IRF column. At
+  Dynare's point, whose residual is 3e-06, they respond with 4e-09 of the largest response, and
+  their rounding failed the comparison on one machine and passed it on another.
 
 ## 1.0.0rc2 — 2026-11-10
 

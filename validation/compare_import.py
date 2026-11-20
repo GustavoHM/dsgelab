@@ -64,7 +64,8 @@ def _mods():
 def compare(name: str, path: Path, out: Path = HERE / "out_import",
             ss_floor: float = 1e-8, steady_from_dynare: bool = False,
             steady_start_from_dynare: bool = False, steady_tol: float = 1e-11,
-            check_steady: bool = True, steady_analytic: bool = False) -> dict:
+            check_steady: bool = True, steady_analytic: bool = False,
+            quiet_share: float = 1e-9) -> dict:
     """Compare one .mod with the Dynare run exported to ``out/<name>.mat``."""
     ex = _load(name, out)
     if ex is None:
@@ -135,8 +136,9 @@ def compare(name: str, path: Path, out: Path = HERE / "out_import",
     for (v, _), (a, b) in curves.items():
         ruler[v] = max(ruler.get(v, 0.0), float(np.max(np.abs(b))), float(np.max(np.abs(a))))
     # a variable that does not move at first order (price dispersion, say) responds with rounding
-    # error, and is left out when its largest response is below 1e-9 of the model's largest
-    quiet = 1e-9 * max(ruler.values(), default=0.0)
+    # error, and is left out when its largest response is below quiet_share (1e-9) of the
+    # model's largest
+    quiet = quiet_share * max(ruler.values(), default=0.0)
     d_irf, worst = 0.0, ""
     for (v, e), (a, b) in curves.items():
         if ruler[v] < max(1e-12, quiet):

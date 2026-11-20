@@ -75,6 +75,7 @@ step "compare_ramsey.py"     "$PYTHON" compare_ramsey.py
 step "Dynare: .mod files read" bash run_examples.sh
 step "compare_import.py"     "$PYTHON" compare_import.py
 step "MMB: fetch"            bash mmb/fetch.sh
+step "MMB: MATLAB inputs"    "$PYTHON" mmb/prepare.py
 step "Dynare: MMB models"    bash mmb/run_dynare.sh
 step "mmb/compare.py"        "$PYTHON" mmb/compare.py
 step "DSGE_mod: fetch"       bash dsge_mod/fetch.sh
